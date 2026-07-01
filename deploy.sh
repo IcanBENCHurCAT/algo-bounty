@@ -33,6 +33,7 @@ $GCLOUD_PATH run deploy "${SERVICE_NAME}" \
   --platform=managed \
   --allow-unauthenticated \
   --port=8080 \
+  --set-secrets="SECRET_KEY=algobounty-jwt-secret:latest,GITHUB_WEBHOOK_SECRET=algobounty-github-webhook-secret:latest" \
   --memory=512Mi \
   --cpu=1 \
   --timeout=300 \
