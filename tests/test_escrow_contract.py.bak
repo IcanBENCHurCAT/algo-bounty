@@ -1,0 +1,526 @@
+"""
+AlgoBounty Escrow Contract Unit Tests
+Framework: AlgoKit (algokit test)
+Target: escrow.algo (Puya compiler)
+
+Run: algokit test --root tests/ --test-files test_escrow_contract.py
+"""
+
+import pytest
+from algokit.utils import AlgorandClient, NetworkType, ContractType
+from algopy import (
+    Account,
+    Bot,
+    BoxGlobal,
+    BotAppCall,
+    BotPayment,
+    Bytes,
+    Global,
+    Int,
+    Log,
+    ptx,
+    Txn,
+    UInt64,
+)
+
+
+# ============================================================================
+# FIXTURES
+# ============================================================================
+
+
+@pytest.fixture
+def creator(bot: Bot) -> Account:
+    return Account(1)
+
+
+@pytest.fixture
+def agent(bot: Bot) -> Account:
+    return Account(2)
+
+
+@pytest.fixture
+def bot_app_call(creator: Account, agent: Account):
+    """Provide BotAppCall with pre-set group context."""
+
+    def _make():
+        return BotAppCall(creator=creator, agent=agent)
+
+    return _make
+
+
+@pytest.fixture
+def bot_payment(bot: Bot):
+    """Provide BotPayment for atomic transfer groups."""
+
+    def _make(receiver: Account, amount: UInt64):
+        return BotPayment(receiver=receiver, amount=amount)
+
+    return _make
+
+
+# ============================================================================
+# TEST 1: Happy Path — Trustless Mode
+# ============================================================================
+
+
+def test_create_bounty_trustless(creator: Account, agent: Account):
+    """
+    Create bounty → claim → submit work → approve → finalize payout.
+    Trustless mode: no review window, instant payout.
+    """
+    bot = Bot()
+
+    # 1. Create bounty (trustless: is_hitm=0)
+    app_call = BotAppCall(creator=creator, agent=agent)
+    result = app_call.create_bounty(
+        bounty_id=Bytes("bounty-001"),
+        escrow_amount=10000,  # 0.01 ALGO
+        is_hitm=Int(0),
+        asset_id=Int(0),  # ALGO native
+    )
+    assert result is True
+
+    # Verify state is OPEN
+    state = app_call.state()
+    assert state == Int(0), f"Expected OPEN(0), got {state}"
+
+    # Verify escrow_amount stored
+    escrow = BoxGlobal.get(Bytes("escrow_amount"))
+    assert escrow.to_uint64() == 10000
+
+    # 2. Claim bounty
+    result = app_call.claim_bounty()
+    assert result is True
+
+    # Verify state is CLAIMED
+    state = app_call.state()
+    assert state == Int(1), f"Expected CLAIMED(1), got {state}"
+
+    # 3. Submit work
+    result = app_call.submit_work(
+        proof_url=Bytes("https://github.com/test/repo/pull/42"),
+        proof_data=Bytes('{"type":"pr","summary":"fixed the bug"}'),
+    )
+    assert result is True
+
+    # Verify state is SUBMITTED
+    state = app_call.state()
+    assert state == Int(2), f"Expected SUBMITTED(2), got {state}"
+
+    # 4. Approve work (trustless: no review needed)
+    result = app_call.approve_work()
+    assert result is True
+
+    # Verify state is CLOSED, payout_type = PAYOUT
+    state = app_call.state()
+    assert state == Int(5), f"Expected CLOSED(5), got {state}"
+    payout = BoxGlobal.get(Bytes("payout_type"))
+    assert payout == Bytes("PAYOUT")
+
+    print("✅ test_create_bounty_trustless passed")
+
+
+# ============================================================================
+# TEST 2: HITM Mode with Approval
+# ============================================================================
+
+
+def test_create_bounty_hitm_approval(creator: Account, agent: Account):
+    """
+    Create bounty with HITM → claim → submit → approve → finalize.
+    HITM mode uses review window (default 7 days) but approval is immediate.
+    """
+    bot = Bot()
+
+    # Create with HITM mode (is_hitm=1)
+    app_call = BotAppCall(creator=creator, agent=agent)
+    result = app_call.create_bounty(
+        bounty_id=Bytes("bounty-hitm-001"),
+        escrow_amount=50000,
+        is_hitm=Int(1),
+        asset_id=Int(0),
+    )
+    assert result is True
+
+    # Claim and submit
+    app_call.claim_bounty()
+    app_call.submit_work(
+        proof_url=Bytes("https://github.com/test/repo/pull/43"),
+        proof_data=Bytes('{"type":"pr","summary":"added feature X"}'),
+    )
+
+    # Approve (even in HITM, approval can be immediate if human is fast)
+    app_call.approve_work()
+
+    state = app_call.state()
+    assert state == Int(5), f"Expected CLOSED(5), got {state}"
+    payout = BoxGlobal.get(Bytes("payout_type"))
+    assert payout == Bytes("PAYOUT")
+
+    print("✅ test_create_bounty_hitm_approval passed")
+
+
+# ============================================================================
+# TEST 3: Auto-Release on HITM Timeout
+# ============================================================================
+
+
+def test_auto_release_hitm_timeout(creator: Account, agent: Account):
+    """
+    Creator doesn't respond after 7-day HITM review window.
+    Worker should be able to call auto_release().
+    """
+    app_call = BotAppCall(creator=creator, agent=agent)
+
+    # Create with HITM
+    app_call.create_bounty(
+        bounty_id=Bytes("bounty-auto-release"),
+        escrow_amount=10000,
+        is_hitm=Int(1),
+        asset_id=Int(0),
+    )
+
+    # Claim and submit
+    app_call.claim_bounty()
+    app_call.submit_work(
+        proof_url=Bytes("https://github.com/test/repo/pull/44"),
+        proof_data=Bytes('{"type":"pr","summary":"fix"}'),
+    )
+
+    # State should be SUBMITTED
+    state = app_call.state()
+    assert state == Int(2)
+
+    # Set review deadline to the future
+    BoxGlobal.put(Bytes("review_deadline"), Int(999999999999))
+
+    # Try to auto-release BEFORE deadline — should fail
+    result = app_call.auto_release()
+    assert result is False  # Deadline not passed yet
+
+    # Set review deadline to the past
+    BoxGlobal.put(Bytes("review_deadline"), Int(1))
+
+    # Now auto-release should succeed
+    result = app_call.auto_release()
+    assert result is True
+
+    state = app_call.state()
+    assert state == Int(5), f"Expected CLOSED(5), got {state}"
+    payout = BoxGlobal.get(Bytes("payout_type"))
+    assert payout == Bytes("PAYOUT")
+
+    print("✅ test_auto_release_hitm_timeout passed")
+
+
+# ============================================================================
+# TEST 4: Reject and Revise
+# ============================================================================
+
+
+def test_reject_and_revise(creator: Account, agent: Account):
+    """
+    Creator rejects → agent revises → creator approves.
+    Rejection count tracked and capped.
+    """
+    app_call = BotAppCall(creator=creator, agent=agent)
+
+    app_call.create_bounty(
+        bounty_id=Bytes("bounty-revise"),
+        escrow_amount=20000,
+        is_hitm=Int(0),
+        asset_id=Int(0),
+    )
+
+    app_call.claim_bounty()
+
+    # First submission: rejected
+    app_call.submit_work(
+        proof_url=Bytes("https://github.com/test/repo/pull/45"),
+        proof_data=Bytes('{"type":"pr","summary":"first attempt"}'),
+    )
+    state = app_call.state()
+    assert state == Int(2)  # SUBMITTED
+
+    app_call.reject_work(Bytes("need more tests"))
+    state = app_call.state()
+    assert state == Int(3), f"Expected REJECTED(3), got {state}"
+
+    # Verify rejection_count = 1
+    rej_count = BoxGlobal.get(Bytes("rejection_count")).to_uint64()
+    assert rej_count == Int(1)
+
+    # Second submission: revise
+    app_call.submit_work(
+        proof_url=Bytes("https://github.com/test/repo/pull/45"),
+        proof_data=Bytes('{"type":"pr","summary":"second attempt with tests"}'),
+    )
+    state = app_call.state()
+    assert state == Int(2)  # SUBMITTED
+
+    rej_count = BoxGlobal.get(Bytes("rejection_count")).to_uint64()
+    assert rej_count == Int(2)
+
+    # Approve on second revision
+    app_call.approve_work()
+    state = app_call.state()
+    assert state == Int(5)  # CLOSED
+
+    print("✅ test_reject_and_revise passed")
+
+
+# ============================================================================
+# TEST 5: Max Rejections — Agent Wins Abandoned Escrow
+# ============================================================================
+
+
+def test_max_rejections_abandoned(creator: Account, agent: Account):
+    """
+    After MAX_REJECTIONS (3) rejections without resolution,
+    the escrow auto-returns to the agent as compensation.
+    """
+    app_call = BotAppCall(creator=creator, agent=agent)
+
+    app_call.create_bounty(
+        bounty_id=Bytes("bounty-max-reject"),
+        escrow_amount=30000,
+        is_hitm=Int(0),
+        asset_id=Int(0),
+    )
+
+    for i in range(MAX_REJECTIONS):
+        app_call.claim_bounty()  # Re-claim each time after close
+        app_call.submit_work(
+            proof_url=Bytes(f"https://github.com/test/repo/pull/{45 + i}"),
+            proof_data=Bytes(f'{{"type":"pr","summary":"attempt {i+1}"}}'),
+        )
+        app_call.reject_work(Bytes("not good enough"))
+
+        if i < MAX_REJECTIONS - 1:
+            # Not at max yet, agent can revise
+            app_call.submit_work(
+                proof_url=Bytes(f"https://github.com/test/repo/pull/{45 + i}"),
+                proof_data=Bytes(f'{{"type":"pr","summary":"revise {i+1}"}}'),
+            )
+
+    # At max rejections, claim_abandoned should work
+    result = app_call.claim_abandoned()
+    assert result is True
+
+    state = app_call.state()
+    assert state == Int(5)  # CLOSED
+    payout = BoxGlobal.get(Bytes("payout_type"))
+    assert payout == Bytes("PAYOUT")  # Agent wins
+
+    print("✅ test_max_rejections_abandoned passed")
+
+
+# ============================================================================
+# TEST 6: Dispute Resolution — Agent Wins
+# ============================================================================
+
+
+def test_dispute_resolution_agent_wins(creator: Account, agent: Account):
+    """
+    Creator rejects → agent disputes → mediator resolves agent win.
+    """
+    app_call = BotAppCall(creator=creator, agent=agent)
+
+    app_call.create_bounty(
+        bounty_id=Bytes("bounty-dispute-aw"),
+        escrow_amount=40000,
+        is_hitm=Int(0),
+        asset_id=Int(0),
+    )
+
+    app_call.claim_bounty()
+    app_call.submit_work(
+        proof_url=Bytes("https://github.com/test/repo/pull/50"),
+        proof_data=Bytes('{"type":"pr","summary":"solid PR"}'),
+    )
+
+    app_call.reject_work(Bytes("wrong implementation"))
+
+    # Agent disputes
+    result = app_call.submit_dispute(Bytes("Creator is wrong, PR is correct"))
+    assert result is True
+
+    state = app_call.state()
+    assert state == Int(4)  # DISPUTED
+
+    # Resolve in agent's favor
+    result = app_call.resolve_dispute(
+        resolution=Bytes("agent_win"),
+        mediator_signature=Bytes("mediator_sig_001"),
+    )
+    assert result is True
+
+    state = app_call.state()
+    assert state == Int(5)  # CLOSED
+    payout = BoxGlobal.get(Bytes("payout_type"))
+    assert payout == Bytes("PAYOUT")
+
+    print("✅ test_dispute_resolution_agent_wins passed")
+
+
+# ============================================================================
+# TEST 7: Dispute Resolution — Creator Wins
+# ============================================================================
+
+
+def test_dispute_resolution_creator_wins(creator: Account, agent: Account):
+    """
+    Creator rejects → agent disputes → mediator resolves creator win.
+    """
+    app_call = BotAppCall(creator=creator, agent=agent)
+
+    app_call.create_bounty(
+        bounty_id=Bytes("bounty-dispute-cw"),
+        escrow_amount=40000,
+        is_hitm=Int(0),
+        asset_id=Int(0),
+    )
+
+    app_call.claim_bounty()
+    app_call.submit_work(
+        proof_url=Bytes("https://github.com/test/repo/pull/51"),
+        proof_data=Bytes('{"type":"pr","summary":"bad PR"}'),
+    )
+
+    app_call.reject_work(Bytes("not what was asked"))
+    app_call.submit_dispute(Bytes("Creator is wrong"))
+
+    # Resolve in creator's favor
+    result = app_call.resolve_dispute(
+        resolution=Bytes("creator_win"),
+        mediator_signature=Bytes("mediator_sig_002"),
+    )
+    assert result is True
+
+    state = app_call.state()
+    assert state == Int(5)  # CLOSED
+    payout = BoxGlobal.get(Bytes("payout_type"))
+    assert payout == Bytes("REFUND")
+
+    print("✅ test_dispute_resolution_creator_wins passed")
+
+
+# ============================================================================
+# TEST 8: Auto Dispute Creator Win (Timeout)
+# ============================================================================
+
+
+def test_auto_dispute_creator_win(creator: Account, agent: Account):
+    """
+    Dispute initiated but no resolution before 14-day window.
+    Creator wins by default.
+    """
+    app_call = BotAppCall(creator=creator, agent=agent)
+
+    app_call.create_bounty(
+        bounty_id=Bytes("bounty-auto-dispute"),
+        escrow_amount=50000,
+        is_hitm=Int(0),
+        asset_id=Int(0),
+    )
+
+    app_call.claim_bounty()
+    app_call.submit_work(
+        proof_url=Bytes("https://github.com/test/repo/pull/52"),
+        proof_data=Bytes('{"type":"pr","summary":"PR"}'),
+    )
+
+    # Dispute (doesn't matter who initiates)
+    app_call.submit_dispute(Bytes("dispute"))
+
+    state = app_call.state()
+    assert state == Int(4)  # DISPUTED
+
+    # Manually set created_timestamp to the past so timeout triggers
+    BoxGlobal.put(Bytes("created_timestamp"), Int(1))
+
+    # Auto-resolve: creator wins by default
+    result = app_call.auto_resolve_creator_win()
+    assert result is True
+
+    state = app_call.state()
+    assert state == Int(5)  # CLOSED
+    payout = BoxGlobal.get(Bytes("payout_type"))
+    assert payout == Bytes("REFUND")
+
+    print("✅ test_auto_dispute_creator_win passed")
+
+
+# ============================================================================
+# TEST 9: Invalid State Transitions
+# ============================================================================
+
+
+def test_invalid_state_transitions(creator: Account, agent: Account):
+    """
+    Verify that invalid state transitions are properly rejected.
+    """
+    app_call = BotAppCall(creator=creator, agent=agent)
+
+    # Can't claim before creating
+    result = app_call.claim_bounty()
+    assert result is False  # No app created yet
+
+    # Create but don't claim
+    app_call.create_bounty(
+        bounty_id=Bytes("bounty-invalid"),
+        escrow_amount=10000,
+        is_hitm=Int(0),
+        asset_id=Int(0),
+    )
+
+    # Can't approve on OPEN
+    result = app_call.approve_work()
+    assert result is False
+
+    # Claim first
+    app_call.claim_bounty()
+
+    # Can't approve on CLAIMED (must submit first)
+    result = app_call.approve_work()
+    assert result is False
+
+    # Can't dispute on CLAIMED (must submit first)
+    result = app_call.submit_dispute(Bytes("bad"))
+    assert result is False
+
+    print("✅ test_invalid_state_transitions passed")
+
+
+# ============================================================================
+# TEST 10: RekeyTo Protection
+# ============================================================================
+
+
+def test_rekey_protection(creator: Account, agent: Account):
+    """
+    RekeyTo should be rejected for all contract methods.
+    """
+    app_call = BotAppCall(creator=creator, agent=agent)
+
+    # Try to create with rekeyTo set
+    app_call._txn.rekey_to = agent.address  # Try to rekey
+    result = app_call.create_bounty(
+        bounty_id=Bytes("bounty-rekey"),
+        escrow_amount=10000,
+        is_hitm=Int(0),
+        asset_id=Int(0),
+    )
+    assert result is False  # RekeyTo should be rejected
+
+    print("✅ test_rekey_protection passed")
+
+
+# ============================================================================
+# RUN ALL TESTS
+# ============================================================================
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])
