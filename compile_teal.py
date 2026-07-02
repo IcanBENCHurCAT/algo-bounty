@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-import os, sys, subprocess
+import os
+import sys
+import subprocess
 
 base_dir = os.path.dirname(os.path.abspath(__file__))
 contract_path = os.path.join(base_dir, 'escrow.algo')
@@ -44,5 +46,5 @@ with open(teal_path, 'w') as f:
 
 print(f'Success: {len(teal.splitlines())} lines ({os.path.getsize(teal_path)} bytes)')
 print('First 5 TEAL lines:')
-for l in teal.splitlines()[:5]:
-    print('  ' + l)
+for line in teal.splitlines()[:5]:
+    print('  ' + line)

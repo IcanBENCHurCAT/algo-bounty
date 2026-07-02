@@ -3,12 +3,9 @@ import os
 import json
 import re
 import time
-import hmac
-import hashlib
 from datetime import datetime, timedelta
-from typing import List, Optional, Dict, Set
-from fastapi import FastAPI, Depends, HTTPException, Body, Query, Header, Request
-from fastapi.middleware.cors import CORSMiddleware
+from typing import Optional, Dict
+from fastapi import FastAPI, Depends, HTTPException, Body, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import StreamingResponse, JSONResponse
 from sqlalchemy.orm import Session
@@ -19,8 +16,10 @@ from .auth import get_current_user, generate_challenge, verify_signature, create
 from .github import handle_issue_event, handle_pr_event, validate_webhook
 from .rate_limiter import RateLimitMiddleware
 from .algod_client import (
-    get_algod_client, get_indexer_client, get_default_account,
+    get_algod_client, get_default_account,
     NODE_ENV, is_sandbox, compile_escrow_contract,
+    get_account_balance, get_asset_holders,
+    health_check as algo_health_check,
 )
 from .middleware import (
     SecurityHeadersMiddleware,
@@ -362,8 +361,8 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
                     app_id = pending_info.get("application-index")
                     onchain = app_id is not None and app_id > 0
 
-        except Exception as e: 
-print(f"[WEB3] Escrow deploy failed: {e}")
+        except Exception as e:
+            print(f"[WEB3] Escrow deploy failed: {e}")
             app_id = None
             onchain = False
 
@@ -609,9 +608,9 @@ def get_bounty_onchain(bounty_id: str, db: Session = Depends(get_db)):
             "confirmed_round": app_info.get("last-round", 0),
             "state": "escrow_active",
         }
-    except Exception as e: 
-return { 
-"bounty_id": bounty_id,
+    except Exception as e:
+        return {
+            "bounty_id": bounty_id,
             "onchain": False,
             "error": str(e),
             "status": b.status,
@@ -624,7 +623,7 @@ return {
 def algorand_health():
     """Health check for Algorand network."""
     try:
-        status = health_check()
+        status = algo_health_check()
         if status.get("algod") and status.get("indexer"):
             return {"status": "healthy", "network": status["network"], "algod": True, "indexer": True}
         return {"status": "degraded", "network": status["network"], "algod": status.get("algod"), "indexer": status.get("indexer"), "error": status.get("error")}

@@ -17,6 +17,7 @@ import threading
 import re
 
 from fastapi import Request, Response, status
+from starlette.middleware.base import BaseHTTPMiddleware
 
 # ---------------------------------------------------------------------------
 # Rule definitions – (regex, limit, window_seconds, method_filter, special)
@@ -116,7 +117,7 @@ def _apply_sliding_window(timestamps: list[float], now: float, limit: int, windo
     return False, remaining
 
 
-class RateLimitMiddleware:
+class RateLimitMiddleware(BaseHTTPMiddleware):
     """FastAPI middleware that enforces per-IP rate limits.
 
     Skips rate limiting for requests that include a valid-looking JWT Bearer
@@ -124,10 +125,7 @@ class RateLimitMiddleware:
     and return 401 without a valid token).
     """
 
-    def __init__(self, app) -> None:
-        self.app = app
-
-    async def __call__(self, request: Request, call_next) -> Response:
+    async def dispatch(self, request: Request, call_next) -> Response:
         # -- 1. Resolve matching rule ----------------------------------------
         path = request.url.path
         method = request.method.upper()

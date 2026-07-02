@@ -1,5 +1,3 @@
-import pytest
-
 # Constants representing contract states
 OPEN = 0
 CLAIMED = 1

@@ -2,7 +2,6 @@ import hmac
 import hashlib
 import logging
 import re
-import os
 import json
 from datetime import datetime
 from sqlalchemy.orm import Session
@@ -138,8 +137,8 @@ def handle_issue_event(db: Session, payload: dict):
     
     if action not in ["opened", "labeled"]:
         return
-        
-    labels = [l.get("name") for l in issue.get("labels", [])]
+
+    labels = [label.get("name") for label in issue.get("labels", [])]
     title = issue.get("title", "")
     
     # Check if this issue is meant to be a bounty
