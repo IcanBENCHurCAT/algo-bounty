@@ -10,8 +10,6 @@ Exports:
     Agent, Bounty, GitHubPR, Notification
 """
 
-import os
-from datetime import datetime, timezone
 
 # ---------------------------------------------------------------------------
 # Import the canonical Supabase implementation (reference DDL, models,
