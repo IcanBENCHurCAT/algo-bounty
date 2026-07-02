@@ -1,3 +1,8 @@
+import os
+
+# Set environment before importing gateway modules
+os.environ["ALGORAND_NETWORK"] = "sandbox"
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
