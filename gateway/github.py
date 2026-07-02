@@ -46,10 +46,11 @@ def verify_webhook_signature(payload_bytes: bytes, signature: str, secret: str) 
         return False
 
     # Extract hex digest after "sha256="
-    expected = "sha256="
-    if not signature.startswith(expected):
+    prefix = "sha256="
+    if not signature.startswith(prefix):
         return False
-    expected_hex = signature[len(expected):]
+
+    expected_hex = signature.removeprefix(prefix)
 
     # Compute HMAC-SHA256
     computed = hmac.new(
