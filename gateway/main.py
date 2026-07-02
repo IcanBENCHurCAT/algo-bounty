@@ -2,51 +2,146 @@ import asyncio
 import os
 import json
 import re
+import time
+import hmac
+import hashlib
 from datetime import datetime, timedelta
-from typing import List, Optional
+from typing import List, Optional, Dict, Set
 from fastapi import FastAPI, Depends, HTTPException, Body, Query, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
 from .database import init_db, SessionLocal, Bounty, Agent, GitHubPR, Notification
 from .auth import get_current_user, generate_challenge, verify_signature, create_jwt_token
-from .github import handle_issue_event, handle_pr_event
+from .github import handle_issue_event, handle_pr_event, validate_webhook
+from .rate_limiter import RateLimitMiddleware
+from .algod_client import (
+    get_algod_client, get_indexer_client, get_default_account,
+    NODE_ENV, is_sandbox, compile_escrow_contract,
+)
+from .middleware import (
+    SecurityHeadersMiddleware,
+    RequestSizeLimitMiddleware,
+    CORSAllowlistMiddleware,
+)
 
 # Initialize database
 init_db()
 
+# CORS origins allowlist – matches deployed frontend + local dev
+ALLOWED_ORIGINS: list[str] = [
+    "https://algo-bounty-frontend-*.uc.a.run.app",
+    "http://localhost:3000",
+    "http://localhost:3001",
+]
+
 app = FastAPI(title="AlgoBounty Gateway", version="1.0.0")
 
-# Enable CORS for frontend flexibility
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# ── Middleware (order matters: top to bottom, bottom to top) ──────
+
+# 1. Request size limit (runs first on incoming requests)
+app.add_middleware(RequestSizeLimitMiddleware)
+
+# 2. CORS with origin allowlist
+app.add_middleware(CORSAllowlistMiddleware, allowed_origins=ALLOWED_ORIGINS)
+
+# 3. Security headers (runs on outgoing responses)
+app.add_middleware(SecurityHeadersMiddleware)
+
+# 4. Rate limiting – protects public endpoints from DDoS / spam
+app.add_middleware(RateLimitMiddleware)
+
+# Start SSE cleanup background task on app startup
+@app.on_event("startup")
+async def start_sse_cleanup():
+    await broker.start_cleanup()
+    print(f"[SSE] Started cleanup task (interval={broker.CLEANUP_INTERVAL_SECONDS}s, stale_timeout={broker.STALE_TIMEOUT_SECONDS}s)")
 
 # SSE Event stream broker
 class EventBroker:
-    def __init__(self):
-        self.listeners = []
+    MAX_CONNECTIONS_PER_IP = 10
+    STALE_TIMEOUT_SECONDS = 60
+    CLEANUP_INTERVAL_SECONDS = 30
 
-    async def subscribe(self):
+    def __init__(self):
+        self.listeners: Dict[str, list] = {}  # ip -> [queue, ...]
+        self.cleanup_task: Optional[asyncio.Task] = None
+
+    async def start_cleanup(self):
+        """Start the background cleanup task for stale connections."""
+        self.cleanup_task = asyncio.create_task(self._cleanup_loop())
+
+    async def _cleanup_loop(self):
+        """Periodically clean up stale entries."""
+        while True:
+            await asyncio.sleep(self.CLEANUP_INTERVAL_SECONDS)
+            await self._cleanup_stale()
+
+    async def _cleanup_stale(self):
+        """Remove stale entries where connections have been dead for > 60 seconds."""
+        now = time.monotonic()
+        stale_ips = []
+        for ip, info in list(self.listeners.items()):
+            queues = info.get("queues", [])
+            registered_at = info.get("registered_at", 0)
+            if now - registered_at > self.STALE_TIMEOUT_SECONDS and len(queues) == 0:
+                stale_ips.append(ip)
+        for ip in stale_ips:
+            del self.listeners[ip]
+
+    def get_active_connections(self, ip: str) -> int:
+        """Get the number of active connections for an IP."""
+        if ip in self.listeners:
+            return len(self.listeners[ip].get("queues", []))
+        return 0
+
+    def get_total_active_connections(self) -> int:
+        """Get total active connections across all IPs."""
+        total = 0
+        for info in self.listeners.values():
+            total += len(info.get("queues", []))
+        return total
+
+    async def subscribe(self, ip: str = "unknown"):
+        """Subscribe to SSE events with per-IP connection tracking."""
+        now = time.monotonic()
+
+        # Initialize tracking for this IP if needed
+        if ip not in self.listeners:
+            self.listeners[ip] = {"queues": [], "registered_at": now}
+
+        # Check connection limit
+        if len(self.listeners[ip]["queues"]) >= self.MAX_CONNECTIONS_PER_IP:
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "error": "SSE connection limit reached",
+                    "max_connections": self.MAX_CONNECTIONS_PER_IP,
+                    "retry_after_seconds": 30
+                }
+            )
+
         queue = asyncio.Queue()
-        self.listeners.append(queue)
+        self.listeners[ip]["queues"].append(queue)
+
         try:
             while True:
                 yield await queue.get()
         finally:
-            self.listeners.remove(queue)
+            if ip in self.listeners:
+                if queue in self.listeners[ip]["queues"]:
+                    self.listeners[ip]["queues"].remove(queue)
+                if len(self.listeners[ip]["queues"]) == 0:
+                    del self.listeners[ip]
 
     def publish(self, event_type: str, data: dict):
         msg = f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
-        for queue in self.listeners:
-            queue.put_nowait(msg)
+        for info in self.listeners.values():
+            for queue in info.get("queues", []):
+                queue.put_nowait(msg)
 
 broker = EventBroker()
 
@@ -77,25 +172,26 @@ class BountyCreate(BaseModel):
     github_issue: Optional[int] = None
     hitm_review_days: int = 7
 
-# Algorand Client Init (Real Sandbox or Mock)
-# Default Sandbox credentials
-ALGOD_ADDRESS = "http://localhost:4001"
-ALGOD_TOKEN = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-INDEXER_ADDRESS = "http://localhost:8980"
-INDEXER_TOKEN = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+# Algorand network config
+sandbox_active = is_sandbox()
+print(f"[WEB3] Algorand network: {NODE_ENV} (sandbox={sandbox_active})")
 
-sandbox_active = False
-try:
-    from algosdk.v2client import algod
-    algod_client = algod.AlgodClient(ALGOD_TOKEN, ALGOD_ADDRESS)
-    # Simple check to verify sandbox is reachable
-    status = algod_client.status()
-    sandbox_active = True
-    print("[WEB3] Connected to Algorand Sandbox successfully.")
-except Exception as e:
-    print(f"[WEB3] Algorand Sandbox not reachable. Operating in SIMULATED LEDGER MODE. Error: {e}")
+# ── Health Check ─────────────────────────────────────────────────
 
-# --- API Endpoints ---
+@app.get("/health")
+async def health_check():
+    """Public health check endpoint for load balancers and monitoring."""
+    return {
+        "status": "healthy",
+        "service": "algobounty-gateway",
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "version": app.version,
+        "sandbox_active": sandbox_active,
+        "node_env": NODE_ENV,
+    }
+
+
+# ── API Endpoints ────────────────────────────────────────────────
 
 # 1. Authentication
 @app.post("/api/v1/auth/request")
@@ -112,7 +208,7 @@ def auth_verify(body: AuthVerify, db: Session = Depends(get_db)):
     is_valid = verify_signature(body.address, body.signature, body.challenge)
     if not is_valid:
         raise HTTPException(status_code=401, detail="Invalid wallet signature")
-        
+
     # Get or create agent
     agent = db.query(Agent).filter(Agent.address == body.address).first()
     if not agent:
@@ -120,7 +216,7 @@ def auth_verify(body: AuthVerify, db: Session = Depends(get_db)):
         db.add(agent)
         db.commit()
         db.refresh(agent)
-        
+
     # Generate JWT
     token = create_jwt_token(body.address)
     return {
@@ -154,7 +250,7 @@ def list_bounties(
         query = query.filter(Bounty.karma_requirement >= min_karma)
     if hitm is not None:
         query = query.filter(Bounty.is_hitm == hitm)
-        
+
     bounties = query.all()
     # Serialize
     result = []
@@ -205,12 +301,73 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
     agent = db.query(Agent).filter(Agent.address == current_user).first()
     if not agent:
         raise HTTPException(status_code=403, detail="Agent profile missing")
-        
+
     bounty_id = f"b_{int(datetime.utcnow().timestamp())}"
-    
-    # Check if sandbox is active, deploy mock/real contract
-    app_id = 990000 + int(datetime.utcnow().timestamp() % 10000)
-    
+
+    # Deploy escrow contract on-chain (if on a live network)
+    app_id = None
+    tx_id = None
+    onchain = False
+
+    if not sandbox_active:
+        try:
+            client = get_algod_client()
+
+            # Compile the escrow contract
+            teal = compile_escrow_contract()
+            compile_resp = client.compile(teal, format="teal")
+            compiled_program = compile_resp.get("result", "").encode()
+
+            if compiled_program:
+                params = client.suggested_params()
+
+                # Encode app args
+                from algosdk.abi import ABIType
+                bounty_id_bytes = body.description[:64].encode()
+                escrow_amount = int(body.amount * 1_000_000)
+                asset_id = int(body.asset_id)
+                is_hitm = 1 if body.hitm else 0
+
+                app_args = ABIType.from_string(
+                    "(bytes,uint64,uint64,uint64)"
+                ).encode(
+                    bounty_id_bytes, escrow_amount, is_hitm, asset_id
+                )
+
+                platform_account = get_default_account()
+                if platform_account is None:
+                    raise HTTPException(
+                        status_code=500,
+                        detail="PLATFORM_PRIVATE_KEY not configured"
+                    )
+
+                from algosdk.transaction import ApplicationCreateTxn, OnComplete
+                create_txn = ApplicationCreateTxn(
+                    sender=platform_account.address,
+                    sp=params,
+                    on_complete=OnComplete.NoOpOC,
+                    app_args=[app_args],
+                    program=compiled_program,
+                    approval_program=compiled_program,
+                    clear_program=compiled_program,
+                )
+
+                signed_txn = create_txn.sign(platform_account.private_key)
+                tx_id = client.send_transaction([signed_txn])
+
+                # Wait for confirmation
+                from algosdk.waiting import wait_for_confirmation
+                pending_info = wait_for_confirmation(client, tx_id, 4)
+                if pending_info:
+                    app_id = pending_info.get("application-index")
+                    onchain = app_id is not None and app_id > 0
+
+        except Exception as e: 
+print(f"[WEB3] Escrow deploy failed: {e}")
+            app_id = None
+            onchain = False
+
+    # Create DB record (always works, on-chain or not)
     new_bounty = Bounty(
         bounty_id=bounty_id,
         app_id=app_id,
@@ -227,20 +384,22 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
     db.add(new_bounty)
     db.commit()
     db.refresh(new_bounty)
-    
+
     # Broadcast event
     broker.publish("bounty.created", {
         "bounty_id": bounty_id,
         "app_id": app_id,
         "amount": body.amount,
-        "creator": current_user
+        "creator": current_user,
+        "onchain": onchain,
     })
-    
+
     return {
         "bounty_id": bounty_id,
         "app_id": app_id,
         "status": "open",
-        "tx_id": "tx_mock_" + bounty_id
+        "tx_id": tx_id,
+        "onchain": onchain,
     }
 
 @app.post("/api/v1/bounties/{bounty_id}/claim")
@@ -252,21 +411,21 @@ def claim_bounty(bounty_id: str, db: Session = Depends(get_db), current_user: st
         raise HTTPException(status_code=400, detail="Bounty not claimable")
     if b.creator == current_user:
         raise HTTPException(status_code=400, detail="Cannot claim your own bounty")
-        
+
     # Check worker karma requirement
     worker = db.query(Agent).filter(Agent.address == current_user).first()
     if not worker or worker.karma < b.karma_requirement:
         raise HTTPException(status_code=403, detail=f"Insufficient karma. Required: {b.karma_requirement}")
-        
+
     b.status = "claimed"
     b.worker = current_user
     db.commit()
-    
+
     broker.publish("bounty.claimed", {
         "bounty_id": bounty_id,
         "worker": current_user
     })
-    
+
     # Create notification for creator
     notif = Notification(
         recipient=b.creator,
@@ -274,7 +433,7 @@ def claim_bounty(bounty_id: str, db: Session = Depends(get_db), current_user: st
     )
     db.add(notif)
     db.commit()
-    
+
     return {"bounty_id": bounty_id, "status": "claimed", "worker": current_user}
 
 @app.post("/api/v1/bounties/{bounty_id}/submit")
@@ -292,15 +451,15 @@ def submit_work(
         raise HTTPException(status_code=400, detail="Bounty must be claimed to submit work")
     if b.worker != current_user:
         raise HTTPException(status_code=403, detail="Only the claiming worker can submit work")
-        
+
     b.status = "submitted"
     db.commit()
-    
+
     # Link PR
     # Match PR number if available
     pr_num_match = re.search(r'pull/(\d+)', pr_url)
     pr_number = int(pr_num_match.group(1)) if pr_num_match else 1
-    
+
     new_pr = GitHubPR(
         pr_number=pr_number,
         repo_url=b.repo_url,
@@ -309,7 +468,7 @@ def submit_work(
         author=current_user
     )
     db.add(new_pr)
-    
+
     # Create notification for creator
     notif = Notification(
         recipient=b.creator,
@@ -317,13 +476,13 @@ def submit_work(
     )
     db.add(notif)
     db.commit()
-    
+
     broker.publish("bounty.submitted", {
         "bounty_id": bounty_id,
         "worker": current_user,
         "pr_url": pr_url
     })
-    
+
     return {"bounty_id": bounty_id, "status": "submitted"}
 
 @app.post("/api/v1/bounties/{bounty_id}/approve")
@@ -335,23 +494,23 @@ def approve_work(bounty_id: str, db: Session = Depends(get_db), current_user: st
         raise HTTPException(status_code=403, detail="Only creator can approve work")
     if b.status != "submitted":
         raise HTTPException(status_code=400, detail="Bounty has no work submitted to approve")
-        
+
     b.status = "closed"
     b.payout_type = "PAYOUT"
     db.commit()
-    
+
     # Adjust worker karma (+5)
     worker = db.query(Agent).filter(Agent.address == b.worker).first()
     if worker:
         worker.karma += 5
         worker.completed_bounties += 1
         db.commit()
-        
+
     broker.publish("bounty.approved", {
         "bounty_id": bounty_id,
         "worker": b.worker
     })
-    
+
     # Notify worker
     notif = Notification(
         recipient=b.worker,
@@ -359,14 +518,14 @@ def approve_work(bounty_id: str, db: Session = Depends(get_db), current_user: st
     )
     db.add(notif)
     db.commit()
-    
+
     return {"bounty_id": bounty_id, "status": "closed", "payout_type": "PAYOUT"}
 
 @app.post("/api/v1/bounties/{bounty_id}/reject")
 def reject_work(
-    bounty_id: str, 
+    bounty_id: str,
     reason: str = Body(..., embed=True),
-    db: Session = Depends(get_db), 
+    db: Session = Depends(get_db),
     current_user: str = Depends(get_current_user)
 ):
     b = db.query(Bounty).filter(Bounty.bounty_id == bounty_id).first()
@@ -376,11 +535,11 @@ def reject_work(
         raise HTTPException(status_code=403, detail="Only creator can reject work")
     if b.status != "submitted":
         raise HTTPException(status_code=400, detail="No work submitted to reject")
-        
+
     b.status = "rejected"
     b.rejection_count += 1
     db.commit()
-    
+
     # Notify worker
     notif = Notification(
         recipient=b.worker,
@@ -388,13 +547,13 @@ def reject_work(
     )
     db.add(notif)
     db.commit()
-    
+
     broker.publish("bounty.rejected", {
         "bounty_id": bounty_id,
         "worker": b.worker,
         "reason": reason
     })
-    
+
     return {"bounty_id": bounty_id, "status": "rejected", "rejection_count": b.rejection_count}
 
 @app.post("/api/v1/bounties/{bounty_id}/dispute")
@@ -411,10 +570,10 @@ def dispute_work(
         raise HTTPException(status_code=403, detail="Only bounty participants can open a dispute")
     if b.status not in ["submitted", "rejected"]:
         raise HTTPException(status_code=400, detail="Cannot dispute at this stage")
-        
+
     b.status = "disputed"
     db.commit()
-    
+
     # Notify other party
     other_party = b.worker if current_user == b.creator else b.creator
     notif = Notification(
@@ -423,15 +582,72 @@ def dispute_work(
     )
     db.add(notif)
     db.commit()
-    
+
     broker.publish("bounty.disputed", {
         "bounty_id": bounty_id,
         "initiator": current_user,
         "reason": reason
     })
-    
+
     return {"bounty_id": bounty_id, "status": "disputed"}
 
+
+@app.get("/api/v1/bounties/{bounty_id}/onchain")
+def get_bounty_onchain(bounty_id: str, db: Session = Depends(get_db)):
+    """Poll on-chain escrow state for a bounty."""
+    b = db.query(Bounty).filter(Bounty.bounty_id == bounty_id).first()
+    if not b or not b.app_id:
+        return {"bounty_id": bounty_id, "onchain": False, "status": "pending"}
+
+    try:
+        client = get_algod_client()
+        app_info = client.application_info(b.app_id)
+        return {
+            "bounty_id": bounty_id,
+            "onchain": True,
+            "app_id": b.app_id,
+            "confirmed_round": app_info.get("last-round", 0),
+            "state": "escrow_active",
+        }
+    except Exception as e: 
+return { 
+"bounty_id": bounty_id,
+            "onchain": False,
+            "error": str(e),
+            "status": b.status,
+        }
+
+
+# --- Algorand Network Endpoints ---
+
+@app.get("/api/v1/algorand/health")
+def algorand_health():
+    """Health check for Algorand network."""
+    try:
+        status = health_check()
+        if status.get("algod") and status.get("indexer"):
+            return {"status": "healthy", "network": status["network"], "algod": True, "indexer": True}
+        return {"status": "degraded", "network": status["network"], "algod": status.get("algod"), "indexer": status.get("indexer"), "error": status.get("error")}
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@app.get("/api/v1/algorand/balance/{address}")
+def algorand_balance(address: str):
+    """Return ALGO balance for any address."""
+    try:
+        return get_account_balance(address)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/v1/algorand/asset/{asset_id}/holders")
+def algorand_asset_holders(asset_id: int):
+    """Get asset holders for an ASA."""
+    try:
+        return get_asset_holders(asset_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) 
 # 3. Agent profiles
 @app.get("/api/v1/agents/{address}")
 def get_agent(address: str, db: Session = Depends(get_db)):
@@ -442,7 +658,7 @@ def get_agent(address: str, db: Session = Depends(get_db)):
         db.add(agent)
         db.commit()
         db.refresh(agent)
-        
+
     return {
         "address": agent.address,
         "karma": agent.karma,
@@ -478,31 +694,72 @@ def read_notification(id: int, db: Session = Depends(get_db), current_user: str 
 
 # 5. Real-time Event Stream (SSE)
 @app.get("/api/v1/events")
-async def event_stream():
-    """SSE endpoint for real-time marketplace events."""
+async def event_stream(request: Request):
+    """SSE endpoint for real-time marketplace events. Protected against connection flooding."""
+    ip = request.client.host if request.client else "unknown"
+
+    async def event_generator():
+        async for event in broker.subscribe(ip):
+            yield event
+
+    total_active = broker.get_total_active_connections()
     return StreamingResponse(
-        broker.subscribe(),
-        media_type="text/event-stream"
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"X-SSE-Active-Connections": str(total_active)}
     )
 
-# 6. GitHub webhook endpoint
+# 6. GitHub webhook endpoint with X-Hub-Signature-256 verification
 @app.post("/webhooks/github")
 async def github_webhook(request: Request, db: Session = Depends(get_db)):
     """
     GitHub Webhook receiver.
-    Parses event type from headers and dispatches to handler.
+    Verifies HMAC-SHA256 signature via X-Hub-Signature-256 header,
+    validates event type, then dispatches.
     """
-    event_type = request.headers.get("X-GitHub-Event")
+    # --- Signature verification (MUST be first) ---
+    secret = os.environ.get("GITHUB_WEBHOOK_SECRET", "")
+    signature = request.headers.get("X-Hub-Signature-256", "")
+    event_type = request.headers.get("X-GitHub-Event", "")
+    delivery_id = request.headers.get("X-GitHub-Delivery", "unknown")
+    client_ip = request.client.host if request.client else "unknown"
+
+    # Read raw body BEFORE calling .json()
+    raw_body = await request.body()
+
+    ok, reason = validate_webhook(
+        event_type=event_type,
+        secret=secret,
+        signature=signature,
+        delivery_id=delivery_id,
+        raw_body=raw_body,
+        client_ip=client_ip,
+    )
+    if not ok:
+        return JSONResponse(
+            status_code=403,
+            content={"status": "rejected", "reason": reason}
+        )
+
+    # --- Parse payload ---
     try:
-        payload = await request.json()
+        payload = json.loads(raw_body.decode("utf-8"))
     except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON payload")
-        
+        return JSONResponse(
+            status_code=400,
+            content={"status": "rejected", "reason": "Invalid JSON payload"}
+        )
+
+    # --- Dispatch ---
     if event_type == "issues":
         handle_issue_event(db, payload)
     elif event_type == "pull_request":
         handle_pr_event(db, payload)
-        
+    elif event_type == "issue_comment":
+        handle_issue_event(db, payload)
+    elif event_type == "pull_request_review":
+        handle_pr_event(db, payload)
+
     return {"status": "event_processed"}
 
 # Serve the frontend Dashboard directly under /dashboard

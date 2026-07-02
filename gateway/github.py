@@ -1,3 +1,6 @@
+import hmac
+import hashlib
+import logging
 import re
 import os
 import json
@@ -5,8 +8,107 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 from .database import Bounty, GitHubPR, Notification, Agent
 
+logger = logging.getLogger(__name__)
+
+# Known GitHub webhook event types (non-exhaustive)
+KNOWN_EVENT_TYPES = {
+    "check_run", "check_suite", "commit_comment", "create", "delete",
+    "deployment", "deployment_status", "fork", "gollum",
+    "installation", "installation_repositories", "issue_comment",
+    "issues", "member", "membership", "milestone", "organization",
+    "org_block", "page_build", "ping", "project", "project_card",
+    "project_column", "public", "pull_request", "pull_request_review",
+    "pull_request_review_comment", "pull_request_review_thread",
+    "push", "release", "repository", "secret_scanning_alert",
+    "status", "team", "team_add", "watch", "workflow_dispatch",
+    "workflow_run",
+}
+
 # Regex pattern to match #ALGO-XXXX or ALGO-XXXX
 BOUNTY_RE = re.compile(r'#?ALGO-(\d+)')
+
+def verify_webhook_signature(payload_bytes: bytes, signature: str, secret: str) -> bool:
+    """
+    Verify that a GitHub webhook request includes a valid HMAC-SHA256 signature.
+
+    GitHub sends the signature in the X-Hub-Signature-256 header:
+        X-Hub-Signature-256: sha256=<hex_digest>
+
+    Args:
+        payload_bytes: Raw request body bytes
+        signature: The X-Hub-Signature-256 header value (e.g. "sha256=abcd...")
+        secret: The webhook secret string
+
+    Returns:
+        True if the signature is valid, False otherwise
+    """
+    if not secret or not signature:
+        return False
+
+    # Extract hex digest after "sha256="
+    expected = "sha256="
+    if not signature.startswith(expected):
+        return False
+    expected_hex = signature[len(expected):]
+
+    # Compute HMAC-SHA256
+    computed = hmac.new(
+        secret.encode("utf-8"),
+        payload_bytes,
+        hashlib.sha256
+    ).hexdigest()
+
+    return hmac.compare_digest(computed, expected_hex)
+
+
+def validate_webhook(event_type: str, secret: str, signature: str,
+                     delivery_id: str, raw_body: bytes,
+                     client_ip: str) -> tuple:
+    """
+    Full webhook validation pipeline.
+
+    Returns:
+        (ok: bool, reason: str)
+        - ok=True  → signature valid and event type known; reason contains delivery_id
+        - ok=False → validation failed; reason contains the failure reason
+    """
+    # 1. Check if secret is configured
+    secret_configured = bool(secret)
+    if not secret_configured:
+        logger.warning(
+            "GitHub webhook signature verification SKIPPED: "
+            "GITHUB_WEBHOOK_SECRET is not set (dev mode)."
+        )
+        return True, delivery_id
+
+    # 2. Validate event type
+    if not event_type:
+        logger.warning(
+            f"GitHub webhook REJECTED: missing X-GitHub-Event header "
+            f"(delivery={delivery_id}, ip={client_ip})"
+        )
+        return False, "Missing X-GitHub-Event header"
+
+    if event_type not in KNOWN_EVENT_TYPES:
+        logger.warning(
+            f"GitHub webhook REJECTED: unknown event type '{event_type}' "
+            f"(delivery={delivery_id}, ip={client_ip})"
+        )
+        return False, f"Unknown event type: {event_type}"
+
+    # 3. Validate HMAC signature (constant-time comparison)
+    if not verify_webhook_signature(raw_body, signature, secret):
+        logger.warning(
+            f"GitHub webhook REJECTED: invalid signature "
+            f"(delivery={delivery_id}, ip={client_ip}, event={event_type})"
+        )
+        return False, "Invalid webhook signature"
+
+    logger.info(
+        f"GitHub webhook OK: event={event_type} delivery={delivery_id}"
+    )
+    return True, delivery_id
+
 
 def log_bot_comment(repo_url: str, issue_or_pr_number: int, comment_text: str):
     """

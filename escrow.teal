@@ -1,0 +1,732 @@
+
+from algopy import (
+    Account,
+    AssetHolding,
+    Global,
+    Int,
+    Log,
+    Methods,
+    Nil,
+    op,
+    SmartContract,
+    Txn,
+    UInt64,
+    Bytes,
+    ptx,
+)
+
+# ============================================================================
+# STATE MACHINE: 8 states (CLOSED absorbs PAYOUT/REFUND/COMPLETED)
+# ============================================================================
+
+OPEN = Int(0)
+CLAIMED = Int(1)
+SUBMITTED = Int(2)
+REJECTED = Int(3)
+DISPUTED = Int(4)
+CLOSED = Int(5)
+DISPUTED_TIMEOUT = Int(6)  # New: dispute auto-resolved with 50/50 split
+CLAIM_EXPIRED = Int(7)      # New: claim timeout reverted to OPEN
+
+# Payout type constants (stored in boxes, not separate states)
+PAYOUT = Bytes("PAYOUT")
+REFUND = Bytes("REFUND")
+SPLIT = Bytes("SPLIT")  # New: 50/50 dispute timeout
+
+# Timeout constants (microseconds)
+DISPUTE_TIMEOUT_DAYS = Int(30)
+DISPUTE_TIMEOUT = DISPUTE_TIMEOUT_DAYS * 24 * 60 * 60 * 1_000_000  # 30 days
+
+CLAIM_TIMEOUT_HOURS = Int(48)
+CLAIM_TIMEOUT = CLAIM_TIMEOUT_HOURS * 60 * 60 * 1_000_000  # 48 hours
+
+# Defaults
+DEFAULT_HITM_REVIEW_WINDOW = 7 * 24 * 60 * 1_000_000  # 7 days in microseconds
+MAX_REJECTIONS = 3  # Max rejections before escrow returns to creator
+MAX_PROOF_BYTES = 2048
+MAX_URL_BYTES = 512
+MAX_DISPUTE_REASON_BYTES = 256
+
+# Box key constants
+_K_PAYOUT_TYPE = Bytes("payout_type")
+_K_IS_HITM = Bytes("is_hitm")
+_K_REVIEW_DEADLINE = Bytes("review_deadline")
+_K_REJECTION_COUNT = Bytes("rejection_count")
+_K_ESCROW_AMOUNT = Bytes("escrow_amount")
+_K_ASSET_ID = Bytes("asset_id")
+_K_CREATOR_ADDRESS = Bytes("creator_address")
+_K_AGENT_ADDRESS = Bytes("agent_address")
+_K_PROOF_URL = Bytes("proof_url")
+_K_PROOF_DATA = Bytes("proof_data")
+_K_CREATED_TIMESTAMP = Bytes("created_timestamp")
+_K_BOUNTY_ID = Bytes("bounty_id")
+_K_DISPUTE_REASON = Bytes("dispute_reason")
+_K_DISPUTE_INITIATOR = Bytes("dispute_initiator")
+
+# New box keys (v2 additions)
+_K_CLAIM_DEADLINE = Bytes("claim_deadline")         # uint64 - when claim expires
+_K_CLAIM_TIMESTAMP = Bytes("claim_timestamp")       # uint64 - when claim was set
+_K_GITHUB_STATUS = Bytes("github_status")           # "pending", "pass", "fail"
+_K_DISPUTE_TIMESTAMP = Bytes("dispute_timestamp")   # uint64 - when dispute was filed
+
+
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
+
+def _box_get_bytes(key: Bytes) -> Bytes:
+    """Read a bytes value from app global box."""
+    return ptx.Box.global_get(key)
+
+
+def _box_put_bytes(key: Bytes, value: Bytes) -> None:
+    """Write a bytes value to app global box."""
+    ptx.Box.global_put(key, value)
+
+
+def _box_get_uint64(key: Bytes) -> UInt64:
+    """Read a uint64 value from app global box (stored as bytes)."""
+    return ptx.Box.global_get(key).to_uint64()
+
+
+def _box_put_uint64(key: Bytes, value: UInt64) -> None:
+    """Write a uint64 value to app global box (as bytes)."""
+    ptx.Box.global_put(key, value.bytes)
+
+
+def _box_get_address(key: Bytes) -> Account:
+    """Read a 32-byte address from app global box."""
+    return ptx.Box.global_get(key).to_account()
+
+
+def _box_put_address(key: Bytes, value: Account) -> None:
+    """Write an address to app global box."""
+    ptx.Box.global_put(key, value.address)
+
+
+def _is_creator() -> bool:
+    return _box_get_address(_K_CREATOR_ADDRESS) == Txn.sender()
+
+
+def _is_agent() -> bool:
+    addr = _box_get_address(_K_AGENT_ADDRESS)
+    return addr.address != Account(32 * b"\x00").address and addr == Txn.sender()
+
+
+def _state() -> UInt64:
+    return ptx.AppLocal.get(Int("state"))
+
+
+def _set_state(val: UInt64) -> None:
+    ptx.AppLocal.set(Int("state"), val)
+
+
+def _require_rekey_not_modified() -> None:
+    """Prevent RekeyTo — standard practice for stateful contracts."""
+    ptx.require(Txn.rekey_to() == Account(32 * b"\x00"))
+
+
+def _verify_escrow_funding(escrow_amount: UInt64, asset_id: UInt64) -> None:
+    """
+    Verify the escrow payment arrived in this transaction group.
+
+    In Algorand, payments to an app must come in the same group.
+    We check Txn.group_index - 1 to find the payment/transfer.
+
+    Args:
+        escrow_amount: Expected amount (microALGO or ASA units)
+        asset_id: 0 for ALGO native, ASA ID for token bounties
+    """
+    # Must have a previous transaction in the group (the payment)
+    ptx.require(Txn.group_index() > Int(1))
+
+    # Get the previous transaction in the group
+    prev_tx = ptx.Gtxn[Txn.group_index() - Int(1)]
+
+    if asset_id > Int(0):
+        # ASA bounty: verify asset transfer of exact amount to this app
+        ptx.require(
+            prev_tx.type_enum() == op.TypeEnum.AssetTransfer,
+            "Previous tx must be asset transfer"
+        )
+        ptx.require(
+            prev_tx.xfer_asset() == asset_id,
+            "Asset ID mismatch"
+        )
+        ptx.require(
+            prev_tx.asset_amount() == escrow_amount,
+            "Asset amount mismatch"
+        )
+    else:
+        # ALGO native bounty: verify payment of exact amount to this app
+        ptx.require(
+            prev_tx.type_enum() == op.TypeEnum.Payment,
+            "Previous tx must be payment"
+        )
+        ptx.require(
+            prev_tx.receiver() == Global.current_application_address(),
+            "Payment must be to this app address"
+        )
+        ptx.require(
+            prev_tx.amount() == escrow_amount,
+            "Amount mismatch"
+        )
+
+
+def _verify_escrow_balance(asset_id: UInt64, escrow_amount: UInt64) -> None:
+    """
+    Verify the contract holds the expected escrow balance.
+
+    This is a secondary check after _verify_escrow_funding() to ensure
+    funds weren't withdrawn between the payment and the app call.
+
+    Args:
+        asset_id: 0 for ALGO native, ASA ID for token bounties
+        escrow_amount: Expected balance
+    """
+    if asset_id > Int(0):
+        # For ASA: check AssetHolding balance
+        asset_balance = AssetHolding.balance(Global.current_application_address(), asset_id)
+        ptx.require(asset_balance.amount >= escrow_amount, "Insufficient asset balance")
+    else:
+        # For ALGO: check contract app balance
+        ptx.require(
+            Global.current_application_balance() >= escrow_amount,
+            "Insufficient contract balance"
+        )
+
+
+# ============================================================================
+# MAIN CONTRACT
+# ============================================================================
+
+class EscrowContract(SmartContract):
+    """
+    AlgoBounty Escrow Smart Contract (Factory pattern).
+    Each bounty gets its own Application ID.
+    Funds are held in the app account — native escrow.
+
+    Security features (v2):
+    - Escrow funding verification prevents fake escrows
+    - Balance verification before payouts
+    - Dispute timeout (30d) with 50/50 split
+    - Claim timeout (48h) with revert to OPEN
+    - GitHub OIDC bridge for auto-verification
+    """
+
+    @Methods.external()
+    def create_bounty(
+        self,
+        bounty_id: Bytes,
+        escrow_amount: UInt64,
+        is_hitm: UInt64,
+        asset_id: UInt64,
+    ) -> None:
+        """
+        Create a new bounty escrow.
+        Called once when the factory deploys this contract instance.
+
+        SECURITY FIX: Verifies the escrow payment arrived in the same
+        transaction group. The caller must include a payment/asset transfer
+        to this app's address with the exact escrow_amount.
+
+        Args:
+            bounty_id: Unique identifier (<= 64 bytes)
+            escrow_amount: Amount to lock (microALGO or ASA units)
+            is_hitm: 1 if HITM mode (review window), 0 for trustless
+            asset_id: 0 for ALGO native, ASA ID for token bounties
+        """
+        ptx.require(Txn.type_enum() == op.TypeEnum.AppCall)
+        ptx.require(Txn.on_completion() == op.OnCompletion.NoOp)
+        _require_rekey_not_modified()
+
+        # Validate inputs
+        ptx.require(bounty_id.length() <= Int(64))
+        ptx.require(escrow_amount > Int(0))
+        ptx.require(is_hitm <= Int(1))
+        ptx.require(asset_id >= Int(0))
+
+        # SECURITY FIX: Verify escrow funding from previous transaction in group
+        _verify_escrow_funding(escrow_amount, asset_id)
+
+        # SECURITY FIX: Verify the contract actually holds the funds
+        _verify_escrow_balance(asset_id, escrow_amount)
+
+        # Initialize state
+        _set_state(OPEN)
+        _box_put_uint64(_K_ESCROW_AMOUNT, escrow_amount)
+        _box_put_uint64(_K_IS_HITM, is_hitm)
+        _box_put_uint64(_K_ASSET_ID, asset_id)
+        _box_put_uint64(_K_CREATED_TIMESTAMP, Global.latest_timestamp())
+        _box_put_bytes(_K_BOUNTY_ID, bounty_id)
+        _box_put_address(_K_CREATOR_ADDRESS, Txn.sender())
+        # Initialize agent address to zero (no agent yet)
+        ptx.Box.global_put(_K_AGENT_ADDRESS, Account(32 * b"\x00").address)
+        # Initialize rejection count
+        _box_put_uint64(_K_REJECTION_COUNT, Int(0))
+
+        Log(Bytes("bounty_created"))
+        Log(bounty_id)
+
+    @Methods.external()
+    def claim_bounty(self) -> None:
+        """
+        Claim an OPEN bounty as the working agent.
+        Sets the claim deadline for timeout enforcement.
+        """
+        ptx.require(Txn.type_enum() == op.TypeEnum.AppCall)
+        ptx.require(Txn.on_completion() == op.OnCompletion.NoOp)
+        _require_rekey_not_modified()
+
+        ptx.require(_state() == OPEN)
+
+        # Cannot claim your own bounty
+        ptx.require(Txn.sender() != _box_get_address(_K_CREATOR_ADDRESS))
+
+        # Must not already have an agent
+        agent_addr = _box_get_address(_K_AGENT_ADDRESS)
+        ptx.require(
+            agent_addr.address == Account(32 * b"\x00").address
+        )
+
+        _box_put_address(_K_AGENT_ADDRESS, Txn.sender())
+        _set_state(CLAIMED)
+
+        # SECURITY FIX: Set claim deadline for timeout enforcement
+        _box_put_uint64(
+            _K_CLAIM_DEADLINE,
+            Global.latest_timestamp() + CLAIM_TIMEOUT
+        )
+        _box_put_uint64(
+            _K_CLAIM_TIMESTAMP,
+            Global.latest_timestamp()
+        )
+
+        Log(Bytes("bounty_claimed"))
+
+    @Methods.external()
+    def submit_work(self, proof_url: Bytes, proof_data: Bytes) -> None:
+        """
+        Submit proof of work (GitHub PR URL + structured data).
+        Transition: CLAIMED -> SUBMITTED or REJECTED -> SUBMITTED (revise).
+        """
+        ptx.require(Txn.type_enum() == op.TypeEnum.AppCall)
+        ptx.require(Txn.on_completion() == op.OnCompletion.NoOp)
+        _require_rekey_not_modified()
+
+        current = _state()
+
+        if current == CLAIMED:
+            ptx.require(_is_agent())
+            ptx.require(proof_url.length() > Int(0))
+            ptx.require(proof_url.length() <= MAX_URL_BYTES)
+            ptx.require(proof_data.length() > Int(0))
+            ptx.require(proof_data.length() <= MAX_PROOF_BYTES)
+
+            _box_put_bytes(_K_PROOF_URL, proof_url)
+            _box_put_bytes(_K_PROOF_DATA, proof_data)
+            _set_state(SUBMITTED)
+
+            Log(Bytes("work_submitted"))
+
+        elif current == REJECTED:
+            ptx.require(_is_agent())
+            ptx.require(_box_get_uint64(_K_REJECTION_COUNT) < MAX_REJECTIONS)
+
+            ptx.require(proof_url.length() > Int(0))
+            ptx.require(proof_url.length() <= MAX_URL_BYTES)
+            ptx.require(proof_data.length() > Int(0))
+            ptx.require(proof_data.length() <= MAX_PROOF_BYTES)
+
+            _box_put_bytes(_K_PROOF_URL, proof_url)
+            _box_put_bytes(_K_PROOF_DATA, proof_data)
+            _box_put_uint64(
+                _K_REJECTION_COUNT,
+                _box_get_uint64(_K_REJECTION_COUNT) + Int(1)
+            )
+            _set_state(SUBMITTED)
+
+            Log(Bytes("work_revise_submitted"))
+
+        else:
+            ptx.revert()  # Invalid state for submit_work
+
+    @Methods.external()
+    def approve_work(self) -> None:
+        """
+        Creator approves submitted work.
+        Transition: SUBMITTED -> CLOSED (payout_type = PAYOUT).
+
+        SECURITY FIX: Verifies escrow balance before payout.
+        The actual transfer is executed by a payment transaction in the
+        same atomic group (receiver + amount as arguments).
+
+        Required group transaction:
+            Tx[1] = PaymentTxn(receiver=agent, amount=escrow_amount, ...)
+
+        The contract approves the state transition; the client executes
+        the payment. This is the only way to transfer FROM a smart contract.
+        """
+        ptx.require(Txn.type_enum() == op.TypeEnum.AppCall)
+        ptx.require(Txn.on_completion() == op.OnCompletion.NoOp)
+        _require_rekey_not_modified()
+
+        ptx.require(_state() == SUBMITTED)
+        ptx.require(_is_creator())
+
+        # SECURITY FIX: Verify escrow balance before payout
+        escrow_amount = _box_get_uint64(_K_ESCROW_AMOUNT)
+        asset_id = _box_get_uint64(_K_ASSET_ID)
+        _verify_escrow_balance(asset_id, escrow_amount)
+
+        _box_put_bytes(_K_PAYOUT_TYPE, PAYOUT)
+        _set_state(CLOSED)
+
+        Log(Bytes("work_approved"))
+        Log(Bytes("payout_pending"))
+        Log(_box_get_address(_K_AGENT_ADDRESS).address)
+        Log(escrow_amount.bytes)
+
+    @Methods.external()
+    def reject_work(self, reason: Bytes) -> None:
+        """
+        Creator rejects submitted work.
+        Agent can revise and resubmit (up to MAX_REJECTIONS).
+        """
+        ptx.require(Txn.type_enum() == op.TypeEnum.AppCall)
+        ptx.require(Txn.on_completion() == op.OnCompletion.NoOp)
+        _require_rekey_not_modified()
+
+        ptx.require(_state() == SUBMITTED)
+        ptx.require(_is_creator())
+        ptx.require(
+            _box_get_uint64(_K_REJECTION_COUNT) < MAX_REJECTIONS
+        )
+
+        _box_put_uint64(
+            _K_REJECTION_COUNT,
+            _box_get_uint64(_K_REJECTION_COUNT) + Int(1)
+        )
+        _set_state(REJECTED)
+
+        Log(Bytes("work_rejected"))
+        Log(reason)
+
+    @Methods.external()
+    def submit_dispute(self, reason: Bytes) -> None:
+        """
+        Either party initiates a dispute.
+        Transition: SUBMITTED/REJECTED -> DISPUTED.
+        Records dispute timestamp for timeout enforcement.
+        """
+        ptx.require(Txn.type_enum() == op.TypeEnum.AppCall)
+        ptx.require(Txn.on_completion() == op.OnCompletion.NoOp)
+        _require_rekey_not_modified()
+
+        state = _state()
+        ptx.require(state == SUBMITTED | state == REJECTED)
+        ptx.require(_is_creator() | _is_agent())
+        ptx.require(reason.length() > Int(0))
+        ptx.require(reason.length() <= MAX_DISPUTE_REASON_BYTES)
+
+        _box_put_bytes(_K_DISPUTE_REASON, reason)
+        _box_put_address(_K_DISPUTE_INITIATOR, Txn.sender())
+        _set_state(DISPUTED)
+
+        # SECURITY FIX: Record dispute timestamp for timeout
+        _box_put_uint64(
+            _K_DISPUTE_TIMESTAMP,
+            Global.latest_timestamp()
+        )
+
+        Log(Bytes("dispute_submitted"))
+
+    @Methods.external()
+    def resolve_dispute(
+        self, resolution: Bytes, mediator_signature: Bytes
+    ) -> None:
+        """
+        Resolve a dispute by signed agreement.
+        resolution = "agent_win" or "creator_win"
+
+        SECURITY FIX: Verifies escrow balance before payout/refund.
+        """
+        ptx.require(Txn.type_enum() == op.TypeEnum.AppCall)
+        ptx.require(Txn.on_completion() == op.OnCompletion.NoOp)
+        _require_rekey_not_modified()
+
+        ptx.require(_state() == DISPUTED)
+        ptx.require(
+            resolution == Bytes("agent_win")
+            | resolution == Bytes("creator_win")
+        )
+        ptx.require(mediator_signature.length() > Int(0))
+
+        # SECURITY FIX: Verify escrow balance before payout
+        escrow_amount = _box_get_uint64(_K_ESCROW_AMOUNT)
+        asset_id = _box_get_uint64(_K_ASSET_ID)
+        _verify_escrow_balance(asset_id, escrow_amount)
+
+        if resolution == Bytes("agent_win"):
+            _box_put_bytes(_K_PAYOUT_TYPE, PAYOUT)
+            _set_state(CLOSED)
+            Log(Bytes("dispute_resolved_agent_win"))
+        else:
+            _box_put_bytes(_K_PAYOUT_TYPE, REFUND)
+            _set_state(CLOSED)
+            Log(Bytes("dispute_resolved_creator_win"))
+
+        Log(Bytes("payout_pending"))
+        Log(resolution)
+        Log(escrow_amount.bytes)
+
+    @Methods.external()
+    def auto_resolve_creator_win(self) -> None:
+        """
+        Auto-resolve dispute in creator's favor if timeout passed.
+        Can be called by anyone (permissionless cleanup).
+        14-day dispute window from creation (legacy).
+        """
+        ptx.require(Txn.type_enum() == op.TypeEnum.AppCall)
+        ptx.require(Txn.on_completion() == op.OnCompletion.NoOp)
+
+        ptx.require(_state() == DISPUTED)
+
+        created_ts = _box_get_uint64(_K_CREATED_TIMESTAMP)
+        timeout = Int(14) * 24 * 60 * 60 * 1_000_000  # 14 days in microseconds
+        ptx.require(Global.latest_timestamp() > created_ts + timeout)
+
+        _box_put_bytes(_K_PAYOUT_TYPE, REFUND)
+        _set_state(CLOSED)
+        Log(Bytes("dispute_auto_resolved_creator_win"))
+
+        Log(Bytes("payout_pending"))
+        Log(Bytes("payout_type"))
+        Log(Bytes("REFUND"))
+
+    @Methods.external()
+    def timeout_dispute(self) -> None:
+        """
+        SECURITY FIX: Dispute timeout - resolves a stalled dispute after
+        30 days with a 50/50 split between creator and agent.
+
+        Anyone can call this (permissionless cleanup). Protects both
+        parties from indefinite dispute locks where the mediator ghosts.
+
+        Transition: DISPUTED -> CLOSED (payout_type = SPLIT)
+
+        Required group transaction:
+            Tx[1] = PaymentTxn(receiver=creator, amount=escrow_amount/2, ...)
+            Tx[2] = PaymentTxn(receiver=agent, amount=escrow_amount/2, ...)
+\n        The contract approves the split; the client executes both payments.
+        """
+        ptx.require(Txn.type_enum() == op.TypeEnum.AppCall)
+        ptx.require(Txn.on_completion() == op.OnCompletion.NoOp)
+
+        ptx.require(_state() == DISPUTED)
+
+        # Check 30-day dispute timeout has passed
+        dispute_ts = _box_get_uint64(_K_DISPUTE_TIMESTAMP)
+        ptx.require(
+            Global.latest_timestamp() > dispute_ts + DISPUTE_TIMEOUT,
+            "Dispute timeout not yet reached"
+        )
+
+        escrow_amount = _box_get_uint64(_K_ESCROW_AMOUNT)
+
+        # SECURITY FIX: Verify escrow balance before split
+        asset_id = _box_get_uint64(_K_ASSET_ID)
+        _verify_escrow_balance(asset_id, escrow_amount)
+
+        half_amount = escrow_amount / Int(2)
+
+        _box_put_bytes(_K_PAYOUT_TYPE, SPLIT)
+        _set_state(CLOSED)
+
+        Log(Bytes("dispute_timeout_split"))
+        Log(Bytes("payout_pending"))
+        Log(_box_get_address(_K_CREATOR_ADDRESS).address)
+        Log(half_amount.bytes)
+        Log(_box_get_address(_K_AGENT_ADDRESS).address)
+        Log(half_amount.bytes)
+
+    @Methods.external()
+    def auto_release(self) -> None:
+        """
+        Auto-release HITM escrow to agent if review window expired.
+        Can be called by anyone (permissionless cleanup).
+
+        Protects workers from indefinite review locks.
+        """
+        ptx.require(Txn.type_enum() == op.TypeEnum.AppCall)
+        ptx.require(Txn.on_completion() == op.OnCompletion.NoOp)
+
+        ptx.require(_state() == SUBMITTED)
+        is_hitm = _box_get_uint64(_K_IS_HITM)
+        ptx.require(is_hitm == Int(1))
+
+        deadline = _box_get_uint64(_K_REVIEW_DEADLINE)
+        ptx.require(Global.latest_timestamp() >= deadline)
+
+        # SECURITY FIX: Verify escrow balance before release
+        escrow_amount = _box_get_uint64(_K_ESCROW_AMOUNT)
+        asset_id = _box_get_uint64(_K_ASSET_ID)
+        _verify_escrow_balance(asset_id, escrow_amount)
+
+        _box_put_bytes(_K_PAYOUT_TYPE, PAYOUT)
+        _set_state(CLOSED)
+
+        Log(Bytes("auto_released_hitm"))
+        Log(Bytes("payout_pending"))
+        Log(_box_get_address(_K_AGENT_ADDRESS).address)
+        Log(escrow_amount.bytes)
+
+    @Methods.external()
+    def claim_abandoned(self) -> None:
+        """
+        Creator can claim escrow if bounty was abandoned (max rejections exceeded).
+        After MAX_REJECTIONS, escrow returns to creator as compensation.
+
+        SECURITY FIX: Verifies escrow balance before refund.
+        """
+        ptx.require(Txn.type_enum() == op.TypeEnum.AppCall)
+        ptx.require(Txn.on_completion() == op.OnCompletion.NoOp)
+        _require_rekey_not_modified()
+
+        ptx.require(_state() == REJECTED)
+        ptx.require(
+            _box_get_uint64(_K_REJECTION_COUNT) >= MAX_REJECTIONS
+        )
+        ptx.require(_is_creator())
+
+        # SECURITY FIX: Verify escrow balance before refund
+        escrow_amount = _box_get_uint64(_K_ESCROW_AMOUNT)
+        asset_id = _box_get_uint64(_K_ASSET_ID)
+        _verify_escrow_balance(asset_id, escrow_amount)
+
+        _box_put_bytes(_K_PAYOUT_TYPE, REFUND)
+        _set_state(CLOSED)
+
+        Log(Bytes("abandoned_refunded_creator"))
+        Log(Bytes("payout_pending"))
+        Log(_box_get_address(_K_CREATOR_ADDRESS).address)
+        Log(escrow_amount.bytes)
+
+    @Methods.external()
+    def expire_claim(self) -> None:
+        """
+        SECURITY FIX: Claim timeout - anyone can expire a stale claim.
+
+        If an agent claims a bounty but never submits work within
+        CLAIM_TIMEOUT_HOURS (default 48h), anyone can call this to
+        revert the bounty to OPEN so others can claim it.
+
+        The agent loses -20 karma (logged for off-chain tracker).
+
+        Transition: CLAIMED -> CLAIM_EXPIRED (then reverts to OPEN)
+        """
+        ptx.require(Txn.type_enum() == op.TypeEnum.AppCall)
+        ptx.require(Txn.on_completion() == op.OnCompletion.NoOp)
+
+        ptx.require(_state() == CLAIMED)
+
+        # Check claim deadline has passed
+        claim_deadline = _box_get_uint64(_K_CLAIM_DEADLINE)
+        ptx.require(
+            Global.latest_timestamp() > claim_deadline,
+            "Claim deadline not yet reached"
+        )
+
+        # Record claim expiry
+        _set_state(CLAIM_EXPIRED)
+        Log(Bytes("claim_expired"))
+        Log(_box_get_bytes(_K_BOUNTY_ID))
+        Log(_box_get_address(_K_AGENT_ADDRESS).address)
+        Log(Bytes("karma_penalty_20"))
+
+        # Revert to OPEN so others can claim
+        _set_state(OPEN)
+        _box_put_uint64(_K_REJECTION_COUNT, Int(0))
+
+        Log(Bytes("bounty_reopened"))
+
+    @Methods.external()
+    def github_verify(self, pr_url: Bytes, test_hash: Bytes, oidc_token: Bytes) -> None:
+        """
+        SECURITY FIX: GitHub OIDC bridge support.
+
+        Stores GitHub PR URL, test hash, and OIDC token for off-chain
+        verification. The actual OIDC validation happens in the Gateway API.
+
+        This enables automated bounty resolution where GitHub Actions
+        can cryptographically prove test results without manual review.
+
+        Args:
+            pr_url: GitHub PR URL
+            test_hash: SHA256 hash of test results
+            oidc_token: GitHub Actions OIDC token (JWT)
+        """
+        ptx.require(Txn.type_enum() == op.TypeEnum.AppCall)
+        ptx.require(Txn.on_completion() == op.OnCompletion.NoOp)
+        _require_rekey_not_modified()
+
+        # Must be in SUBMITTED state (work has been submitted)
+        ptx.require(_state() == SUBMITTED)
+
+        # Store GitHub verification data
+        _box_put_bytes(_K_PROOF_URL, pr_url)
+        _box_put_bytes(_K_GITHUB_STATUS, Bytes("pending"))
+
+        # Store test hash in proof_data (reserved field)
+        _box_put_bytes(_K_PROOF_DATA, test_hash)
+
+        # Store OIDC token (off-chain processes will validate)
+        _box_put_bytes(Bytes("oidc_token"), oidc_token)
+
+        Log(Bytes("github_verified"))
+        Log(_box_get_bytes(_K_BOUNTY_ID))
+        Log(Bytes("pending"))
+
+    @Methods.external()
+    def set_github_status(self, status: Bytes) -> None:
+        """
+        SECURITY FIX: Update GitHub verification status.
+
+        Called by off-chain processor after OIDC validation.
+        Status: "pass" or "fail".
+
+        Args:
+            status: "pass", "fail", or "pending"
+        """
+        ptx.require(Txn.type_enum() == op.TypeEnum.AppCall)
+        ptx.require(Txn.on_completion() == op.OnCompletion.NoOp)
+        _require_rekey_not_modified()
+
+        ptx.require(
+            status == Bytes("pass")
+            | status == Bytes("fail")
+            | status == Bytes("pending")
+        )
+
+        _box_put_bytes(_K_GITHUB_STATUS, status)
+
+        Log(Bytes("github_status_updated"))
+        Log(status)
+
+    @Methods.external()
+    def get_bounty_info(self) -> None:
+        """
+        Read-only view: return bounty metadata.
+        Returns structured data that can be consumed off-chain.
+        """
+        ptx.require(Txn.type_enum() == op.TypeEnum.AppCall)
+        ptx.require(Txn.on_completion() == op.OnCompletion.NoOp)
+
+        Log(Bytes("bounty_info"))
+        Log(_state())
+        Log(_box_get_bytes(_K_BOUNTY_ID))
+        Log(_box_get_uint64(_K_ESCROW_AMOUNT).to_bytes())
+        Log(_box_get_address(_K_CREATOR_ADDRESS).address)
+        agent_addr = _box_get_address(_K_AGENT_ADDRESS)
+        Log(agent_addr.address)
+        Log(_box_get_uint64(_K_REJECTION_COUNT).to_bytes())

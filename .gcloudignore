@@ -1,0 +1,45 @@
+# GCloud Build ignore file for AlgoBounty
+
+# Node modules (bundled in Docker)
+node_modules/
+dashboard/node_modules/
+
+# Git
+.git/
+.gitignore
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+gateway/__pycache__/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local dev
+.env
+*.local
+
+# Tests (not needed in production build)
+tests/
+
+# Docs
+README.md
+*.md
+
+# Legacy
+dashboard-legacy/
+
+# Supabase (CLI tools, not needed)
+supabase/
+
+# Script outputs
+*.algo

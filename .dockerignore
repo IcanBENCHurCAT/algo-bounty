@@ -1,0 +1,56 @@
+# Build context ignores for gcloud builds submit
+
+# Node modules
+node_modules/
+**/node_modules/
+
+# Git
+.git/
+.gitignore
+
+# Python cache
+__pycache__/
+**/__pycache__/
+*.pyc
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Tests
+tests/
+
+# Docs
+*.md
+README*
+
+# Legacy
+dashboard-legacy/
+
+# Local
+.env
+
+# Supabase
+supabase/
+
+# Algosdk artifacts (keep escrow.algo)
+*.teal
+*.algo
+!escrow.algo
+
+# Workspace files
+*.orig
+
+# OpenClaw workspace
+.openclaw/
+
+# Build artifacts
+dist/
+build/
+
+# Cloud build cache
+.gcloud/
