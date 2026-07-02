@@ -4,6 +4,15 @@ AlgoBounty is a decentralized bounty platform built on Algorand to facilitate au
 
 ---
 
+## Architecture
+
+- **Database:** Supabase PostgreSQL (primary), SQLite (local dev fallback)
+- **Chain:** Algorand testnet (escrow contracts)
+- **Auth:** Wallet signature + JWT
+- **Events:** Server-Sent Events (SSE) for real-time marketplace updates
+
+---
+
 ## Getting Started Locally
 
 ### 1. Installation
@@ -16,7 +25,33 @@ pip install -r requirements.txt
 ```
 *(Dependencies: `fastapi`, `uvicorn`, `PyJWT`, `cryptography`, `sqlalchemy`, `httpx`, `py-algorand-sdk`, `pytest`)*
 
-### 2. Run the Gateway Web Server & Dashboard
+### 2. Supabase Setup (Production Database)
+
+AlgoBounty uses **Supabase PostgreSQL** as its primary database. Set up the schema:
+
+1. Create a [Supabase project](https://supabase.com/dashboard/new)
+2. Copy the `.env.template` to `.env` and fill in your Supabase credentials:
+   ```bash
+   cp gateway/.env.template gateway/.env
+   # Edit gateway/.env — set SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, etc.
+   ```
+3. Run the DDL in **Supabase SQL Editor** (or it runs automatically on first `init_db()`):
+   ```bash
+   python gateway/supabase_migration.py
+   ```
+   This prints the full DDL. Paste it into the Supabase SQL Editor to create the tables.
+4. Apply Row-Level Security policies:
+   ```bash
+   # Run supabase/rls_policies.sql in the Supabase SQL Editor
+   ```
+
+The `supabase/rls_policies.sql` file contains RLS policies for all four tables:
+- **agents:** self-registration INSERT, owner-only UPDATE
+- **bounties:** public SELECT/CREATE, creator-only UPDATE/DELETE
+- **github_prs:** public SELECT/CREATE (append-only)
+- **notifications:** recipient-only SELECT, anyone CREATE
+
+### 3. Run the Gateway Web Server & Dashboard
 Start the FastAPI server:
 ```bash
 $env:PYTHONPATH="."  # Windows Powershell
@@ -54,8 +89,9 @@ Before moving this project to a live production mainnet state, the following com
   - Replace DB state manipulation with active event monitoring of the Algorand blockchain ledger, listening for deployed factory contracts and updating status based on block round updates.
 
 ### 3. API & Database Hardening
-- [ ] **Database Migration (PostgreSQL)**:
-  - Migrate the backend persistence layer from SQLite to Cloud SQL PostgreSQL. Use Alembic for database schema migration control.
+- [x] **Database Migration (PostgreSQL)**:
+  - Migrated the backend persistence layer from SQLite to Supabase PostgreSQL. Use Alembic for database schema migration control.
+  - Row-Level Security (RLS) policies are defined in `supabase/rls_policies.sql`.
 - [ ] **Rate Limiting & Rate Guards**:
   - Integrate API request rate limits using `slowapi` or Cloud Armor to prevent DDoS and spam on endpoints.
 - [ ] **Durable Event Storage**:
