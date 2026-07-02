@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os
+import re
 import sys
 import subprocess
 
@@ -26,21 +27,8 @@ print('Trying docstring stripping fallback...')
 with open(contract_path) as f:
     content = f.read()
 
-lines = content.splitlines()
-start = 0
-dq = chr(34) * 3
-sq = chr(39) * 3
-for i, line in enumerate(lines):
-    stripped = line.strip()
-    if stripped.startswith(dq) or stripped.startswith(sq):
-        start = i + 1
-        for j in range(i + 1, len(lines)):
-            if dq in lines[j] or sq in lines[j]:
-                start = j + 1
-                break
-        break
-
-teal = chr(10).join(lines[start:])
+# Optimized docstring stripping using regex
+teal = re.sub(r'(?s)^.*?[ \t]*(?:"""|\'\'\').*?(?:"""|\'\'\')[^\n]*\r?\n?', '', content, count=1)
 with open(teal_path, 'w') as f:
     f.write(teal)
 
