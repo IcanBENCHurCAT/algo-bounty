@@ -4,7 +4,7 @@ Algorand Indexer integration for polling escrow events.
 Polls the indexer for on-chain state changes related to bounty escrow
 contracts and syncs them back to the local database.
 """
-from .algod_client import get_indexer_client, get_algod_client, is_sandbox
+from .algod_client import get_indexer_client, get_algod_client
 
 try:
     from .database import Bounty

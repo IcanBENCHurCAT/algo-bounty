@@ -10,6 +10,7 @@ Usage:
 """
 
 import os
+import signal
 from datetime import datetime, timezone
 
 from sqlalchemy import (
@@ -20,18 +21,15 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
-    Text,
     event,
     create_engine,
-    text,
 )
 from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
-from sqlalchemy.orm import Session, declarative_base, sessionmaker
+from sqlalchemy.orm import declarative_base, sessionmaker
 
 # ---------------------------------------------------------------------------
 # Connection pool warming (reduces first-request latency)
@@ -237,7 +235,6 @@ def init_db():
         # PostgreSQL / Supabase: run Alembic migrations (with timeout)
         import subprocess
         import os as _os
-        import signal
 
         alembic_cfg = _os.path.join(
             _os.path.dirname(__file__), "alembic.ini"

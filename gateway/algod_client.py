@@ -125,7 +125,8 @@ def health_check():
             "node_version": info.get("version", ""),
             "network": info.get("network", NODE_ENV),
         }
-    except Exception as e:\n        result["error"] = str(e)
+    except Exception as e:
+        result["error"] = str(e)
         return result
 
     try:
@@ -136,7 +137,8 @@ def health_check():
             "last_round": info.get("last-round", 0),
             "node_version": info.get("version", ""),
         }
-    except Exception as e:\n        result["indexer"] = False
+    except Exception as e:
+        result["indexer"] = False
         if not result.get("error"):
             result["error"] = f"indexer: {e}"
 
@@ -166,7 +168,9 @@ def get_account_balance(address):
                 for a in assets
             ],
         }
-    except Exception as e:\n        return {\n            "address": address,
+    except Exception as e:
+        return {
+            "address": address,
             "error": str(e),
             "balance": 0,
             "balance_algo": 0,
@@ -189,7 +193,9 @@ def get_transaction_status(tx_id):
             "confirmed": True,
             "transaction": tx_info,
         }
-    except Exception as e:\n        # Check if the transaction exists but isn't confirmed yet\n        try:
+    except Exception as e:
+        # Check if the transaction exists but isn't confirmed yet
+        try:
             ic = get_indexer_client()
             pending = ic.pending_transaction_by_id(tx_id)
             return {
@@ -215,7 +221,6 @@ def get_asset_holders(asset_id):
     Returns list of {address, amount} dicts.
     """
     try:
-        ac = get_algod_client()
         # Use account_assets or iterate accounts (limited)
         # Indexer provides /v2/assets/{id}/balances endpoint
         ic = get_indexer_client()
@@ -231,7 +236,9 @@ def get_asset_holders(asset_id):
             "total_holders": len(holders),
             "holders": holders[:100],  # Limit to first 100
         }
-    except Exception as e:\n        return {\n            "asset_id": asset_id,
+    except Exception as e:
+        return {
+            "asset_id": asset_id,
             "error": str(e),
             "total_holders": 0,
             "holders": [],
@@ -391,7 +398,8 @@ def deploy_escrow_on_testnet():
 
         return result
 
-    except Exception as e:\n        result["error"] = f"Deployment failed: {e}"
+    except Exception as e:
+        result["error"] = f"Deployment failed: {e}"
         return result
 
 
