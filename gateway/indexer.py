@@ -29,28 +29,24 @@ def poll_bounty_events(last_polled_round: int = 0):
         print(f"[INDEXER] Cannot connect: {exc}")
         return []
 
-    algod_client = get_algod_client()
-
     events = []
     try:
-        apps = client.search_applications(limit=100)
-        apps_list = apps.get("apps", [])
+        # Use indexer to get application data in bulk, avoiding N+1 algod calls
+        apps_response = client.search_applications(limit=100)
+        apps_list = apps_response.get("applications") or apps_response.get("apps") or []
+        current_round = apps_response.get("current-round", 0)
+
         for app in apps_list:
             app_id = app.get("id")
             if app_id is None or app_id == 0:
                 continue
 
-            try:
-                app_info = algod_client.application_info(app_id)
-                params = app_info.get("params", {})
-                events.append({
-                    "app_id": app_id,
-                    "app_status": params.get("approval-program", "unknown"),
-                    "round": app_info.get("last-round", 0),
-                })
-            except Exception:
-                # App not found yet (awaiting confirmation) or error
-                continue
+            params = app.get("params", {})
+            events.append({
+                "app_id": app_id,
+                "app_status": params.get("approval-program", "unknown"),
+                "round": current_round,
+            })
 
     except Exception as exc:
         print(f"[INDEXER] Indexer search error: {exc}")
