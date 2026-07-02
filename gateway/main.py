@@ -652,11 +652,7 @@ def algorand_asset_holders(asset_id: int):
 def get_agent(address: str, db: Session = Depends(get_db)):
     agent = db.query(Agent).filter(Agent.address == address).first()
     if not agent:
-        # Implicitly register
-        agent = Agent(address=address, karma=25)
-        db.add(agent)
-        db.commit()
-        db.refresh(agent)
+        raise HTTPException(status_code=404, detail="Agent not found")
 
     return {
         "address": agent.address,

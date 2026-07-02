@@ -2,8 +2,11 @@ import os
 
 # Set environment before importing gateway modules
 os.environ["ALGORAND_NETWORK"] = "sandbox"
-
 import pytest
+
+# Set dummy secret for tests BEFORE importing gateway modules
+os.environ["SECRET_KEY"] = "test_dummy_secret_key_at_least_32_characters_long"
+
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
