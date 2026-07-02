@@ -7,6 +7,7 @@ Tier 2: Algorand Testnet (production fallback)
 Tier 3: Mainnet (future)
 """
 import os
+import re
 import subprocess
 from pathlib import Path
 from algosdk.v2client import algod, indexer
@@ -297,19 +298,8 @@ def compile_escrow_contract():
     finally:
         fh.close()
 
-    lines = content.splitlines()
-    start = 0
-    for i, line in enumerate(lines):
-        stripped = line.strip()
-        if stripped.startswith('"""') or stripped.startswith("'''"):
-            start = i + 1
-            for j in range(i + 1, len(lines)):
-                if '"""' in lines[j] or "'''" in lines[j]:
-                    start = j + 1
-                    break
-            break
-
-    ESCROW_TEAL = chr(10).join(lines[start:])
+    # Optimized docstring stripping using regex
+    ESCROW_TEAL = re.sub(r'(?s)^.*?[ \t]*(?:"""|\'\'\').*?(?:"""|\'\'\')[^\n]*\r?\n?', '', content, count=1)
     return ESCROW_TEAL
 
 
