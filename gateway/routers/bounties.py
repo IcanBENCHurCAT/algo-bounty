@@ -31,7 +31,9 @@ def list_bounties(
     if status:
         query = query.filter(Bounty.status == status)
     if repo:
-        query = query.filter(Bounty.repo_url.contains(repo))
+        # Escape wildcards to prevent Unbounded LIKE Query (SQL Injection Variant)
+        escaped_repo = repo.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        query = query.filter(Bounty.repo_url.contains(escaped_repo, escape="\\"))
     if min_amount is not None:
         query = query.filter(Bounty.amount >= min_amount)
     if max_amount is not None:
