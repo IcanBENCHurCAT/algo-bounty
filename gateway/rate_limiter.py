@@ -11,6 +11,7 @@ Design:
     - Endpoint-specific rate limits enforced in the middleware.
 """
 
+from starlette.middleware.base import BaseHTTPMiddleware
 import time
 import json
 import threading
@@ -116,7 +117,7 @@ def _apply_sliding_window(timestamps: list[float], now: float, limit: int, windo
     return False, remaining
 
 
-class RateLimitMiddleware:
+class RateLimitMiddleware(BaseHTTPMiddleware):
     """FastAPI middleware that enforces per-IP rate limits.
 
     Skips rate limiting for requests that include a valid-looking JWT Bearer
@@ -124,10 +125,10 @@ class RateLimitMiddleware:
     and return 401 without a valid token).
     """
 
-    def __init__(self, app) -> None:
-        self.app = app
+    def __init__(self, app, dispatch=None) -> None:
+        super().__init__(app, dispatch)
 
-    async def __call__(self, request: Request, call_next) -> Response:
+    async def dispatch(self, request: Request, call_next) -> Response:
         # -- 1. Resolve matching rule ----------------------------------------
         path = request.url.path
         method = request.method.upper()

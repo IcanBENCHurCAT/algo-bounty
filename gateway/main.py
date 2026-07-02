@@ -363,7 +363,7 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
                     onchain = app_id is not None and app_id > 0
 
         except Exception as e: 
-print(f"[WEB3] Escrow deploy failed: {e}")
+            print(f"[WEB3] Escrow deploy failed: {e}")
             app_id = None
             onchain = False
 
@@ -610,8 +610,8 @@ def get_bounty_onchain(bounty_id: str, db: Session = Depends(get_db)):
             "state": "escrow_active",
         }
     except Exception as e: 
-return { 
-"bounty_id": bounty_id,
+        return {
+            "bounty_id": bounty_id,
             "onchain": False,
             "error": str(e),
             "status": b.status,
