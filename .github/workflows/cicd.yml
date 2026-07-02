@@ -6,7 +6,10 @@ on:
   pull_request:
     branches: [ main ]
 
-# Minimal permissions best practice
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -28,7 +31,7 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: '3.12'
-        cache: 'pip' # Free best-practice: Caches dependencies to speed up subsequent runs
+        cache: 'pip'
 
     - name: Install dependencies
       run: |
@@ -43,9 +46,8 @@ jobs:
 
   deploy-gateway:
     needs: test
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
-    environment: deployment # Routes this job through your environment's codeowner gate
+    environment: deployment # Routes this job through codeowner gate
     outputs:
       gateway-url: ${{ steps.deploy.outputs.gateway-url }}
 
@@ -102,9 +104,8 @@ jobs:
 
   deploy-frontend:
     needs: deploy-gateway
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
-    environment: deployment # Routes this job through your environment's codeowner gate
+    environment: deployment # Routes this job through codeowner gate
 
     steps:
     - name: Checkout Repository
