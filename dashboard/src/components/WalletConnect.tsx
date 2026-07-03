@@ -1,6 +1,7 @@
 'use client';
 
-import { useWallet } from '@/hooks/useWallet';
+import { useState } from 'react';
+import { useWallet, type WalletType } from '@/hooks/useWallet';
 
 interface WalletButtonProps {
   variant?: 'default' | 'compact';
@@ -11,23 +12,38 @@ interface WalletButtonProps {
 export default function WalletConnect({
   variant = 'default',
   className = '',
-  onConnect,
 }: WalletButtonProps) {
-  const { address, connected, loading, error, connect, disconnect } = useWallet();
+  const { address, connected, walletType, loading, error, connect, disconnect } = useWallet();
+  const [showOptions, setShowOptions] = useState(false);
 
-  const handleConnect = () => {
-    if (connected) {
-      disconnect();
-    } else {
-      connect();
-    }
+  const handleConnect = (type: WalletType) => {
+    setShowOptions(false);
+    connect(type);
+  };
+
+  const walletLogos: Record<WalletType, React.ReactNode> = {
+    pera: (
+      <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71L12 2z" />
+      </svg>
+    ),
+    defly: (
+      <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 2L2 12l10 10 10-10L12 2zm0 4l6 6-6 6-6-6 6-6z" />
+      </svg>
+    ),
+    edge: (
+      <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5-10-5-10 5z" />
+      </svg>
+    ),
   };
 
   if (error && !connected) {
     return (
       <div className="relative">
         <button
-          onClick={handleConnect}
+          onClick={() => setShowOptions(true)}
           className={`flex items-center gap-2 rounded-lg bg-transparent border border-amber-500/50 px-3 py-2 text-sm text-amber-400 hover:bg-amber-500/10 transition-colors ${className}`}
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -43,7 +59,10 @@ export default function WalletConnect({
     const shortAddr = `${address.slice(0, 6)}...${address.slice(-4)}`;
     return (
       <div className="flex items-center gap-2">
-        <span className="hidden sm:inline text-sm text-gray-400">{shortAddr}</span>
+        <div className="hidden sm:flex items-center gap-1.5 px-2 py-1 rounded bg-gray-800/40 border border-gray-700/50">
+          <span className="text-gray-500">{walletLogos[walletType || 'pera']}</span>
+          <span className="text-xs font-mono text-gray-400">{shortAddr}</span>
+        </div>
         <button
           onClick={disconnect}
           className="flex items-center gap-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 px-3 py-2 text-sm text-amber-400 hover:bg-amber-500/20 transition-colors"
@@ -61,28 +80,48 @@ export default function WalletConnect({
   }
 
   return (
-    <button
-      onClick={handleConnect}
-      disabled={loading}
-      className={`flex items-center gap-2 rounded-lg bg-blue-600/20 border border-blue-500/40 px-3 py-2 text-sm text-blue-400 hover:bg-blue-600/30 hover:border-blue-400/60 transition-colors disabled:opacity-50 ${className}`}
-    >
-      {loading ? (
+    <div className="relative">
+      <button
+        onClick={() => setShowOptions(!showOptions)}
+        disabled={loading}
+        className={`flex items-center gap-2 rounded-lg bg-blue-600/20 border border-blue-500/40 px-3 py-2 text-sm text-blue-400 hover:bg-blue-600/30 hover:border-blue-400/60 transition-colors disabled:opacity-50 ${className}`}
+      >
+        {loading ? (
+          <>
+            <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            Connecting...
+          </>
+        ) : (
+          <>
+            <WalletIcon />
+            <span className={variant === 'compact' ? 'hidden sm:inline' : ''}>
+              Connect Wallet
+            </span>
+          </>
+        )}
+      </button>
+
+      {showOptions && (
         <>
-          <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-          </svg>
-          Connecting...
-        </>
-      ) : (
-        <>
-          <WalletIcon />
-          <span className={variant === 'compact' ? 'hidden sm:inline' : ''}>
-            Connect Wallet
-          </span>
+          <div className="fixed inset-0 z-50" onClick={() => setShowOptions(false)} />
+          <div className="absolute right-0 mt-2 w-48 rounded-xl bg-gray-900 border border-gray-800 shadow-2xl z-[60] overflow-hidden p-1">
+            {(['pera', 'defly', 'edge'] as const).map((type) => (
+              <button
+                key={type}
+                onClick={() => handleConnect(type)}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition-colors"
+              >
+                <span className="text-gray-500">{walletLogos[type]}</span>
+                {type.charAt(0).toUpperCase() + type.slice(1)} Wallet
+              </button>
+            ))}
+          </div>
         </>
       )}
-    </button>
+    </div>
   );
 }
 

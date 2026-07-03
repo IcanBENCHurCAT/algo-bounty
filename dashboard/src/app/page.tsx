@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import BountyCard from '@/components/BountyCard';
 import { getBounties, type Bounty } from '@/lib/api';
+import { useEvents } from '@/hooks/useEvents';
 
 type StatusFilter = 'open' | 'claimed' | 'submitted' | 'approved' | 'disputed' | 'refunded' | 'closed' | 'all';
 type HitmFilter = 'any' | 'true' | 'false';
@@ -72,6 +73,15 @@ export default function MarketplacePage() {
   useState(() => {
     loadBounties(1);
   });
+
+  // Real-time updates
+  useEvents(useCallback((event) => {
+    console.log('Marketplace event:', event);
+    if (event.event_type.startsWith('bounty.')) {
+      // For simplicity, just reload the first page to get latest status/new bounties
+      loadBounties(1);
+    }
+  }, [loadBounties]));
 
   const statusOptions: StatusFilter[] = ['all', 'open', 'claimed', 'submitted', 'approved', 'disputed', 'refunded', 'closed'];
   const hitmOptions: HitmFilter[] = ['any', 'true', 'false'];

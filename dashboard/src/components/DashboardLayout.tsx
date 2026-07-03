@@ -41,15 +41,18 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     }
   }, [connected]);
 
-  useEffect(() => {
-    fetchNotifCount();
-  }, [fetchNotifCount]);
-
   // Refresh notifications every 30s
   useEffect(() => {
     if (!connected) return;
+
+    // Defer initial fetch to avoid synchronous setState during render/effect phase
+    const timeout = setTimeout(fetchNotifCount, 0);
     const interval = setInterval(fetchNotifCount, 30000);
-    return () => clearInterval(interval);
+
+    return () => {
+      clearTimeout(timeout);
+      clearInterval(interval);
+    };
   }, [connected, fetchNotifCount]);
 
   return (
