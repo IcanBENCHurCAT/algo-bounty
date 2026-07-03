@@ -2,10 +2,10 @@
 
 The following features and improvements are planned for the next phase of development:
 
-## 1. High Priority: Smart Contract & HITM Mode
-- **Full HITM Flow Testing**: Verify the Human-in-the-Middle review window (default 7 days) and auto-release logic.
-- **Dispute Resolution Refinement**: Implement the 30-day dispute timeout with 50/50 split as defined in the `escrow.algo` contract.
-- **Karma System Integration**: Ensure all on-chain events (claim, submit, approve, ghosting) correctly trigger karma updates in the database.
+## 1. High Priority: Smart Contract & HITM Mode [COMPLETE]
+- [x] **Full HITM Flow Testing**: Verified the Human-in-the-Middle review window and auto-release logic via `indexer_polling_task` log processing.
+- [x] **Dispute Resolution Refinement**: Corrected timeout constants in `escrow.algo` and implemented on-chain split logic handling in the gateway.
+- [x] **Karma System Integration**: Implemented full karma scoring rules (v2) in both the router lifecycle and background indexer sync.
 
 ## 2. GitHub Integration Enhancements
 - **OIDC Bridge**: Implement the full GitHub OIDC token verification for automated bounty payouts (trustless mode).
@@ -19,6 +19,8 @@ The following features and improvements are planned for the next phase of develo
 
 ## 4. Indexer & Backend Robustness
 - **Indexer Polling Refinement**: Move the background polling task to a dedicated asynchronous service (e.g., using Celery or a standalone worker process) to improve scalability and isolation from the main API.
+- **Bulk Transaction Search**: Optimize the `indexer_polling_task` to use a single `search_transactions` call for all relevant app IDs instead of polling each app individually.
+- **Active Cleanup Triggering**: Implement logic for the Gateway to actively call on-chain cleanup methods (`expire_claim`, `auto_release`, `timeout_dispute`) when internal deadlines are met, rather than just reacting to logs.
 - **Database Migrations**: Continue using Alembic for all schema changes.
 - **Secret Management**: Move sensitive environment variables (e.g., `GITHUB_TOKEN`, `PLATFORM_PRIVATE_KEY`) to a secure secret manager in production.
 

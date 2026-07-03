@@ -35,31 +35,71 @@ async def indexer_polling_task():
     """Background task to poll Algorand indexer for bounty events."""
     print("[INDEXER] Starting background polling task...")
     last_round = 0
+    from .indexer import fetch_app_logs
+    import base64
+
     while True:
         try:
-            events = poll_bounty_events(last_round)
-            if events:
-                # Get a new DB session
-                from .database import SessionLocal
-                db = SessionLocal()
-                try:
-                    for event in events:
-                        # Map on-chain app status to DB bounty statuses
-                        # This is a simplified version of the logic
-                        app_id = event.get("app_id")
-                        app_status = event.get("app_status") # This might be the program hash or similar
+            # Get a new DB session
+            from .database import SessionLocal, Bounty, Agent
+            db = SessionLocal()
+            try:
+                # Find all active bounties to poll for logs
+                active_bounties = db.query(Bounty).filter(
+                    Bounty.status.in_(["open", "claimed", "submitted", "rejected", "disputed"])
+                ).all()
 
-                        # Find the bounty with this app_id
-                        from .database import Bounty
-                        bounty = db.query(Bounty).filter(Bounty.app_id == app_id).first()
-                        if bounty:
-                            # Sync logic would go here
-                            # For example, if app is closed on-chain, update DB
-                            pass
-                    if events:
-                        last_round = max(e.get("round", 0) for e in events)
-                finally:
-                    db.close()
+                for bounty in active_bounties:
+                    if not bounty.app_id:
+                        continue
+
+                    logs_list = fetch_app_logs(bounty.app_id, last_round)
+                    for log_entry in logs_list:
+                        for log_b64 in log_entry["logs"]:
+                            log_bytes = base64.b64decode(log_b64)
+                            # Handle HITM Auto-Release
+                            if log_bytes == b"auto_released_hitm":
+                                if bounty.status != "closed":
+                                    bounty.status = "closed"
+                                    bounty.payout_type = "PAYOUT"
+                                    # Karma: +3 worker, +2 creator
+                                    worker = db.query(Agent).filter(Agent.address == bounty.worker).first()
+                                    if worker: worker.karma += 3
+                                    creator = db.query(Agent).filter(Agent.address == bounty.creator).first()
+                                    if creator: creator.karma += 2
+                                    db.commit()
+                                    print(f"[INDEXER] Bounty {bounty.bounty_id} auto-released.")
+
+                            # Handle Dispute Timeout Split
+                            elif log_bytes == b"dispute_timeout_split":
+                                if bounty.status != "closed":
+                                    bounty.status = "closed"
+                                    bounty.payout_type = "SPLIT"
+                                    # Karma: -1 both parties
+                                    worker = db.query(Agent).filter(Agent.address == bounty.worker).first()
+                                    if worker: worker.karma -= 1
+                                    creator = db.query(Agent).filter(Agent.address == bounty.creator).first()
+                                    if creator: creator.karma -= 1
+                                    db.commit()
+                                    print(f"[INDEXER] Bounty {bounty.bounty_id} dispute timed out (split).")
+
+                            # Handle Claim Expired
+                            elif log_bytes == b"claim_expired":
+                                if bounty.status != "open":
+                                    # Penalty: -20 karma for the ghosting worker
+                                    worker = db.query(Agent).filter(Agent.address == bounty.worker).first()
+                                    if worker: worker.karma -= 20
+
+                                    bounty.status = "open"
+                                    bounty.worker = None
+                                    bounty.rejection_count = 0
+                                    db.commit()
+                                    print(f"[INDEXER] Bounty {bounty.bounty_id} claim expired. Reopened.")
+
+                        if log_entry["round"] > last_round:
+                            last_round = log_entry["round"]
+            finally:
+                db.close()
         except Exception as e:
             print(f"[INDEXER] Polling task error: {e}")
 
