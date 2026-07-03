@@ -58,20 +58,22 @@ It includes:
 
 ### 3. Backend — Gateway (FastAPI) ✅
 
-`gateway/main.py` (768 lines) — Full REST API with **32+ endpoints**:
+`gateway/` — Full FastAPI backend (~8,635 total lines):
 
-| Module | File | Status |
-|--------|------|--------|
-| Main API | `gateway/main.py` | ✅ ~768 lines, 32 endpoints |
-| Auth | `gateway/auth.py` | ✅ Wallet signature + JWT (AlgSDK verify) |
-| DB Models | `gateway/database.py` | ✅ Re-exports from supabase_migration |
-| Supabase/Postgres | `gateway/supabase_migration.py` | ✅ Full DDL, models, engine, Alembic |
-| Algorand Client | `gateway/algod_client.py` | ✅ Health check, balance, holders, compile |
-| GitHub Webhooks | `gateway/github.py` | ✅ HMAC verification, issue/PR handlers |
-| Rate Limiting | `gateway/rate_limiter.py` | ✅ Middleware with config |
-| Security Middleware | `gateway/middleware.py` | ✅ Headers, CORS, size limits |
-| Indexer | `gateway/indexer.py` | ✅ Polls on-chain events, syncs to DB |
-| SSE Broker | EventBroker in main.py | ✅ Real-time event stream for dashboard |
+| Module | File | Lines | Status |
+|--------|------|-------|--------|
+| Main API | `main.py` | 768 | ✅ 32 endpoints, SSE broker |
+| Auth | `auth.py` | 68 | ✅ Wallet signature + JWT |
+| DB Models | `database.py` | 49 | ✅ Re-exports from supabase_migration |
+| Migration DDL | `supabase_migration.py` | 399 | ✅ Full DDL, models, engine, Alembic |
+| Algorand Client | `algod_client.py` | 426 | ✅ Health check, balance, holders, compile |
+| GitHub Webhooks | `github.py` | 307 | ✅ HMAC verification, issue/PR handlers |
+| Rate Limiting | `rate_limiter.py` | 211 | ✅ Middleware with config |
+| Security Middleware | `middleware.py` | 121 | ✅ Headers, CORS, size limits |
+| Indexer | `indexer.py` | 138 | ✅ Polls on-chain events, syncs to DB |
+| Migrations | `migrations/versions/` | — | ✅ Alembic init migration |
+| SSE Broker | `EventBroker` in main.py | — | ✅ Real-time event stream |
+| Config | `.env.template` | — | ✅ Template for env vars |
 
 **Key endpoints:**
 - `POST /auth/request` / `POST /auth/verify` — Wallet signature auth flow
@@ -84,24 +86,30 @@ It includes:
 
 ### 4. Frontend — Dashboard (Next.js) ✅
 
-`dashboard/` (261 lines page, full Next.js App Router):
+`dashboard/` — Full Next.js App Router project (31 files):
+
+| Directory | Files |
+|-----------|-------|
+| `src/app/` | `layout.tsx`, `page.tsx` (261 lines — main dashboard), `globals.css`, bounties detail page |
+| `src/components/` | `BountyCard.tsx` (156 lines), `DashboardLayout.tsx` (184 lines), `WalletConnect.tsx` (97 lines), `Toast.tsx` (126 lines) |
+| `src/hooks/` | `useWallet.ts` — Pera wallet connect hook |
+| `src/lib/` | `api.ts` (296 lines) — API client with all endpoint calls |
+| `src/utils/supabase/` | `client.ts`, `middleware.ts`, `server.ts` — Supabase client helpers |
+| `middleware.ts` | Next.js middleware for Supabase auth |
 
 | Component | Status |
 |-----------|--------|
-| Next.js App Router pages | ✅ / |
-| Dashboard layout | ✅ |
-| Bounty card/list | ✅ |
 | Wallet connect (Pera) | ✅ Full auth flow with challenge/sign/verify |
 | Supabase client helpers | ✅ client, middleware, server |
-| API client | ✅ `dashboard/src/lib/api.ts` (296 lines) |
+| API client | ✅ `api.ts` (296 lines) |
 | Toast notifications | ✅ |
 
 ### 5. Database ✅
 
 - **PostgreSQL via Supabase** (primary production DB)
 - **SQLite** (local dev fallback — only when SUPABASE_URL not set)
-- **Alembic** migrations configured (`gateway/alembic.ini` + `gateway/migrations/`)
-- **RLS policies** defined in `supabase/rls_policies.sql`
+- **Alembic** migrations configured (`gateway/alembic.ini` + `gateway/migrations/versions/`)
+- **RLS policies** defined in `supabase/rls_policies.sql` (4 tables)
 - Tables: `agents`, `bounties`, `github_prs`, `notifications`
 
 ### 6. Security Hardening (recent) ✅
@@ -286,30 +294,45 @@ New accounts start with 0 karma (+25 bonus on creation). Karma changes based on:
 
 ```
 algo-bounty/
-├── gateway/                # FastAPI backend
-│   ├── main.py             # Main API (32+ endpoints)
-│   ├── auth.py             # Wallet signature + JWT
-│   ├── database.py         # DB models (re-exports from supabase_migration)
-│   ├── supabase_migration.py # DDL, models, Alembic setup
-│   ├── algod_client.py     # Algorand client utilities
-│   ├── github.py           # GitHub webhook handler
-│   ├── rate_limiter.py     # Rate limiting middleware
+├── gateway/                # FastAPI backend (~8,635 lines)
+│   ├── main.py             # Main API (768 lines, 32 endpoints)
+│   ├── auth.py             # Wallet signature + JWT (68 lines)
+│   ├── database.py         # DB models (re-exports)
+│   ├── supabase_migration.py # DDL, models, Alembic (399 lines)
+│   ├── algod_client.py     # Algorand client utilities (426 lines)
+│   ├── github.py           # GitHub webhook handler (307 lines)
+│   ├── rate_limiter.py     # Rate limiting middleware (211 lines)
 │   ├── middleware.py        # Security headers, CORS, size limits
 │   ├── indexer.py          # On-chain event poller
-│   └── migrations/         # Alembic migrations
-├── dashboard/              # Next.js frontend (App Router)
-│   ├── src/app/            # Pages
-│   ├── src/components/     # React components
+│   ├── migrations/         # Alembic migrations
+│   └── .env.template       # Environment variable template
+├── dashboard/              # Next.js frontend (31 files)
+│   ├── src/app/            # Pages (layout, index, bounties detail)
+│   ├── src/components/     # React components (BountyCard, Layout, Wallet, Toast)
 │   ├── src/hooks/          # useWallet hook
-│   ├── src/lib/            # API client, Supabase helpers
-│   └── src/utils/supabase/ # Client/middleware/server configs
-├── tests/                  # Test suite
-├── supabase/               # RLS policies
+│   ├── src/lib/            # API client (296 lines)
+│   ├── src/utils/supabase/ # Client/middleware/server configs
+│   ├── middleware.ts        # Next.js middleware
+│   ├── public/             # Static assets
+│   └── package.json        # Node deps
+├── tests/                  # Test suite (3 files)
+│   ├── test_gateway.py
+│   ├── test_escrow_mock.py
+│   └── test_escrow_contract.py.bak
+├── supabase/               # RLS policies (rls_policies.sql)
 ├── escrow.algo             # Puya/pyTEAL escrow contract (748 lines)
-├── v0-v7*.md               # Design documents
-├── AGENTS.md               # Agent guide
+├── v0-rust-chain-autopsy.md
+├── v1-teal-escrow-contract.md
+├── v2-karma-reputation-system.md
+├── v4-dashboard-api.md
+├── v5-github-integration.md
+├── v6-hitm-design.md
+├── v7-handover.md
+├── AGENTS.md               # Project-level agent guide
+├── CORE-PERSONA.md         # Agent persona
 ├── CONTRACTOR-BRIEF.md     # This file
-└── README.md               # Project overview
+├── README.md               # Project overview
+└── deploy*.sh              # Deployment scripts
 ```
 
 ---
