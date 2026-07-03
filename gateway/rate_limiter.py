@@ -50,10 +50,10 @@ _RULES = [
     (r"^/health$", 1000, 60, "GET", None),
 
     # All other GET endpoints – read endpoints, moderate throttling.
-    (r"^/api/v1/", 30, 60, "GET", None),
+    (r"^/api/v1/", 100, 60, "GET", None),
 
     # Catch-all for anything else POST – reasonable default.
-    (r"^.*$", 30, 60, "POST", None),
+    (r"^.*$", 100, 60, "POST", None),
 ]
 
 # Cache compiled regexes at import time.

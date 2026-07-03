@@ -3,6 +3,8 @@ import hashlib
 import logging
 import re
 import json
+import os
+import httpx
 from datetime import datetime, UTC
 from sqlalchemy.orm import Session
 from .database import Bounty, GitHubPR, Notification, Agent
@@ -120,9 +122,35 @@ def validate_webhook(event_type: str, secret: str, signature: str,
 
 def log_bot_comment(repo_url: str, issue_or_pr_number: int, comment_text: str):
     """
-    Mock GitHub app comment.
-    Writes bot comments to a log file and prints to stdout for local inspection.
+    GitHub bot comment.
+    If GITHUB_TOKEN is set, posts to the real GitHub API.
+    Otherwise, logs to a file and stdout.
     """
+    token = os.environ.get("GITHUB_TOKEN")
+
+    # Extract owner and repo from URL
+    # Expected format: https://github.com/owner/repo
+    match = re.search(r'github\.com/([^/]+)/([^/]+)', repo_url)
+    if token and match:
+        owner = match.group(1)
+        repo = match.group(2)
+        api_url = f"https://api.github.com/repos/{owner}/{repo}/issues/{issue_or_pr_number}/comments"
+
+        try:
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Accept": "application/vnd.github.v3+json",
+                "User-Agent": "AlgoBounty-Gateway"
+            }
+            with httpx.Client() as client:
+                resp = client.post(api_url, json={"body": comment_text}, headers=headers)
+                resp.raise_for_status()
+                logger.info(f"Successfully posted comment to GitHub: {api_url}")
+                return
+        except Exception as e:
+            logger.error(f"Failed to post comment to GitHub: {e}")
+
+    # Fallback to logging
     log_file = "github_bot_comments.log"
     timestamp = datetime.now(UTC).isoformat().replace("+00:00", "Z")
     log_entry = {
