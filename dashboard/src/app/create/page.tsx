@@ -31,7 +31,18 @@ export default function CreateBountyPage() {
   const validateDetails = () => {
     const newErrors: Record<string, string> = {};
     if (description.length < 10) newErrors.description = 'Description must be at least 10 characters';
-    if (repoUrl && !repoUrl.includes('github.com')) newErrors.repoUrl = 'Only GitHub repositories are supported currently';
+
+    if (repoUrl) {
+      try {
+        const url = new URL(repoUrl);
+        if (url.hostname !== 'github.com' && url.hostname !== 'www.github.com') {
+          newErrors.repoUrl = 'Only GitHub repositories are supported currently';
+        }
+      } catch {
+        newErrors.repoUrl = 'Invalid URL format';
+      }
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };

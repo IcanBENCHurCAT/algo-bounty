@@ -14,11 +14,9 @@ from .middleware import (
 )
 from .broker import broker
 from .dependencies import get_db
-from .indexer import poll_bounty_events, sync_bounty_from_chain
-import asyncio
 from .routers import (
     auth, bounties, algorand, agents,
-    notifications, events, webhooks
+    notifications, events, webhooks, oidc
 )
 
 # Initialize database
@@ -31,56 +29,13 @@ ALLOWED_ORIGINS: list[str] = [
     "http://localhost:3001",
 ]
 
-async def indexer_polling_task():
-    """Background task to poll Algorand indexer for bounty events."""
-    print("[INDEXER] Starting background polling task...")
-    last_round = 0
-    while True:
-        try:
-            events = poll_bounty_events(last_round)
-            if events:
-                # Get a new DB session
-                from .database import SessionLocal
-                db = SessionLocal()
-                try:
-                    for event in events:
-                        # Map on-chain app status to DB bounty statuses
-                        # This is a simplified version of the logic
-                        app_id = event.get("app_id")
-                        app_status = event.get("app_status") # This might be the program hash or similar
-
-                        # Find the bounty with this app_id
-                        from .database import Bounty
-                        bounty = db.query(Bounty).filter(Bounty.app_id == app_id).first()
-                        if bounty:
-                            # Sync logic would go here
-                            # For example, if app is closed on-chain, update DB
-                            pass
-                    if events:
-                        last_round = max(e.get("round", 0) for e in events)
-                finally:
-                    db.close()
-        except Exception as e:
-            print(f"[INDEXER] Polling task error: {e}")
-
-        await asyncio.sleep(10)  # Poll every 10 seconds
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Start SSE cleanup background task on app startup
     await broker.start_cleanup()
     print(f"[SSE] Started cleanup task (interval={broker.CLEANUP_INTERVAL_SECONDS}s, stale_timeout={broker.STALE_TIMEOUT_SECONDS}s)")
 
-    # Start Indexer polling task
-    polling_task = asyncio.create_task(indexer_polling_task())
-
     yield
-
-    polling_task.cancel()
-    try:
-        await polling_task
-    except asyncio.CancelledError:
-        print("[INDEXER] Background polling task stopped.")
 
 app = FastAPI(title="AlgoBounty Gateway", version="1.0.0", lifespan=lifespan)
 
@@ -125,6 +80,7 @@ app.include_router(agents.router)
 app.include_router(notifications.router)
 app.include_router(events.router)
 app.include_router(webhooks.router)
+app.include_router(oidc.router)
 
 # Serve the frontend Dashboard directly under /dashboard
 # Check if directory exists
