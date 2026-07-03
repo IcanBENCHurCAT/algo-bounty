@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
 
 env:
@@ -53,8 +53,9 @@ jobs:
 
     - name: Comment on PR with Coverage
       if: github.event_name == 'pull_request'
-      uses: py-cov-action/python-coverage-comment-action@v3
+      uses: MishaKav/pytest-coverage-comment@v1.1.53
       with:
+        pytest-xml-coverage-path: ./coverage.xml
         github-token: ${{ secrets.GITHUB_TOKEN }}
 
   deploy-gateway:

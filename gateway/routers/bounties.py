@@ -58,7 +58,7 @@ def list_bounties(
             "description": b.description,
             "repo_url": b.repo_url,
             "karma_requirement": b.karma_requirement,
-            "created_at": b.created_at.isoformat().replace("+00:00", "Z"),
+            "created_at": b.created_at.replace(tzinfo=UTC).isoformat().replace("+00:00", "Z"),
             "rejection_count": b.rejection_count
         })
     return {"bounties": result, "total": len(result)}
@@ -81,7 +81,7 @@ def get_bounty(bounty_id: str, db: Session = Depends(get_db)):
         "description": b.description,
         "repo_url": b.repo_url,
         "karma_requirement": b.karma_requirement,
-        "created_at": b.created_at.isoformat().replace("+00:00", "Z"),
+        "created_at": b.created_at.replace(tzinfo=UTC).isoformat().replace("+00:00", "Z"),
         "rejection_count": b.rejection_count
     }
 
