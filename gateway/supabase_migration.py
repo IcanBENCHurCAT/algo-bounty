@@ -252,21 +252,30 @@ def _run_alembic_with_timeout(alembic_cfg, timeout=10):
     """Run Alembic upgrade with a hard timeout to prevent hangs."""
     import subprocess
 
-    def handler(signum, frame):
-        raise subprocess.TimeoutExpired("alembic upgrade", timeout)
+    if hasattr(signal, "SIGALRM"):
+        def handler(signum, frame):
+            raise subprocess.TimeoutExpired("alembic upgrade", timeout)
 
-    old_handler = signal.signal(signal.SIGALRM, handler)
-    signal.alarm(timeout)
-    try:
+        old_handler = signal.signal(signal.SIGALRM, handler)
+        signal.alarm(timeout)
+        try:
+            import alembic.config
+            alembic.config.main(
+                argv=["--config", alembic_cfg, "upgrade", "head"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        finally:
+            signal.alarm(0)  # Cancel the alarm
+            signal.signal(signal.SIGALRM, old_handler)  # Restore handler
+    else:
+        # Fallback for Windows where SIGALRM is not supported
         import alembic.config
         alembic.config.main(
             argv=["--config", alembic_cfg, "upgrade", "head"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-    finally:
-        signal.alarm(0)  # Cancel the alarm
-        signal.signal(signal.SIGALRM, old_handler)  # Restore handler
 
 
 def _seed_platform_account():
