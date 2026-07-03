@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -14,7 +14,7 @@ def auth_request(body: AuthRequest):
     challenge = generate_challenge(body.address)
     return {
         "challenge": challenge,
-        "expires_at": (datetime.utcnow() + timedelta(minutes=5)).isoformat() + "Z"
+        "expires_at": (datetime.now(UTC) + timedelta(minutes=5)).isoformat().replace("+00:00", "Z")
     }
 
 @router.post("/verify")
@@ -37,6 +37,6 @@ def auth_verify(body: AuthVerify, db: Session = Depends(get_db)):
     return {
         "jwt": token,
         "address": body.address,
-        "expires_at": (datetime.utcnow() + timedelta(days=1)).isoformat() + "Z",
+        "expires_at": (datetime.now(UTC) + timedelta(days=1)).isoformat().replace("+00:00", "Z"),
         "karma": agent.karma
     }

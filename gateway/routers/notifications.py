@@ -14,7 +14,7 @@ def list_notifications(db: Session = Depends(get_db), current_user: str = Depend
             "id": n.id,
             "message": n.message,
             "read": n.read,
-            "created_at": n.created_at.isoformat() + "Z"
+            "created_at": n.created_at.isoformat().replace("+00:00", "Z")
         } for n in notifs
     ]
 
