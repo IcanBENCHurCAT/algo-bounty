@@ -1,16 +1,85 @@
+import os
 import hmac
 import hashlib
 import logging
 import re
 import json
-import os
 import httpx
+import jwt
+import time
+from typing import Optional
 from datetime import datetime, UTC
 from sqlalchemy.orm import Session
 from .database import Bounty, GitHubPR, Notification, Agent
 from .algod_client import NODE_ENV
+from .config import settings
 
 logger = logging.getLogger(__name__)
+
+# Cache for GitHub App installation token
+_installation_token_cache = {"token": None, "expires_at": 0}
+
+def get_github_bot_token() -> Optional[str]:
+    """
+    Get a GitHub token for the bot.
+    Priority:
+    1. GitHub App (App ID + Private Key + Installation ID)
+    2. GITHUB_TOKEN environment variable
+    """
+    app_id = os.environ.get("GITHUB_APP_ID")
+    private_key = os.environ.get("GITHUB_PRIVATE_KEY")
+    installation_id = os.environ.get("GITHUB_INSTALLATION_ID")
+
+    if not (app_id and private_key and installation_id):
+        return os.environ.get("GITHUB_TOKEN")
+
+    global _installation_token_cache
+    if _installation_token_cache["token"] and _installation_token_cache["expires_at"] > time.time() + 60:
+        return _installation_token_cache["token"]
+
+    try:
+        # 1. Generate JWT for the GitHub App
+        now = int(time.time())
+        payload = {
+            "iat": now - 60,
+            "exp": now + (10 * 60),
+            "iss": app_id
+        }
+
+        # Handle private key (could be a file path or the key content itself)
+        if os.path.isfile(private_key):
+            with open(private_key, "r") as f:
+                private_key_contents = f.read()
+        else:
+            # Replace escaped newlines if they exist (common when passing via env vars)
+            private_key_contents = private_key.replace("\\n", "\n")
+
+        encoded_jwt = jwt.encode(payload, private_key_contents, algorithm="RS256")
+
+        # 2. Exchange JWT for an installation access token
+        headers = {
+            "Authorization": f"Bearer {encoded_jwt}",
+            "Accept": "application/vnd.github.v3+json",
+            "User-Agent": "AlgoBounty-Gateway"
+        }
+        url = f"https://api.github.com/app/installations/{installation_id}/access_tokens"
+
+        with httpx.Client() as client:
+            resp = client.post(url, headers=headers)
+            resp.raise_for_status()
+            data = resp.json()
+
+            _installation_token_cache["token"] = data["token"]
+            # Parse expiration
+            expires_at_str = data["expires_at"]
+            expires_at = datetime.fromisoformat(expires_at_str.replace("Z", "+00:00")).timestamp()
+            _installation_token_cache["expires_at"] = expires_at
+
+            return data["token"]
+    except Exception as e:
+        logger.error(f"Failed to get GitHub App installation token: {e}")
+        # Fallback to GITHUB_TOKEN if available
+        return os.environ.get("GITHUB_TOKEN")
 
 # Known GitHub webhook event types (non-exhaustive)
 KNOWN_EVENT_TYPES = {
@@ -123,10 +192,10 @@ def validate_webhook(event_type: str, secret: str, signature: str,
 def log_bot_comment(repo_url: str, issue_or_pr_number: int, comment_text: str):
     """
     GitHub bot comment.
-    If GITHUB_TOKEN is set, posts to the real GitHub API.
+    If a valid GitHub token (App or Token) is found, posts to the real GitHub API.
     Otherwise, logs to a file and stdout.
     """
-    token = os.environ.get("GITHUB_TOKEN")
+    token = get_github_bot_token()
 
     # Extract owner and repo from URL
     # Expected format: https://github.com/owner/repo
@@ -245,100 +314,102 @@ def handle_pr_event(db: Session, payload: dict):
     pr_number = pr.get("number")
     author = pr.get("user", {}).get("login")
     
-    # Scan for #ALGO-XXXX or ALGO-XXXX
+    # Scan for #ALGO-XXXX or ALGO-XXXX (multiple allowed)
     text_to_scan = f"{title} {body}"
-    match = BOUNTY_RE.search(text_to_scan)
-    if not match:
+    # Use set to avoid double-processing if the same bounty is mentioned in title and body
+    issue_numbers = sorted(list(set(BOUNTY_RE.findall(text_to_scan))))
+    if not issue_numbers:
         return
         
-    issue_number = match.group(1)
-    bounty_id = f"b_{issue_number}"
-    
-    # Find the corresponding bounty
-    bounty = db.query(Bounty).filter(Bounty.bounty_id == bounty_id).first()
-    if not bounty:
-        return
+    for issue_number in issue_numbers:
+        bounty_id = f"b_{issue_number}"
         
-    # Link PR to bounty
-    existing_pr = db.query(GitHubPR).filter(
-        GitHubPR.pr_number == pr_number, 
-        GitHubPR.repo_url == repo.get("html_url", "")
-    ).first()
-    
-    if not existing_pr:
-        new_pr = GitHubPR(
-            pr_number=pr_number,
-            repo_url=repo.get("html_url", ""),
-            bounty_id=bounty_id,
-            state=pr.get("state", "open"),
-            author=author
-        )
-        db.add(new_pr)
-        
-    # Handle PR lifecycle actions
-    if action in ["opened", "synchronize"]:
-        # If bounty is open, auto-claim it for this worker if not already claimed
-        if bounty.status == "open":
-            bounty.status = "claimed"
-            bounty.worker = author  # Map github username as mock worker address (or link via DB)
-            db.commit()
+        # Find the corresponding bounty
+        bounty = db.query(Bounty).filter(Bounty.bounty_id == bounty_id).first()
+        if not bounty:
+            continue
             
-            comment_text = (
-                f"🤝 **Bounty Claimed!**\n\n"
-                f"GitHub user @{author} has claimed this bounty by opening PR #{pr_number}.\n"
-                f"The bounty status has transitioned to **CLAIMED**.\n"
-                f"Submit your work on the dashboard to trigger review."
+        # Link PR to bounty
+        existing_pr = db.query(GitHubPR).filter(
+            GitHubPR.pr_number == pr_number,
+            GitHubPR.repo_url == repo.get("html_url", ""),
+            GitHubPR.bounty_id == bounty_id
+        ).first()
+
+        if not existing_pr:
+            new_pr = GitHubPR(
+                pr_number=pr_number,
+                repo_url=repo.get("html_url", ""),
+                bounty_id=bounty_id,
+                state=pr.get("state", "open"),
+                author=author
             )
-            log_bot_comment(bounty.repo_url, int(issue_number), comment_text)
-            
-        # If bounty is claimed, transition to submitted
-        elif bounty.status == "claimed" and bounty.worker == author:
-            bounty.status = "submitted"
-            db.commit()
-            
-            comment_text = (
-                f"🚀 **Solution Submitted!**\n\n"
-                f"Worker @{author} has submitted their PR #{pr_number} for review.\n"
-                f"The bounty status is now **SUBMITTED**.\n"
-                f"- **HITM Review**: {'Enabled (7-day window)' if bounty.is_hitm else 'Disabled (Trustless auto-release)'}"
-            )
-            log_bot_comment(bounty.repo_url, int(issue_number), comment_text)
-            
-            # Notify creator
-            creator_notif = Notification(
-                recipient=bounty.creator,
-                message=f"Bounty ALGO-{issue_number} has a new solution submitted by GitHub user @{author}."
-            )
-            db.add(creator_notif)
-            db.commit()
-            
-    elif action == "closed" and pr.get("merged") is True:
-        # PR Merged! If trustless mode is on, auto-approve the payout!
-        if bounty.status in ["claimed", "submitted"]:
-            if not bounty.is_hitm:
-                # Trustless mode: auto payout!
-                bounty.status = "closed"
-                bounty.payout_type = "PAYOUT"
+            db.add(new_pr)
+
+        # Handle PR lifecycle actions for each linked bounty
+        if action in ["opened", "synchronize"]:
+            # If bounty is open, auto-claim it for this worker if not already claimed
+            if bounty.status == "open":
+                bounty.status = "claimed"
+                bounty.worker = author  # Map github username as mock worker address (or link via DB)
                 db.commit()
                 
                 comment_text = (
-                    f"🎉 **Bounty Completed & Funds Released!**\n\n"
-                    f"PR #{pr_number} has been merged. Since this bounty was in **Trustless Mode**, "
-                    f"the escrow has been closed, and funds have been automatically released to @{author}!"
+                    f"🤝 **Bounty Claimed!**\n\n"
+                    f"GitHub user @{author} has claimed this bounty by opening PR #{pr_number}.\n"
+                    f"The bounty status has transitioned to **CLAIMED**.\n"
+                    f"Submit your work on the dashboard to trigger review."
                 )
                 log_bot_comment(bounty.repo_url, int(issue_number), comment_text)
                 
-                # Reward karma
-                worker_agent = db.query(Agent).filter(Agent.address == author).first()
-                if worker_agent:
-                    worker_agent.karma += 5
-                    worker_agent.completed_bounties += 1
-                    db.commit()
-            else:
-                # HITM mode: require human approval, remind creator
+            # If bounty is claimed, transition to submitted
+            elif bounty.status == "claimed" and bounty.worker == author:
+                bounty.status = "submitted"
+                db.commit()
+
                 comment_text = (
-                    f"⚠️ **PR Merged - Awaiting Escrow Release**\n\n"
-                    f"PR #{pr_number} has been merged, but this bounty is in **HITM Mode** (Human-in-the-Middle).\n"
-                    f"Creator @{bounty.creator} must sign the release transaction on the dashboard to pay the worker."
+                    f"🚀 **Solution Submitted!**\n\n"
+                    f"Worker @{author} has submitted their PR #{pr_number} for review.\n"
+                    f"The bounty status is now **SUBMITTED**.\n"
+                    f"- **HITM Review**: {'Enabled (7-day window)' if bounty.is_hitm else 'Disabled (Trustless auto-release)'}"
                 )
                 log_bot_comment(bounty.repo_url, int(issue_number), comment_text)
+
+                # Notify creator
+                creator_notif = Notification(
+                    recipient=bounty.creator,
+                    message=f"Bounty ALGO-{issue_number} has a new solution submitted by GitHub user @{author}."
+                )
+                db.add(creator_notif)
+                db.commit()
+
+        elif action == "closed" and pr.get("merged") is True:
+            # PR Merged! If trustless mode is on, auto-approve the payout!
+            if bounty.status in ["claimed", "submitted"]:
+                if not bounty.is_hitm:
+                    # Trustless mode: auto payout!
+                    bounty.status = "closed"
+                    bounty.payout_type = "PAYOUT"
+                    db.commit()
+
+                    comment_text = (
+                        f"🎉 **Bounty Completed & Funds Released!**\n\n"
+                        f"PR #{pr_number} has been merged. Since this bounty was in **Trustless Mode**, "
+                        f"the escrow has been closed, and funds have been automatically released to @{author}!"
+                    )
+                    log_bot_comment(bounty.repo_url, int(issue_number), comment_text)
+
+                    # Reward karma
+                    worker_agent = db.query(Agent).filter(Agent.address == author).first()
+                    if worker_agent:
+                        worker_agent.karma += 5
+                        worker_agent.completed_bounties += 1
+                        db.commit()
+                else:
+                    # HITM mode: require human approval, remind creator
+                    comment_text = (
+                        f"⚠️ **PR Merged - Awaiting Escrow Release**\n\n"
+                        f"PR #{pr_number} has been merged, but this bounty is in **HITM Mode** (Human-in-the-Middle).\n"
+                        f"Creator @{bounty.creator} must sign the release transaction on the dashboard to pay the worker."
+                    )
+                    log_bot_comment(bounty.repo_url, int(issue_number), comment_text)

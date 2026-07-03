@@ -59,6 +59,8 @@ def upgrade() -> None:
         sa.Index("ix_bounties_bounty_id", "bounty_id"),
         sa.Index("ix_bounties_creator", "creator"),
         sa.Index("ix_bounties_repo_url", "repo_url"),
+        sa.Index("ix_bounties_app_id", "app_id", unique=True),
+        sa.Index("ix_bounties_worker", "worker"),
     )
 
     op.create_table(
