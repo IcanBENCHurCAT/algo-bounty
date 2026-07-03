@@ -29,12 +29,6 @@ def verify_signature(address: str, signature: str, challenge: str) -> bool:
         # Some clients return signature as base64 or bytes. If it's a string, we decode it
         # but algosdk.util.verify_bytes requires signature in base64 string or bytes?
         # Let's write a robust verification that checks verify_bytes.
-        # If it's a mock wallet (for testing/easy local trial), we can check a special suffix "MOCK_SIG"
-        if signature.endswith("MOCK_SIG"):
-            # Simple mock signature validation for testing
-            mock_addr = signature.split("-")[0]
-            return mock_addr == address
-            
         return util.verify_bytes(message_bytes, signature, address)
     except Exception as e:
         print(f"Signature verification failed: {e}")

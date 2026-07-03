@@ -47,6 +47,8 @@ def run_around_tests():
     # Teardown
     Base.metadata.drop_all(bind=engine)
 
+from unittest.mock import patch
+
 def get_auth_token(address: str) -> str:
     # 1. Request challenge
     res = client.post("/api/v1/auth/request", json={"address": address})
@@ -54,14 +56,15 @@ def get_auth_token(address: str) -> str:
     challenge = res.json()["challenge"]
     
     # 2. Verify with mock signature
-    sig = f"{address}-MOCK_SIG"
-    verify_res = client.post("/api/v1/auth/verify", json={
-        "address": address,
-        "signature": sig,
-        "challenge": challenge
-    })
-    assert verify_res.status_code == 200
-    return verify_res.json()["jwt"]
+    # We mock util.verify_bytes to return True for tests
+    with patch("gateway.auth.util.verify_bytes", return_value=True):
+        verify_res = client.post("/api/v1/auth/verify", json={
+            "address": address,
+            "signature": "fake_signature",
+            "challenge": challenge
+        })
+        assert verify_res.status_code == 200
+        return verify_res.json()["jwt"]
 
 # Test cases
 
@@ -117,7 +120,7 @@ def test_bounty_claim_submit_approve_flow():
     bounty_id = res.json()["bounty_id"]
     
     # 2. Worker claims bounty
-    claim_res = client.post(f"/api/v1/bounties/{bounty_id}/claim", headers={"Authorization": f"Bearer {worker_token}"})
+    claim_res = client.post(f"/api/v1/bounties/{bounty_id}/claim", json={"signed_txn": ""}, headers={"Authorization": f"Bearer {worker_token}"})
     assert claim_res.status_code == 200
     assert claim_res.json()["status"] == "claimed"
     
@@ -126,14 +129,15 @@ def test_bounty_claim_submit_approve_flow():
         f"/api/v1/bounties/{bounty_id}/submit", 
         json={
             "pr_url": "https://github.com/vantage-labs/vintage-miner/pull/4",
-            "proof_data": {"type": "code"}
+            "proof_data": {"type": "code"},
+            "signed_txn": ""
         }, 
         headers={"Authorization": f"Bearer {worker_token}"}
     )
     assert submit_res.status_code == 200
     
     # 4. Creator approves solution
-    approve_res = client.post(f"/api/v1/bounties/{bounty_id}/approve", headers={"Authorization": f"Bearer {creator_token}"})
+    approve_res = client.post(f"/api/v1/bounties/{bounty_id}/approve", json={"signed_txn": ""}, headers={"Authorization": f"Bearer {creator_token}"})
     assert approve_res.status_code == 200
     assert approve_res.json()["status"] == "closed"
     assert approve_res.json()["payout_type"] == "PAYOUT"

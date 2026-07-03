@@ -7,11 +7,15 @@ from sqlalchemy.orm import Session
 from ..database import Bounty, Agent, GitHubPR, Notification
 from ..auth import get_current_user
 from ..dependencies import get_db
-from ..schemas import BountyCreate
+from ..schemas import (
+    BountyCreate, BountyClaim, WorkSubmit,
+    WorkApprove, WorkReject, DisputeCreate
+)
 from ..broker import broker
 from ..algod_client import (
     get_algod_client, get_default_account,
     is_sandbox, compile_escrow_contract,
+    send_signed_transaction,
 )
 
 router = APIRouter(prefix="/api/v1/bounties", tags=["bounties"])
@@ -195,7 +199,12 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
     }
 
 @router.post("/{bounty_id}/claim")
-def claim_bounty(bounty_id: str, db: Session = Depends(get_db), current_user: str = Depends(get_current_user)):
+def claim_bounty(
+    bounty_id: str,
+    body: BountyClaim,
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user)
+):
     b = db.query(Bounty).filter(Bounty.bounty_id == bounty_id).first()
     if not b:
         raise HTTPException(status_code=404, detail="Bounty not found")
@@ -209,13 +218,22 @@ def claim_bounty(bounty_id: str, db: Session = Depends(get_db), current_user: st
     if not worker or worker.karma < b.karma_requirement:
         raise HTTPException(status_code=403, detail=f"Insufficient karma. Required: {b.karma_requirement}")
 
+    # Broadcase on-chain transaction
+    tx_id = None
+    if body.signed_txn:
+        try:
+            tx_id = send_signed_transaction(body.signed_txn)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"On-chain transaction failed: {e}")
+
     b.status = "claimed"
     b.worker = current_user
     db.commit()
 
     broker.publish("bounty.claimed", {
         "bounty_id": bounty_id,
-        "worker": current_user
+        "worker": current_user,
+        "tx_id": tx_id
     })
 
     # Create notification for creator
@@ -226,30 +244,37 @@ def claim_bounty(bounty_id: str, db: Session = Depends(get_db), current_user: st
     db.add(notif)
     db.commit()
 
-    return {"bounty_id": bounty_id, "status": "claimed", "worker": current_user}
+    return {"bounty_id": bounty_id, "status": "claimed", "worker": current_user, "tx_id": tx_id}
 
 @router.post("/{bounty_id}/submit")
 def submit_work(
     bounty_id: str,
-    pr_url: str = Body(..., embed=True),
-    proof_data: dict = Body(..., embed=True),
+    body: WorkSubmit,
     db: Session = Depends(get_db),
     current_user: str = Depends(get_current_user)
 ):
     b = db.query(Bounty).filter(Bounty.bounty_id == bounty_id).first()
     if not b:
         raise HTTPException(status_code=404, detail="Bounty not found")
-    if b.status != "claimed":
-        raise HTTPException(status_code=400, detail="Bounty must be claimed to submit work")
+    if b.status != "claimed" and b.status != "rejected":
+        raise HTTPException(status_code=400, detail="Bounty state must be claimed or rejected to submit work")
     if b.worker != current_user:
         raise HTTPException(status_code=403, detail="Only the claiming worker can submit work")
+
+    # Broadcast on-chain transaction
+    tx_id = None
+    if body.signed_txn:
+        try:
+            tx_id = send_signed_transaction(body.signed_txn)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"On-chain transaction failed: {e}")
 
     b.status = "submitted"
     db.commit()
 
     # Link PR
     # Match PR number if available
-    pr_num_match = re.search(r'pull/(\d+)', pr_url)
+    pr_num_match = re.search(r'pull/(\d+)', body.pr_url)
     pr_number = int(pr_num_match.group(1)) if pr_num_match else 1
 
     new_pr = GitHubPR(
@@ -272,13 +297,19 @@ def submit_work(
     broker.publish("bounty.submitted", {
         "bounty_id": bounty_id,
         "worker": current_user,
-        "pr_url": pr_url
+        "pr_url": body.pr_url,
+        "tx_id": tx_id
     })
 
-    return {"bounty_id": bounty_id, "status": "submitted"}
+    return {"bounty_id": bounty_id, "status": "submitted", "tx_id": tx_id}
 
 @router.post("/{bounty_id}/approve")
-def approve_work(bounty_id: str, db: Session = Depends(get_db), current_user: str = Depends(get_current_user)):
+def approve_work(
+    bounty_id: str,
+    body: WorkApprove,
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user)
+):
     b = db.query(Bounty).filter(Bounty.bounty_id == bounty_id).first()
     if not b:
         raise HTTPException(status_code=404, detail="Bounty not found")
@@ -286,6 +317,14 @@ def approve_work(bounty_id: str, db: Session = Depends(get_db), current_user: st
         raise HTTPException(status_code=403, detail="Only creator can approve work")
     if b.status != "submitted":
         raise HTTPException(status_code=400, detail="Bounty has no work submitted to approve")
+
+    # Broadcast on-chain transaction
+    tx_id = None
+    if body.signed_txn:
+        try:
+            tx_id = send_signed_transaction(body.signed_txn)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"On-chain transaction failed: {e}")
 
     b.status = "closed"
     b.payout_type = "PAYOUT"
@@ -300,7 +339,8 @@ def approve_work(bounty_id: str, db: Session = Depends(get_db), current_user: st
 
     broker.publish("bounty.approved", {
         "bounty_id": bounty_id,
-        "worker": b.worker
+        "worker": b.worker,
+        "tx_id": tx_id
     })
 
     # Notify worker
@@ -311,12 +351,12 @@ def approve_work(bounty_id: str, db: Session = Depends(get_db), current_user: st
     db.add(notif)
     db.commit()
 
-    return {"bounty_id": bounty_id, "status": "closed", "payout_type": "PAYOUT"}
+    return {"bounty_id": bounty_id, "status": "closed", "payout_type": "PAYOUT", "tx_id": tx_id}
 
 @router.post("/{bounty_id}/reject")
 def reject_work(
     bounty_id: str,
-    reason: str = Body(..., embed=True),
+    body: WorkReject,
     db: Session = Depends(get_db),
     current_user: str = Depends(get_current_user)
 ):
@@ -328,6 +368,14 @@ def reject_work(
     if b.status != "submitted":
         raise HTTPException(status_code=400, detail="No work submitted to reject")
 
+    # Broadcast on-chain transaction
+    tx_id = None
+    if body.signed_txn:
+        try:
+            tx_id = send_signed_transaction(body.signed_txn)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"On-chain transaction failed: {e}")
+
     b.status = "rejected"
     b.rejection_count += 1
     db.commit()
@@ -335,7 +383,7 @@ def reject_work(
     # Notify worker
     notif = Notification(
         recipient=b.worker,
-        message=f"Your submission for bounty {bounty_id} has been REJECTED. Reason: {reason}"
+        message=f"Your submission for bounty {bounty_id} has been REJECTED. Reason: {body.reason}"
     )
     db.add(notif)
     db.commit()
@@ -343,15 +391,16 @@ def reject_work(
     broker.publish("bounty.rejected", {
         "bounty_id": bounty_id,
         "worker": b.worker,
-        "reason": reason
+        "reason": body.reason,
+        "tx_id": tx_id
     })
 
-    return {"bounty_id": bounty_id, "status": "rejected", "rejection_count": b.rejection_count}
+    return {"bounty_id": bounty_id, "status": "rejected", "rejection_count": b.rejection_count, "tx_id": tx_id}
 
 @router.post("/{bounty_id}/dispute")
 def dispute_work(
     bounty_id: str,
-    reason: str = Body(..., embed=True),
+    body: DisputeCreate,
     db: Session = Depends(get_db),
     current_user: str = Depends(get_current_user)
 ):
@@ -363,6 +412,14 @@ def dispute_work(
     if b.status not in ["submitted", "rejected"]:
         raise HTTPException(status_code=400, detail="Cannot dispute at this stage")
 
+    # Broadcast on-chain transaction
+    tx_id = None
+    if body.signed_txn:
+        try:
+            tx_id = send_signed_transaction(body.signed_txn)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"On-chain transaction failed: {e}")
+
     b.status = "disputed"
     db.commit()
 
@@ -370,7 +427,7 @@ def dispute_work(
     other_party = b.worker if current_user == b.creator else b.creator
     notif = Notification(
         recipient=other_party,
-        message=f"Bounty {bounty_id} has been placed in DISPUTE by {current_user}. Reason: {reason}"
+        message=f"Bounty {bounty_id} has been placed in DISPUTE by {current_user}. Reason: {body.reason}"
     )
     db.add(notif)
     db.commit()
@@ -378,10 +435,11 @@ def dispute_work(
     broker.publish("bounty.disputed", {
         "bounty_id": bounty_id,
         "initiator": current_user,
-        "reason": reason
+        "reason": body.reason,
+        "tx_id": tx_id
     })
 
-    return {"bounty_id": bounty_id, "status": "disputed"}
+    return {"bounty_id": bounty_id, "status": "disputed", "tx_id": tx_id}
 
 @router.get("/{bounty_id}/onchain")
 def get_bounty_onchain(bounty_id: str, db: Session = Depends(get_db)):
