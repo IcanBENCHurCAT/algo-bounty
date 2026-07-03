@@ -35,8 +35,10 @@ if project_root not in sys.path:
 # ---------------------------------------------------------------------------
 try:
     from gateway.database import Base  # noqa: F401
+    from gateway.config import settings
 except ImportError:
     Base = None
+    settings = None
 
 target_metadata = None
 if Base is not None:
@@ -47,9 +49,11 @@ def run_migrations_offline():
     """Run migrations in 'offline' mode.
 
     Generates SQL statements from the models, to be applied via the
-    database driver.  The DATABASE_URL is read from env.
+    database driver.  The DATABASE_URL is read from settings.
     """
-    url = os.getenv("DATABASE_URL", "postgresql://algobounty:password@localhost/algobounty")
+    url = settings.DATABASE_URL if settings else os.getenv("DATABASE_URL")
+    if not url:
+        url = "postgresql://algobounty:password@localhost/algobounty"
 
     context.configure(
         url=url,
@@ -71,7 +75,9 @@ def run_migrations_online():
     """
     from sqlalchemy import create_engine
 
-    url = os.getenv("DATABASE_URL", "postgresql://algobounty:password@localhost/algobounty")
+    url = settings.DATABASE_URL if settings else os.getenv("DATABASE_URL")
+    if not url:
+        url = "postgresql://algobounty:password@localhost/algobounty"
 
     connectable = create_engine(
         url,

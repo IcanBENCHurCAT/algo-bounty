@@ -56,10 +56,15 @@ AlgoBounty consists of three main layers:
 - Install dependencies: `pip install -r requirements.txt`.
 - Set up `.env` in `gateway/` based on `.env.template`.
 
-### Running the Gateway
+### Running the Gateway & Worker
 ```bash
+# Run the API server
 export PYTHONPATH=.
 python gateway/main.py
+
+# Run the background indexer worker
+export PYTHONPATH=.
+python gateway/worker.py
 ```
 
 ### Running Tests
@@ -70,8 +75,13 @@ PYTHONPATH=. python -m pytest tests/
 
 ### Working with the Database
 - The primary DB is Supabase. If `SUPABASE_URL` is missing, it falls back to `algobounty.db` (SQLite).
-- Check `gateway/supabase_migration.py` for the canonical DDL and models.
+- Use Alembic for migrations: `alembic -c gateway/alembic.ini upgrade head`.
+- Check `gateway/supabase_migration.py` for the canonical SQLAlchemy models.
 - RLS policies are located in `supabase/rls_policies.sql`.
+
+### Configuration & Secrets
+- All secrets and configuration are centralized in `gateway/config.py`.
+- In production, ensure `SECRET_KEY`, `PLATFORM_PRIVATE_KEY`, and `GITHUB_TOKEN` are provided via environment variables or a configured secret manager.
 
 ### Smart Contract Integration
 - The contract is in `escrow.algo`.

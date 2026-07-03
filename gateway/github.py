@@ -3,7 +3,6 @@ import hashlib
 import logging
 import re
 import json
-import os
 import httpx
 import jwt
 import time
@@ -12,6 +11,7 @@ from datetime import datetime, UTC
 from sqlalchemy.orm import Session
 from .database import Bounty, GitHubPR, Notification, Agent
 from .algod_client import NODE_ENV
+from .config import settings
 
 logger = logging.getLogger(__name__)
 
