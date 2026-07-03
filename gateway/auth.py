@@ -1,14 +1,14 @@
 import time
-import os
 import jwt
 from typing import Optional
 from algosdk import util
 from fastapi import HTTPException, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from .config import settings
 
-SECRET_KEY = os.environ.get("SECRET_KEY")
+SECRET_KEY = settings.SECRET_KEY
 if not SECRET_KEY:
-    raise RuntimeError("SECRET_KEY environment variable is not set. For security, the gateway cannot start without a JWT secret.")
+    raise RuntimeError("SECRET_KEY secret is not set. For security, the gateway cannot start without a JWT secret.")
 
 ALGORITHM = "HS256"
 JWT_EXPIRY_SECONDS = 86400  # 24 hours

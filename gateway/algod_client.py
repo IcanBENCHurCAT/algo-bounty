@@ -12,35 +12,36 @@ import subprocess
 from pathlib import Path
 from algosdk.v2client import algod, indexer
 from algosdk import account
+from .config import settings
 
 # --- Tier 1: Sandbox (local dev only) ---
-SANDBOX_ALGOD = os.getenv("ALGOD_ADDRESS", "http://10.0.0.67:4001")
-SANDBOX_TOKEN = os.getenv("ALGOD_TOKEN",
+SANDBOX_ALGOD = settings.get_secret("ALGOD_ADDRESS", "http://10.0.0.67:4001")
+SANDBOX_TOKEN = settings.get_secret("ALGOD_TOKEN",
     "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
-SANDBOX_INDEXER = os.getenv("INDEXER_ADDRESS", "http://10.0.0.67:8980")
-SANDBOX_INDEXER_TOKEN = os.getenv("INDEXER_TOKEN", SANDBOX_TOKEN)
+SANDBOX_INDEXER = settings.get_secret("INDEXER_ADDRESS", "http://10.0.0.67:8980")
+SANDBOX_INDEXER_TOKEN = settings.get_secret("INDEXER_TOKEN", SANDBOX_TOKEN)
 
 # --- Tier 2: Algorand Testnet (production fallback) ---
-TESTNET_ALGOD = os.getenv(
+TESTNET_ALGOD = settings.get_secret(
     "TESTNET_ALGOD_URL", "https://testnet-api.algonode.cloud"
 )
-TESTNET_INDEXER = os.getenv(
+TESTNET_INDEXER = settings.get_secret(
     "TESTNET_INDEXER_URL", "https://testnet-indexer.algonode.cloud"
 )
-TESTNET_TOKEN = os.getenv("TESTNET_ALGOD_TOKEN", "")  # public, no auth
+TESTNET_TOKEN = settings.get_secret("TESTNET_ALGOD_TOKEN", "")  # public, no auth
 
 # --- Tier 3: Mainnet (future) ---
-MAINNET_ALGOD = os.getenv(
+MAINNET_ALGOD = settings.get_secret(
     "MAINNET_ALGOD_URL", "https://mainnet-api.algonode.cloud"
 )
-MAINNET_INDEXER = os.getenv(
+MAINNET_INDEXER = settings.get_secret(
     "MAINNET_INDEXER_URL", "https://mainnet-indexer.algonode.cloud"
 )
-MAINNET_TOKEN = os.getenv("MAINNET_ALGOD_TOKEN", "")  # public, no auth
+MAINNET_TOKEN = settings.get_secret("MAINNET_ALGOD_TOKEN", "")  # public, no auth
 
 # Current active network: sandbox | testnet | mainnet
 # Default to testnet for production deployments
-NODE_ENV = os.getenv("ALGORAND_NETWORK", "testnet")
+NODE_ENV = settings.ALGORAND_NETWORK
 
 # --- Network config lookup ---
 _NETWORK_CONFIG = {
@@ -91,7 +92,7 @@ def is_sandbox():
 
 def get_default_account():
     """Get the platform's default wallet account."""
-    private_key = os.getenv("PLATFORM_PRIVATE_KEY", "")
+    private_key = settings.PLATFORM_PRIVATE_KEY
     if not private_key:
         return None
     return account.from_private_key(private_key)
