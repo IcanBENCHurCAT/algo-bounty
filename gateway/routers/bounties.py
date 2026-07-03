@@ -1,5 +1,5 @@
 import re
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlalchemy.orm import Session
@@ -58,7 +58,7 @@ def list_bounties(
             "description": b.description,
             "repo_url": b.repo_url,
             "karma_requirement": b.karma_requirement,
-            "created_at": b.created_at.isoformat() + "Z",
+            "created_at": b.created_at.replace(tzinfo=UTC).isoformat().replace("+00:00", "Z"),
             "rejection_count": b.rejection_count
         })
     return {"bounties": result, "total": len(result)}
@@ -81,7 +81,7 @@ def get_bounty(bounty_id: str, db: Session = Depends(get_db)):
         "description": b.description,
         "repo_url": b.repo_url,
         "karma_requirement": b.karma_requirement,
-        "created_at": b.created_at.isoformat() + "Z",
+        "created_at": b.created_at.replace(tzinfo=UTC).isoformat().replace("+00:00", "Z"),
         "rejection_count": b.rejection_count
     }
 
@@ -92,7 +92,7 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
     if not agent:
         raise HTTPException(status_code=403, detail="Agent profile missing")
 
-    bounty_id = f"b_{int(datetime.utcnow().timestamp())}"
+    bounty_id = f"b_{int(datetime.now(UTC).timestamp())}"
 
     # Deploy escrow contract on-chain (if on a live network)
     app_id = None

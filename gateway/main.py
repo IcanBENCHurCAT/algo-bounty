@@ -1,5 +1,6 @@
 import os
-from datetime import datetime
+from datetime import datetime, UTC
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
@@ -28,7 +29,14 @@ ALLOWED_ORIGINS: list[str] = [
     "http://localhost:3001",
 ]
 
-app = FastAPI(title="AlgoBounty Gateway", version="1.0.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Start SSE cleanup background task on app startup
+    await broker.start_cleanup()
+    print(f"[SSE] Started cleanup task (interval={broker.CLEANUP_INTERVAL_SECONDS}s, stale_timeout={broker.STALE_TIMEOUT_SECONDS}s)")
+    yield
+
+app = FastAPI(title="AlgoBounty Gateway", version="1.0.0", lifespan=lifespan)
 
 # ── Middleware (order matters: top to bottom, bottom to top) ──────
 
@@ -44,12 +52,6 @@ app.add_middleware(SecurityHeadersMiddleware)
 # 4. Rate limiting – protects public endpoints from DDoS / spam
 app.add_middleware(RateLimitMiddleware)
 
-# Start SSE cleanup background task on app startup
-@app.on_event("startup")
-async def start_sse_cleanup():
-    await broker.start_cleanup()
-    print(f"[SSE] Started cleanup task (interval={broker.CLEANUP_INTERVAL_SECONDS}s, stale_timeout={broker.STALE_TIMEOUT_SECONDS}s)")
-
 # Algorand network config
 sandbox_active = is_sandbox()
 print(f"[WEB3] Algorand network: {NODE_ENV} (sandbox={sandbox_active})")
@@ -62,7 +64,7 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "algobounty-gateway",
-        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "timestamp": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "version": app.version,
         "sandbox_active": sandbox_active,
         "node_env": NODE_ENV,
