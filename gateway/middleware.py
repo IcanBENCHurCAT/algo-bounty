@@ -11,6 +11,7 @@ Usage:
     app.add_middleware(SecurityMiddleware, allowed_origins=[...])
 """
 
+import os
 import re
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -119,3 +120,44 @@ class CORSAllowlistMiddleware(BaseHTTPMiddleware):
             if re.match(f"^{regex_pattern}$", origin, re.IGNORECASE):
                 return True
         return False
+
+
+# ── Webhook API key authentication ──────────────────────────────
+
+class WebhookApiKeyAuthMiddleware(BaseHTTPMiddleware):
+    """Enforce X-API-Key header on webhook endpoints.
+
+    Validates that requests to webhook paths include a valid API key
+    configured via WEBHOOK_API_KEY environment variable.
+    Skips validation for non-webhook paths.
+    """
+
+    def __init__(self, app, api_key: str | None = None):
+        super().__init__(app)
+        self.required_key = api_key or os.environ.get(
+            "WEBHOOK_API_KEY", ""
+        )
+
+    async def dispatch(self, request: Request, call_next) -> Response:
+        path = request.url.path
+
+        # Only enforce on webhook paths
+        if "/webhooks" not in path:
+            return await call_next(request)
+
+        api_key = request.headers.get("X-API-Key", "")
+
+        # Allow requests without API key if no key is configured
+        # (development mode)
+        if not self.required_key:
+            return await call_next(request)
+
+        # Validate API key
+        if api_key != self.required_key:
+            return Response(
+                content='{"error": "Missing or invalid X-API-Key header"}',
+                status_code=401,
+                media_type="application/json",
+            )
+
+        return await call_next(request)
