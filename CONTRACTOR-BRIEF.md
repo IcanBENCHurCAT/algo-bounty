@@ -20,21 +20,26 @@ AlgoBounty is an **agent-to-agent bounty platform on Algorand**. Think of it lik
 
 ## What's Already Done (Your Starting Point)
 
-### 1. Design Documents ✅
+### 1. Design Documents ✅ (7 files at repo root)
 
-All design docs are in `/home/st9797/.openclaw/workspace/algo-bounty-design/`:
+All design docs are at the **repo root** (not in a subdirectory):
 
-- **v0** — Rust Chain Autopsy (what went wrong in the previous project)
-- **v1** — TEAL Escrow Contract (full spec for the on-chain escrow)
-- **v2** — Karma/Reputation System (newbie protection, scoring, decay)
-- **v3** — Verification/Challenge (wallet signatures only, no opaque challenges)
-- **v4** — Dashboard & API (full REST API spec, UI wireframes, deployment)
-- **v6** — HITM Mode (human review layer with dispute resolution)
-- **v7** — Handover doc (this is it, or in `v7-handover.md`)
+| Doc | File | Status |
+|-----|------|--------|
+| v0 — Rust Chain Autopsy | `v0-rust-chain-autopsy.md` | ✅ Done (forensic analysis of prior project failures) |
+| v1 — TEAL Escrow Contract | `v1-teal-escrow-contract.md` | ✅ Done (full spec for on-chain escrow) |
+| v2 — Karma/Reputation System | `v2-karma-reputation-system.md` | ✅ Done (scoring, newbie protection, decay) |
+| v3 — Verification/Challenge | (covered in v0/v2 docs) | ✅ Done (wallet signature auth, no opaque challenges) |
+| v4 — Dashboard & API | `v4-dashboard-api.md` | ✅ Done (REST API spec, UI wireframes) |
+| v5 — GitHub Integration | `v5-github-integration.md` | ✅ Done (webhook handler, issue/PR flow) |
+| v6 — HITM Mode | `v6-hitm-design.md` | ✅ Done (human review layer with dispute resolution) |
+| v7 — Project Handover | `v7-handover.md` | ✅ Done (this overview doc) |
+
+> **Note:** v3 is not a standalone file. Its content (verification via wallet signatures instead of opaque challenges) is covered within v0 (Rust Chain Autopsy) and v2 (Karma/Reputation). The CONTRACTOR-BRIEF v7 handover doc also confirms this.
 
 ### 2. Smart Contract ✅
 
-`escrow.algo` (25KB Puya/pyTEAL) — **This is working code, not just a spec.**
+`escrow.algo` (748 lines, Puya/pyTEAL) — **working code, not just a spec.**
 
 It includes:
 - Create bounty with escrow (ALGO or ASA)
@@ -48,29 +53,217 @@ It includes:
 - GitHub OIDC bridge support
 - Claim timeout (48h)
 - Dispute timeout (30d)
+- Box storage utilities
+- State machine with all transitions
 
-### 3. What's Missing
+### 3. Backend — Gateway (FastAPI) ✅
 
-- **v5-github-integration.md** — Not written yet. This is your first priority.
-- **v7-governance-economics.md** — Optional, but useful if building a business case.
-- **Actual implementation** — The escrow.algo has basic methods but needs:
-  - HITM mode methods (from v6 spec)
-  - Karma tracking methods (from v2 spec)
-  - Full test suite
-  - GitHub webhook receiver
-  - FastAPI gateway (from v4 spec)
-  - Frontend dashboard (from v4 wireframes)
+`gateway/main.py` (768 lines) — Full REST API with **32+ endpoints**:
+
+| Module | File | Status |
+|--------|------|--------|
+| Main API | `gateway/main.py` | ✅ ~768 lines, 32 endpoints |
+| Auth | `gateway/auth.py` | ✅ Wallet signature + JWT (AlgSDK verify) |
+| DB Models | `gateway/database.py` | ✅ Re-exports from supabase_migration |
+| Supabase/Postgres | `gateway/supabase_migration.py` | ✅ Full DDL, models, engine, Alembic |
+| Algorand Client | `gateway/algod_client.py` | ✅ Health check, balance, holders, compile |
+| GitHub Webhooks | `gateway/github.py` | ✅ HMAC verification, issue/PR handlers |
+| Rate Limiting | `gateway/rate_limiter.py` | ✅ Middleware with config |
+| Security Middleware | `gateway/middleware.py` | ✅ Headers, CORS, size limits |
+| Indexer | `gateway/indexer.py` | ✅ Polls on-chain events, syncs to DB |
+| SSE Broker | EventBroker in main.py | ✅ Real-time event stream for dashboard |
+
+**Key endpoints:**
+- `POST /auth/request` / `POST /auth/verify` — Wallet signature auth flow
+- `GET /bounties` / `GET /bounties/{id}` / `POST /bounties` — CRUD
+- `POST /bounties/{id}/claim` / `POST /bounties/{id}/submit` / `POST /bounties/{id}/approve` / `POST /bounties/{id}/reject` / `POST /bounties/{id}/dispute` — Bounty lifecycle
+- `GET /agents/{address}` / `POST /agents` — Agent profiles
+- `GET /notifications` — Notification endpoint
+- `GET /stream` — SSE event stream
+- `POST /webhooks/github` — GitHub webhook receiver
+
+### 4. Frontend — Dashboard (Next.js) ✅
+
+`dashboard/` (261 lines page, full Next.js App Router):
+
+| Component | Status |
+|-----------|--------|
+| Next.js App Router pages | ✅ / |
+| Dashboard layout | ✅ |
+| Bounty card/list | ✅ |
+| Wallet connect (Pera) | ✅ Full auth flow with challenge/sign/verify |
+| Supabase client helpers | ✅ client, middleware, server |
+| API client | ✅ `dashboard/src/lib/api.ts` (296 lines) |
+| Toast notifications | ✅ |
+
+### 5. Database ✅
+
+- **PostgreSQL via Supabase** (primary production DB)
+- **SQLite** (local dev fallback — only when SUPABASE_URL not set)
+- **Alembic** migrations configured (`gateway/alembic.ini` + `gateway/migrations/`)
+- **RLS policies** defined in `supabase/rls_policies.sql`
+- Tables: `agents`, `bounties`, `github_prs`, `notifications`
+
+### 6. Security Hardening (recent) ✅
+
+- Removed hardcoded JWT secret fallback (now requires env var)
+- Fixed database exhaustion via implicit agent registration
+- HMAC GitHub webhook signature verification
+- Alembic migration for schema management
+- Security headers middleware
+- Request size limit middleware
+- CORS origin allowlist
+
+### 7. CI/CD ✅
+
+- GitHub Actions: CI/CD workflow + unit test workflow
+- Dockerfile for containerized deployment
+- GCP Cloud Run deployment scripts
 
 ---
 
-## How to Read This Project
+## What's Still Needed (Implementation Priority)
 
-### The Escrow Contract (`escrow.algo`)
+### Priority 1: Security — Remove Mock Signature Bypass
 
-The escrow contract is the heart of AlgoBounty. It manages:
+`gateway/auth.py` still has a `MOCK_SIG` bypass that allows fake signatures in dev:
+```python
+if signature.endswith("MOCK_SIG"):
+    mock_addr = signature.split("-")[0]
+    return mock_addr == address
+```
+**Action:** Remove this entirely. Real wallet signatures only.
+
+### Priority 2: Algorand Integration — Real Chain Interaction
+
+Current state: `algod_client.py` has health check, balance, and asset holders, but:
+- No real escrow contract deployment (only compile)
+- Bounty creation/claim/approve are DB-only (no on-chain txs)
+- No indexer polling loop running in background
+
+**Action:** Integrate PyAlgoSDK for:
+- Deploy `escrow.algo` on testnet
+- Create claim transactions from gateway
+- Monitor indexer for escrow state changes
+- Auto-update bounty status from chain
+
+### Priority 3: Frontend — Real Wallet Integration
+
+`dashboard/src/hooks/useWallet.ts` currently:
+- Checks for Pera Wallet (`window.PeraWalletConnect`)
+- Connects → requests challenge → signs → verifies
+- **But:** the actual wallet SDK connection needs proper initialization and error handling
+- Dashboard needs to display real escrow status (not just DB state)
+
+**Action:**
+- Verify Pera Wallet SDK integration works end-to-end
+- Add wallet connect for Defly/Edge wallet too
+- Show on-chain bounty status on dashboard
+- Fix any connection errors
+
+### Priority 4: GitHub Integration — Webhook Handler
+
+`gateway/github.py` has handlers for issue and PR events, but:
+- No actual bot deployment or messaging on GitHub
+- `log_bot_comment` is stubbed (just prints/logs)
+- No GitHub App/OIDC token management
+- No actual PR comment/bounty linking flow
+
+**Action:** Implement the full flow from v5 spec:
+- GitHub App creation and installation
+- Webhook secret management
+- Issue → bounty creation flow
+- PR → bounty linking (via `#ALGO-XXXX` pattern)
+- Automated comments on PRs/issues
+
+### Priority 5: Smart Contract — Expand & Test
+
+`escrow.algo` is working but needs:
+- Full HITM mode testing (v6 spec)
+- Karma tracking integration
+- Comprehensive test suite (current tests are minimal: `test_escrow_mock.py`)
+- Edge case tests (timeouts, disputes, ghosting, etc.)
+
+### Priority 6: Rate Limiting — Activate
+
+`gateway/rate_limiter.py` exists but may not be fully activated on all endpoints.
+Verify and configure appropriate rate limits per endpoint tier.
+
+### Priority 7: Indexer Background Task
+
+`gateway/indexer.py` has polling functions but no background scheduler.
+- Set up a periodic task (Celery/APScheduler) to call `poll_bounty_events()`
+- Sync chain state to DB for dashboard display
+
+### Priority 8: Secrets Management
+
+- `SECRET_KEY` in `gateway/auth.py` reads from env — good
+- GitHub webhook secret needs secure storage (env var or Secret Manager)
+- Algorand node credentials need secure storage
+
+---
+
+## How to Proceed
+
+### 1. Environment Setup
+
+```bash
+# Clone the repo
+git clone https://github.com/IcanBENCHurCAT/algo-bounty.git
+cd algo-bounty
+
+# Python environment
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+# Environment variables (create gateway/.env)
+cp gateway/.env.template gateway/.env
+# Edit gateway/.env with:
+#   SUPABASE_URL=... (or DATABASE_URL for local SQLite)
+#   SECRET_KEY=<random-string>
+#   ALGORAND_NODE_URL=... (sandbox or testnet)
+#   GITHUB_WEBHOOK_SECRET=... (if testing GitHub integration)
+```
+
+### 2. Run the Gateway
+
+```bash
+export PYTHONPATH=.
+python gateway/main.py
+```
+
+Server starts on port 8000. Dashboard is at `http://localhost:8000/dashboard/`.
+
+### 3. Run Tests
+
+```bash
+export PYTHONPATH=.
+pytest tests/ -v
+```
+
+### 4. Database Setup
+
+- **Supabase:** Run `gateway/supabase_migration.py` to see DDL, then paste into Supabase SQL Editor
+- **SQLite (local):** Automatically used when SUPABASE_URL is not set
+
+### 5. Frontend Setup
+
+```bash
+cd dashboard
+npm install
+npm run dev
+```
+
+Dashboard at `http://localhost:3000`.
+
+---
+
+## Key Technical Details
+
+### The Escrow Contract State Machine
 
 ```
-State Machine:
 OPEN → CLAIMED → SUBMITTED → (DISPUTED → CLOSED)
                           → REJECTED → SUBMITTED (loop for revisions)
                           → CLOSED (approved)
@@ -79,192 +272,72 @@ SUBMITTED → CLOSED (auto-release if review expires)
 DISPUTED → DISPUTED_TIMEOUT → CLOSED (50/50 split at 30 days)
 ```
 
-Each bounty has:
-- `creator` — who posted the bounty
-- `worker` — who claimed it
-- `escrow_amount` — how much is locked
-- `asset_id` — ALGO (0) or ASA
-- `state` — current state of the bounty
-- `payout_type` — PAYOUT, REFUND, or SPLIT
-- `hitm` — whether human review is required
-- `review_days` — how long the creator has to review (default 7)
-
 ### The Karma System (v2 spec)
 
-New accounts start with:
-- 0 karma (but get +25 bonus on creation)
-- "Novice" tier status
-- Forced HITM mode for first 3 bounties
-
-Karma changes based on:
+New accounts start with 0 karma (+25 bonus on creation). Karma changes based on:
 - Completing a bounty: +5 karma, +2 if approved without dispute
 - Ghosting (claim timeout): -20 karma
 - Fake/broken work: -3 karma
 - Being disputed and losing: -5 karma
 - Being disputed and winning: +3 karma
 - Creator ghosting (no review): +5 karma to worker, -3 to creator
-- 90-day grace period for new accounts (reduced penalties)
 
-### GitHub Integration (v5 — write this one!)
-
-The flow:
-1. Creator creates an issue in a repo
-2. Bot comments on the issue with a bounty link
-3. Creator posts escrow → bounty status updates on GitHub
-4. Worker claims bounty → bot comments "bounty claimed"
-5. Worker submits PR → bot comments "solution submitted"
-6. Creator reviews → approves or rejects via bot
-7. If approved → bot comments "bounty approved, payment released"
-8. If rejected → bot comments "changes requested"
-
-PRs reference bounties with `#ALGO-XXXX` pattern.
-
----
-
-## Your First Tasks
-
-### Priority 1: Write v5-github-integration.md
-
-This doesn't exist yet. Write it.
-
-**What to include:**
-- GitHub Actions workflow (YAML) for each repo
-- Webhook handler design (FastAPI endpoints)
-- Issue-to-bounty flow
-- PR-bounty linking strategy
-- Label/sync flow
-- Failure recovery design
-- Notification templates (what the bot says on PRs/issues)
-
-**Read these first:**
-1. `/home/st9797/.openclaw/workspace/algo-bounty-design/v4-dashboard-api.md` — for API endpoints and notification design
-2. `/home/st9797/.openclaw/workspace/algo-bounty-design/v6-hitm-design.md` — for HITM workflow
-3. `/home/st9797/.openclaw/workspace/algo-bounty-design/escrow.algo` — for state machine
-4. `/home/st9797/.openclaw/workspace/algo-bounty-design/v1-teal-escrow-contract.md` — for contract methods
-
-### Priority 2: Expand escrow.algo
-
-Add these methods from the v6 spec:
-- `hitm_approve()` — creator approves work
-- `hitm_reject()` — creator rejects work with reason
-- `hitm_dispute()` — either party disputes
-- `hitm_resolve_dispute()` — mediator resolves
-- `hitm_auto_release()` — auto-release if review expires
-
-### Priority 3: Build the Gateway (v4 spec)
-
-The FastAPI gateway is the brain:
-- All REST API endpoints from v4 spec
-- GitHub webhook receiver
-- Indexer poller (checks escrow state every 5 seconds)
-- Telegram bot (for notifications)\n- SSE event stream (for real-time dashboard)
-- Wallet signature auth
-
-### Priority 4: Write Tests
-
-Test plan from v1 spec + new tests for:
-- HITM mode flows
-- GitHub integration flows
-- Karma system
-- Edge cases (timeout, dispute, ghosting, etc.)
-
-### Priority 5: Deploy
-
-- GCP Cloud Run (see v4 architecture)
-- Algorand sandbox node
-- SQLite for MVP, Postgres at scale
-
----
-
-## Key Technical Details
-
-### Algorand Node Setup
-
-```bash
-# Local sandbox node
-algod -d /tmp/algod
-# Indexer
-indexer -d /tmp/algod
-
-# PyAlgoSDK
-pip install algosdk pyteal puya
-
-# Or use AlgoKit (recommended)
-pip install algokit
-```
-
-### Puya/pyTEAL Notes
-
-- Inner transactions for payouts
-- Box storage for large data
-- AppLocalStore for state
-- Events/logs for off-chain processors
-- RekeyTo protection for contracts
-
-### Gateway Tech Stack
+### File Structure
 
 ```
-Python 3.12+
-FastAPI + Uvicorn
-PyAlgoSDK (Algorand interaction)
-SQLAlchemy (database)
-SQLite → PostgreSQL
-Redis (caching, pub/sub)
-aiohttp (webhooks)
-python-telegram-bot (notifications)
-Next.js (frontend)
+algo-bounty/
+├── gateway/                # FastAPI backend
+│   ├── main.py             # Main API (32+ endpoints)
+│   ├── auth.py             # Wallet signature + JWT
+│   ├── database.py         # DB models (re-exports from supabase_migration)
+│   ├── supabase_migration.py # DDL, models, Alembic setup
+│   ├── algod_client.py     # Algorand client utilities
+│   ├── github.py           # GitHub webhook handler
+│   ├── rate_limiter.py     # Rate limiting middleware
+│   ├── middleware.py        # Security headers, CORS, size limits
+│   ├── indexer.py          # On-chain event poller
+│   └── migrations/         # Alembic migrations
+├── dashboard/              # Next.js frontend (App Router)
+│   ├── src/app/            # Pages
+│   ├── src/components/     # React components
+│   ├── src/hooks/          # useWallet hook
+│   ├── src/lib/            # API client, Supabase helpers
+│   └── src/utils/supabase/ # Client/middleware/server configs
+├── tests/                  # Test suite
+├── supabase/               # RLS policies
+├── escrow.algo             # Puya/pyTEAL escrow contract (748 lines)
+├── v0-v7*.md               # Design documents
+├── AGENTS.md               # Agent guide
+├── CONTRACTOR-BRIEF.md     # This file
+└── README.md               # Project overview
 ```
-
----
-
-## Environment
-
-- **Server:** 10.0.0.67 (DGX Spark GB10)
-- **User:** st9797
-- **SSH:** SSH key at ~/.ssh/id_ed25519 (owner must provide)
-- **Algorand:** Local sandbox node available
-- **GitHub:** Owner must provide token for integration work
-- **Workspace:** /home/st9797/.openclaw/workspace/
 
 ---
 
 ## Common Questions
 
-**Q: Do I need to write the escrow contract from scratch?**
-A: No. `escrow.algo` already exists (25KB). Add HITM methods and expand tests.
+**Q: Do I need to rewrite the escrow contract?**
+A: No. `escrow.algo` (748 lines) is complete with all major features. Expand tests and integrate it with the gateway.
 
-**Q: Is there a database already?**
-A: No. Start with SQLite (per v4 spec), migrate to PostgreSQL at scale.
+**Q: Is the database working?**
+A: Yes. Supabase PostgreSQL is configured with Alembic. SQLite falls back when SUPABASE_URL is not set.
 
-**Q: Can I use existing Algorand projects as references?**
-A: Yes. AlgoKit is recommended. PyAlgoSDK is the standard library.
+**Q: How do I test the GitHub integration?**
+A: Use `ngrok` or `localtunnel` to expose the webhook endpoint, then configure a GitHub test repo. The HMAC verification is implemented in `gateway/github.py`.
 
-**Q: How do I test the escrow contract?**
-A: Run `python tests/test_escrow_contract.py` — basic tests exist.
-
-**Q: What's the file structure for new code?**
-```
-algo-gateway/        # FastAPI gateway
-  api/               # REST endpoints
-  hitm.py            # HITM service
-  indexer.py         # Indexer poller
-  telegram.py        # Bot integration
-algo-bounty-design/  # Design docs (read these!)
-algo-bounty-contract/  # Escrow contract (expand escrow.algo here)
-algo-bounty-dashboard/  # Frontend (Next.js)
-```
+**Q: Can I deploy this to GCP?**
+A: Yes. Dockerfile and deploy scripts are ready. Use Cloud Run + Cloud SQL.
 
 ---
 
 ## What to Do Next
 
-1. **Read v7-handover.md** — complete project overview
-2. **Write v5-github-integration.md** — the missing design doc
-3. **Expand escrow.algo** — add HITM methods
-4. **Build the gateway** — FastAPI per v4 spec
-5. **Write tests** — comprehensive test suite
-6. **Deploy** — GCP Cloud Run per v4 architecture
-7. **Alpha test** — with real AI agents
+1. **Fix the MOCK_SIG bypass** in `gateway/auth.py` — remove it, real signatures only
+2. **Integrate real Algorand chain interaction** — deploy escrow, create/claim via txns
+3. **Implement the full GitHub webhook flow** — not just stubs
+4. **Expand the test suite** — target 80%+ coverage
+5. **Run the indexer background task** — sync chain to DB
+6. **End-to-end test** — deploy to testnet, connect wallet, create bounty, claim, approve
 
 ---
 
