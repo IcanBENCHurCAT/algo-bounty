@@ -18,7 +18,7 @@ from .indexer import poll_bounty_events, sync_bounty_from_chain
 import asyncio
 from .routers import (
     auth, bounties, algorand, agents,
-    notifications, events, webhooks
+    notifications, events, webhooks, oidc
 )
 
 # Initialize database
@@ -125,6 +125,7 @@ app.include_router(agents.router)
 app.include_router(notifications.router)
 app.include_router(events.router)
 app.include_router(webhooks.router)
+app.include_router(oidc.router)
 
 # Serve the frontend Dashboard directly under /dashboard
 # Check if directory exists
