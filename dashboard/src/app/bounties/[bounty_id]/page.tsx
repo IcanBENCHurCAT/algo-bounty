@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { getBounty, approveWork, rejectWork, submitWork, claimBounty, getStoredToken, type Bounty } from '@/lib/api';
 import { useWallet } from '@/hooks/useWallet';
 import { useToast } from '@/components/Toast';
+import { useEvents } from '@/hooks/useEvents';
 
 export default function BountyDetailPage() {
   const params = useParams();
@@ -36,8 +37,20 @@ export default function BountyDetailPage() {
   }, [bountyId]);
 
   useEffect(() => {
-    loadBounty();
+    const timeout = setTimeout(loadBounty, 0);
+    return () => clearTimeout(timeout);
   }, [loadBounty]);
+
+  // Real-time updates for this specific bounty
+  useEvents(useCallback((event) => {
+    if (event.event_type.startsWith('bounty.') && event.data.bounty_id === bountyId) {
+      console.log('Bounty updated:', event);
+      loadBounty();
+      if (event.event_type === 'bounty.claimed') toast.info('Bounty has been claimed');
+      if (event.event_type === 'bounty.submitted') toast.info('New work submitted');
+      if (event.event_type === 'bounty.approved') toast.success('Bounty approved!');
+    }
+  }, [bountyId, loadBounty, toast]));
 
   const shortAddr = address ? `${address.slice(0, 6)}...${address.slice(-4)}` : '';
   const shortCreator = bounty ? `${bounty.creator.slice(0, 6)}...${bounty.creator.slice(-4)}` : '';
