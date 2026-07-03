@@ -11,6 +11,7 @@ from .middleware import (
     SecurityHeadersMiddleware,
     RequestSizeLimitMiddleware,
     CORSAllowlistMiddleware,
+    WebhookApiKeyAuthMiddleware,
 )
 from .broker import broker
 from .dependencies import get_db
@@ -22,11 +23,15 @@ from .routers import (
 # Initialize database
 init_db()
 
-# CORS origins allowlist – matches deployed frontend + local dev
+# CORS origins allowlist – matches deployed frontend + local dev + vantage-labs domain
 ALLOWED_ORIGINS: list[str] = [
     "https://algo-bounty-frontend-*.uc.a.run.app",
+    "https://vantage-labs.com",
+    "https://*.vantage-labs.com",
     "http://localhost:3000",
     "http://localhost:3001",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:3001",
 ]
 
 @asynccontextmanager
@@ -50,7 +55,10 @@ app.add_middleware(CORSAllowlistMiddleware, allowed_origins=ALLOWED_ORIGINS)
 # 3. Security headers (runs on outgoing responses)
 app.add_middleware(SecurityHeadersMiddleware)
 
-# 4. Rate limiting – protects public endpoints from DDoS / spam
+# 4. Webhook API key auth – protects webhook endpoints
+app.add_middleware(WebhookApiKeyAuthMiddleware)
+
+# 5. Rate limiting – protects public endpoints from DDoS / spam
 app.add_middleware(RateLimitMiddleware)
 
 # Algorand network config
