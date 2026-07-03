@@ -92,6 +92,8 @@ PYTHONPATH=. python -m pytest tests/
 - `useWallet`: Manages connection to Pera, Defly, and Edge wallets.
 - `useEvents`: Subscribes to `/api/v1/events` SSE and triggers callbacks for real-time updates.
 - Mock signatures are often used in dev (suffix `-MOCK_SIG`). In production-ready code, ensure strict verification.
+- **HITM Mode**: When `is_hitm=1`, the contract sets a `review_deadline`. If the creator doesn't act, the `indexer_polling_task` detects the `auto_released_hitm` log and updates the DB.
+- **Karma System**: Karma changes are applied both in `gateway/routers/bounties.py` (for API-driven actions) and `gateway/main.py` (for on-chain timeouts/logs).
 
 ### Middleware Implementation
 - When adding middleware to the Gateway, inherit from `starlette.middleware.base.BaseHTTPMiddleware` to avoid signature mismatches.
