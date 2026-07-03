@@ -12,6 +12,7 @@ Usage:
 import os
 import signal
 from datetime import datetime, timezone
+from .config import settings
 
 from sqlalchemy import (
     BigInteger,
@@ -44,8 +45,8 @@ def _warm_pool(_conn, record):
 # Engine construction
 # ---------------------------------------------------------------------------
 
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-DATABASE_URL = os.getenv("DATABASE_URL")
+SUPABASE_URL = settings.SUPABASE_URL
+DATABASE_URL = settings.DATABASE_URL
 
 
 def build_engine():
@@ -310,7 +311,7 @@ class Agent(Base):
     completed_bounties = Column(Integer, default=0)
     disputes_lost = Column(Integer, default=0)
     created_at = Column(
-        DateTime, default=lambda: datetime.now(timezone.utc)
+        DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
     )
 
 
@@ -319,16 +320,16 @@ class Bounty(Base):
     bounty_id = Column(String, primary_key=True, index=True)
     app_id = Column(Integer, unique=True, index=True, nullable=True)
     status = Column(String, default="open")
-    creator = Column(String, index=True)
+    creator = Column(String, index=True, nullable=False)
     worker = Column(String, index=True, nullable=True)
     amount = Column(BigInteger)
     asset_id = Column(Integer, default=0)
     is_hitm = Column(Boolean, default=False)
     description = Column(String)
-    repo_url = Column(String, index=True)
+    repo_url = Column(String, index=True, nullable=False)
     karma_requirement = Column(Integer, default=0)
     created_at = Column(
-        DateTime, default=lambda: datetime.now(timezone.utc)
+        DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
     )
     deadline_round = Column(Integer, nullable=True)
     hitm_review_days = Column(Integer, default=7)
@@ -339,24 +340,24 @@ class Bounty(Base):
 class GitHubPR(Base):
     __tablename__ = "github_prs"
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    pr_number = Column(Integer, index=True)
-    repo_url = Column(String, index=True)
-    bounty_id = Column(String, ForeignKey("bounties.bounty_id"))
+    pr_number = Column(Integer, index=True, nullable=False)
+    repo_url = Column(String, index=True, nullable=False)
+    bounty_id = Column(String, ForeignKey("bounties.bounty_id"), nullable=False)
     state = Column(String, default="open")
-    author = Column(String)
+    author = Column(String, nullable=False)
     created_at = Column(
-        DateTime, default=lambda: datetime.now(timezone.utc)
+        DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
     )
 
 
 class Notification(Base):
     __tablename__ = "notifications"
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    recipient = Column(String, index=True)
-    message = Column(String)
+    recipient = Column(String, index=True, nullable=False)
+    message = Column(String, nullable=False)
     read = Column(Boolean, default=False)
     created_at = Column(
-        DateTime, default=lambda: datetime.now(timezone.utc)
+        DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
     )
 
 
