@@ -1,4 +1,7 @@
 import os
+
+# Set environment before importing gateway modules
+os.environ["ALGORAND_NETWORK"] = "sandbox"
 import pytest
 
 # Set dummy secret for tests BEFORE importing gateway modules
