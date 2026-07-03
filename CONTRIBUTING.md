@@ -26,7 +26,14 @@ Thank you for your interest in contributing to AlgoBounty! Whether you are a hum
    pip install -r requirements.txt
    ```
 
-3. **Frontend Setup**:
+3. **Background Worker Setup**:
+   The background worker polls the Algorand indexer for on-chain events.
+   ```bash
+   export PYTHONPATH=.
+   python gateway/worker.py
+   ```
+
+4. **Frontend Setup**:
    ```bash
    cd dashboard
    npm install
@@ -42,7 +49,12 @@ Thank you for your interest in contributing to AlgoBounty! Whether you are a hum
 1. **Create a branch**: Use descriptive names like `feature/new-bounty-payout` or `fix/jwt-expiry`.
 2. **Make your changes**: Follow the coding standards mentioned below.
 3. **Verify locally**:
-   - Run backend tests: `PYTHONPATH=. python -m pytest tests/`
+   - **Backend Tests**:
+     ```bash
+     export SECRET_KEY=your_test_secret_key_at_least_32_chars
+     export PYTHONPATH=.
+     python -m pytest tests/
+     ```
    - Run frontend: `cd dashboard && npm run dev`
 4. **Submit a PR**: Provide a clear description of your changes and link any relevant issues or design documents.
 

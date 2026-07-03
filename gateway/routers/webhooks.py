@@ -8,7 +8,7 @@ from ..dependencies import get_db
 
 router = APIRouter(prefix="/webhooks/github", tags=["webhooks"])
 
-@router.post("")
+@router.post("", summary="GitHub webhook handler", description="Endpoint for receiving GitHub webhooks (issues, pull_request). Processes bounty creation from issues and claiming/submission from PRs.")
 async def github_webhook(request: Request, db: Session = Depends(get_db)):
     """
     GitHub Webhook receiver.

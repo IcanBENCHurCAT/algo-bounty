@@ -98,6 +98,12 @@ KNOWN_EVENT_TYPES = {
 # Regex pattern to match #ALGO-XXXX or ALGO-XXXX
 BOUNTY_RE = re.compile(r'#?ALGO-(\d+)')
 
+def extract_bounty_ids(text: str) -> list[str]:
+    """Extract bounty IDs (e.g. 123 from ALGO-123) from text."""
+    if not text:
+        return []
+    return sorted(list(set(BOUNTY_RE.findall(text))))
+
 def verify_webhook_signature(payload_bytes: bytes, signature: str, secret: str) -> bool:
     """
     Verify that a GitHub webhook request includes a valid HMAC-SHA256 signature.
@@ -315,9 +321,7 @@ def handle_pr_event(db: Session, payload: dict):
     author = pr.get("user", {}).get("login")
     
     # Scan for #ALGO-XXXX or ALGO-XXXX (multiple allowed)
-    text_to_scan = f"{title} {body}"
-    # Use set to avoid double-processing if the same bounty is mentioned in title and body
-    issue_numbers = sorted(list(set(BOUNTY_RE.findall(text_to_scan))))
+    issue_numbers = extract_bounty_ids(f"{title} {body}")
     if not issue_numbers:
         return
         
