@@ -62,9 +62,37 @@ graph TD
 
 ---
 
-## 3. GitHub Actions Auto-Payout Workflow
-
 To automate settlement upon code verification:
 1.  On pull request merge, the configured workflow requests an OIDC token from GitHub with the custom audience `https://github.com/AlgoBounty`.
 2.  The workflow sends the OIDC token along with target repository parameters to the `/api/v1/bounties/{id}/payout-oidc` Gateway endpoint.
 3.  The Gateway verifies the JWKS signatures from GitHub, confirms the matching repository and commit state, signs the escrow release transaction on-chain, and pays the worker.
+
+---
+
+## 4. Bounty ID Spoofing & Link Validation (Security Hotspot)
+
+### The Threat Model
+A developer completes work on a high-value bounty. Before the PR is merged, an attacker submits a PR targeting the same codebase, but manually associates it with the same bounty ID (or a different active bounty ID) in the PR description. If validation solely relies on extracting string matches from raw markdown descriptions, several issues arise:
+- **Payout Hijacking**: An attacker redirects the bounty payout to their own address by mapping their code submission to a legitimate bounty.
+- **Accidental Mismatches**: A developer typos the bounty ID, resulting in a failed payout or releasing funds under a completely different escrow contract.
+
+### Mitigation & Future GitHub App Automation
+
+```mermaid
+graph TD
+    A[Worker Pull Request] -->|1. PR Opened| B(GitHub App Listener)
+    B -->|2. Query DB| C{Is worker address registered for Bounty ID?}
+    C -->|No/Invalid| D[Post warning & block merge/auto-payout]
+    C -->|Yes| E[GitHub App applies verified label 'bounty-linked: b_123']
+    E -->|3. PR Merged| F[OIDC Workflow runs]
+    F -->|4. Gateway verifies OIDC + GitHub App Label| G[Approve & Payout Escrow]
+```
+
+To eliminate manual string parsing vulnerabilities and secure reusable actions, the platform will implement the following:
+1. **GitHub App Verification State (Double-Check)**:
+   Instead of the GitHub Action parsing the markdown description directly, the Gateway's GitHub App listener will intercept `pull_request` creation. It queries the database to verify if the PR author is the registered claimant (`worker` address) of that bounty ID.
+2. **Cryptographic App Labels**:
+   Upon verification, the GitHub App automatically applies a restricted label (e.g., `bounty-linked: b_1720000000`) and posts a system-signed verification comment. The OIDC gateway endpoint will check this state via GitHub's API during payout, ignoring raw text links in the PR body.
+3. **Reusable Action Design**:
+   When packaged as a reusable action, the action will accept the bounty ID as a parameter but rely entirely on GitHub's context variables (`github.repository`, `github.actor`) and the verified status from the Gateway database to prevent client spoofing.
+

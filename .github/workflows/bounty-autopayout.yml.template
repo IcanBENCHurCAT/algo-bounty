@@ -51,14 +51,18 @@ jobs:
           GATEWAY_URL="${{ secrets.ALGOBUNTY_GATEWAY_URL }}"
           
           if [ -z "$GATEWAY_URL" ]; then
-            # Default fallback to localhost if not specified in secrets
             GATEWAY_URL="https://api.algobounty.dev"
+          fi
+          
+          if [ -z "$OIDC_TOKEN" ]; then
+            echo "::error::GitHub OIDC Token is empty. Verify workflow permissions."
+            exit 1
           fi
           
           echo "Sending verification to gateway at $GATEWAY_URL..."
           
-          # Send OIDC verification & payout trigger to AlgoBounty Gateway
-          curl -X POST "$GATEWAY_URL/api/v1/bounties/$BOUNTY_ID/payout-oidc" \
+          # Send OIDC verification & payout trigger (uses -f to fail the step on HTTP error)
+          curl -fsS -X POST "$GATEWAY_URL/api/v1/bounties/$BOUNTY_ID/payout-oidc" \
             -H "Content-Type: application/json" \
             -d "{
               \"token\": \"$OIDC_TOKEN\",
