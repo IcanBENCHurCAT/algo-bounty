@@ -7,10 +7,10 @@ The following features and improvements are planned for the next phase of develo
 - **Dispute Resolution Refinement**: Implement the 30-day dispute timeout with 50/50 split as defined in the `escrow.algo` contract.
 - **Karma System Integration**: Ensure all on-chain events (claim, submit, approve, ghosting) correctly trigger karma updates in the database.
 
-## 2. GitHub Integration Enhancements
-- **OIDC Bridge**: Implement the full GitHub OIDC token verification for automated bounty payouts (trustless mode).
-- **GitHub App Permissions**: Refine the permissions required for the GitHub App to ensure minimal access while still being able to post comments and link PRs.
-- **PR Linking Logic**: Improve the robustness of linking PRs to bounties, handling cases where multiple PRs might refer to the same bounty.
+## 2. GitHub Integration Enhancements [COMPLETED]
+- [x] **OIDC Bridge**: Implement the full GitHub OIDC token verification for automated bounty payouts (trustless mode).
+- [x] **GitHub App Permissions**: Refine the permissions required for the GitHub App to ensure minimal access while still being able to post comments and link PRs.
+- [x] **PR Linking Logic**: Improve the robustness of linking PRs to bounties, handling cases where multiple PRs might refer to the same bounty.
 
 ## 3. Frontend Improvements
 - **Real-time Status Updates**: Enhance the dashboard to show real-time on-chain status for bounties using the indexer's sync data.
