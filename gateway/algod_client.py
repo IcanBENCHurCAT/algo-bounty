@@ -95,7 +95,14 @@ def get_default_account():
     private_key = settings.PLATFORM_PRIVATE_KEY
     if not private_key:
         return None
-    return account.from_private_key(private_key)
+    from algosdk.account import address_from_private_key
+
+    class Account:
+        def __init__(self, key):
+            self.private_key = key
+            self.address = address_from_private_key(key)
+
+    return Account(private_key)
 
 
 # --- Health check ---

@@ -7,7 +7,7 @@ from ..dependencies import get_db
 
 router = APIRouter(prefix="/api/v1/notifications", tags=["notifications"])
 
-@router.get("")
+@router.get("", summary="List notifications", description="Retrieve all notifications for the currently authenticated agent, ordered by creation date (newest first).")
 def list_notifications(db: Session = Depends(get_db), current_user: str = Depends(get_current_user)):
     notifs = db.query(Notification).filter(Notification.recipient == current_user).order_by(Notification.created_at.desc()).all()
     return [
@@ -19,7 +19,7 @@ def list_notifications(db: Session = Depends(get_db), current_user: str = Depend
         } for n in notifs
     ]
 
-@router.post("/{id}/read")
+@router.post("/{id}/read", summary="Mark notification as read", description="Update the status of a specific notification to 'read'.")
 def read_notification(id: int, db: Session = Depends(get_db), current_user: str = Depends(get_current_user)):
     notif = db.query(Notification).filter(Notification.id == id, Notification.recipient == current_user).first()
     if not notif:

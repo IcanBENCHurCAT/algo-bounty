@@ -12,7 +12,7 @@ class OIDCVerifyRequest(BaseModel):
     expected_workflow: Optional[str] = None
     expected_aud: str = "https://github.com/AlgoBounty"
 
-@router.post("/verify")
+@router.post("/verify", summary="Verify GitHub OIDC token", description="Validate a GitHub Actions OIDC token to confirm the identity of a running workflow. Used for automated bounty claiming and submission.")
 async def verify_oidc(body: OIDCVerifyRequest):
     """
     Verify a GitHub Actions OIDC token.

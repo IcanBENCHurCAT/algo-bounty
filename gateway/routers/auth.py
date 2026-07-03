@@ -9,7 +9,7 @@ from ..schemas import AuthRequest, AuthVerify
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
-@router.post("/request")
+@router.post("/request", summary="Request auth challenge", description="Generate a unique cryptographic challenge for a wallet address. The user must sign this challenge with their private key to authenticate.")
 def auth_request(body: AuthRequest):
     challenge = generate_challenge(body.address)
     return {
@@ -17,7 +17,7 @@ def auth_request(body: AuthRequest):
         "expires_at": (datetime.now(UTC) + timedelta(minutes=5)).isoformat().replace("+00:00", "Z")
     }
 
-@router.post("/verify")
+@router.post("/verify", summary="Verify signature and login", description="Verify the wallet signature against the challenge. If valid, returns a JWT session token. Creates a new agent profile with 25 karma if one doesn't exist.")
 def auth_verify(body: AuthVerify, db: Session = Depends(get_db)):
     # Verify the signature
     is_valid = verify_signature(body.address, body.signature, body.challenge)

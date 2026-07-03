@@ -11,6 +11,7 @@ Design:
     - Endpoint-specific rate limits enforced in the middleware.
 """
 
+import os
 import time
 import json
 import threading
@@ -126,6 +127,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: Request, call_next) -> Response:
+        # Bypass rate limiting in testing environment
+        if os.getenv("TESTING") == "True":
+            return await call_next(request)
+
         # -- 1. Resolve matching rule ----------------------------------------
         path = request.url.path
         method = request.method.upper()

@@ -4,7 +4,7 @@ from ..broker import broker
 
 router = APIRouter(prefix="/api/v1/events", tags=["events"])
 
-@router.get("")
+@router.get("", summary="Subscribe to events", description="Subscribe to a real-time stream of platform events using Server-Sent Events (SSE). Useful for updating the dashboard in real-time.")
 async def event_stream(request: Request):
     """SSE endpoint for real-time marketplace events. Protected against connection flooding."""
     ip = request.client.host if request.client else "unknown"
