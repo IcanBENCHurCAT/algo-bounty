@@ -3,7 +3,7 @@ import hashlib
 import logging
 import re
 import json
-from datetime import datetime
+from datetime import datetime, UTC
 from sqlalchemy.orm import Session
 from .database import Bounty, GitHubPR, Notification, Agent
 from .algod_client import NODE_ENV
@@ -123,7 +123,7 @@ def log_bot_comment(repo_url: str, issue_or_pr_number: int, comment_text: str):
     Writes bot comments to a log file and prints to stdout for local inspection.
     """
     log_file = "github_bot_comments.log"
-    timestamp = datetime.utcnow().isoformat()
+    timestamp = datetime.now(UTC).isoformat().replace("+00:00", "Z")
     log_entry = {
         "timestamp": timestamp,
         "repo_url": repo_url,
