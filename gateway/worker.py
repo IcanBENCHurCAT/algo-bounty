@@ -14,8 +14,15 @@ async def indexer_worker():
     loop = asyncio.get_running_loop()
     stop_event = asyncio.Event()
 
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, stop_event.set)
+    try:
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(sig, stop_event.set)
+    except NotImplementedError:
+        # Windows fallback: loop.add_signal_handler is not implemented
+        def sync_handler(signum, frame):
+            loop.call_soon_threadsafe(stop_event.set)
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            signal.signal(sig, sync_handler)
 
     try:
         while not stop_event.is_set():
