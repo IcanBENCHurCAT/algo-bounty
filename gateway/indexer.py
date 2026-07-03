@@ -132,3 +132,30 @@ def read_box_value(app_id: int, box_name: str):
     except Exception as exc:
         print(f"[INDEXER] Box read error: {exc}")
         return None
+
+
+def fetch_app_logs(app_id: int, min_round: int = 0):
+    """Fetch transaction logs for a specific application ID from the indexer."""
+    try:
+        client = get_indexer_client()
+        response = client.search_transactions(
+            application_id=app_id,
+            min_round=min_round,
+            txn_type="appl"
+        )
+        txns = response.get("transactions", [])
+        logs = []
+        for tx in txns:
+            app_call = tx.get("application-transaction", {})
+            # Indexer returns logs in the 'logs' field of the transaction
+            tx_logs = tx.get("logs", [])
+            if tx_logs:
+                logs.append({
+                    "tx_id": tx.get("id"),
+                    "round": tx.get("confirmed-round"),
+                    "logs": tx_logs
+                })
+        return logs
+    except Exception as exc:
+        print(f"[INDEXER] Error fetching logs for app {app_id}: {exc}")
+        return []

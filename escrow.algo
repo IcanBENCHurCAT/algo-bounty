@@ -49,15 +49,15 @@ PAYOUT = Bytes("PAYOUT")
 REFUND = Bytes("REFUND")
 SPLIT = Bytes("SPLIT")  # New: 50/50 dispute timeout
 
-# Timeout constants (microseconds)
+# Timeout constants (seconds)
 DISPUTE_TIMEOUT_DAYS = Int(30)
-DISPUTE_TIMEOUT = DISPUTE_TIMEOUT_DAYS * 24 * 60 * 60 * 1_000_000  # 30 days
+DISPUTE_TIMEOUT = DISPUTE_TIMEOUT_DAYS * 24 * 60 * 60  # 30 days
 
 CLAIM_TIMEOUT_HOURS = Int(48)
-CLAIM_TIMEOUT = CLAIM_TIMEOUT_HOURS * 60 * 60 * 1_000_000  # 48 hours
+CLAIM_TIMEOUT = CLAIM_TIMEOUT_HOURS * 60 * 60  # 48 hours
 
 # Defaults
-DEFAULT_HITM_REVIEW_WINDOW = 7 * 24 * 60 * 1_000_000  # 7 days in microseconds
+DEFAULT_HITM_REVIEW_WINDOW = 7 * 24 * 60 * 60  # 7 days
 MAX_REJECTIONS = 3  # Max rejections before escrow returns to creator
 MAX_PROOF_BYTES = 2048
 MAX_URL_BYTES = 512
@@ -84,6 +84,7 @@ _K_CLAIM_DEADLINE = Bytes("claim_deadline")         # uint64 - when claim expire
 _K_CLAIM_TIMESTAMP = Bytes("claim_timestamp")       # uint64 - when claim was set
 _K_GITHUB_STATUS = Bytes("github_status")           # "pending", "pass", "fail"
 _K_DISPUTE_TIMESTAMP = Bytes("dispute_timestamp")   # uint64 - when dispute was filed
+_K_REVIEW_DAYS = Bytes("review_days")               # uint64 - review window in days
 
 
 # ============================================================================
@@ -237,6 +238,7 @@ class EscrowContract(SmartContract):
         escrow_amount: UInt64,
         is_hitm: UInt64,
         asset_id: UInt64,
+        review_days: UInt64,
     ) -> None:
         """
         Create a new bounty escrow.
@@ -273,6 +275,7 @@ class EscrowContract(SmartContract):
         _box_put_uint64(_K_ESCROW_AMOUNT, escrow_amount)
         _box_put_uint64(_K_IS_HITM, is_hitm)
         _box_put_uint64(_K_ASSET_ID, asset_id)
+        _box_put_uint64(_K_REVIEW_DAYS, review_days)
         _box_put_uint64(_K_CREATED_TIMESTAMP, Global.latest_timestamp())
         _box_put_bytes(_K_BOUNTY_ID, bounty_id)
         _box_put_address(_K_CREATOR_ADDRESS, Txn.sender())
@@ -343,6 +346,13 @@ class EscrowContract(SmartContract):
             _box_put_bytes(_K_PROOF_DATA, proof_data)
             _set_state(SUBMITTED)
 
+            # HITM: Set review deadline if enabled
+            if _box_get_uint64(_K_IS_HITM) == Int(1):
+                _box_put_uint64(
+                    _K_REVIEW_DEADLINE,
+                    Global.latest_timestamp() + _box_get_uint64(_K_REVIEW_DAYS) * 24 * 60 * 60
+                )
+
             Log(Bytes("work_submitted"))
 
         elif current == REJECTED:
@@ -361,6 +371,13 @@ class EscrowContract(SmartContract):
                 _box_get_uint64(_K_REJECTION_COUNT) + Int(1)
             )
             _set_state(SUBMITTED)
+
+            # HITM: Reset review deadline on revision if enabled
+            if _box_get_uint64(_K_IS_HITM) == Int(1):
+                _box_put_uint64(
+                    _K_REVIEW_DEADLINE,
+                    Global.latest_timestamp() + _box_get_uint64(_K_REVIEW_DAYS) * 24 * 60 * 60
+                )
 
             Log(Bytes("work_revise_submitted"))
 
@@ -509,7 +526,7 @@ class EscrowContract(SmartContract):
         ptx.require(_state() == DISPUTED)
 
         created_ts = _box_get_uint64(_K_CREATED_TIMESTAMP)
-        timeout = Int(14) * 24 * 60 * 60 * 1_000_000  # 14 days in microseconds
+        timeout = Int(14) * 24 * 60 * 60  # 14 days
         ptx.require(Global.latest_timestamp() > created_ts + timeout)
 
         _box_put_bytes(_K_PAYOUT_TYPE, REFUND)

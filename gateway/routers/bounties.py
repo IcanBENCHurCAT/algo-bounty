@@ -98,6 +98,10 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
     if not agent:
         raise HTTPException(status_code=403, detail="Agent profile missing")
 
+    # Karma System: Deduct 1 karma for creating a bounty (v2 scoring rules)
+    agent.karma -= 1
+    db.commit()
+
     bounty_id = f"b_{int(datetime.now(UTC).timestamp())}"
 
     # Deploy escrow contract on-chain (if on a live network)
@@ -123,11 +127,12 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
                 escrow_amount = int(body.amount * 1_000_000)
                 asset_id = int(body.asset_id)
                 is_hitm = 1 if body.hitm else 0
+                review_days = int(body.hitm_review_days)
 
                 app_args = ABIType.from_string(
-                    "(bytes,uint64,uint64,uint64)"
+                    "(bytes,uint64,uint64,uint64,uint64)"
                 ).encode(
-                    bounty_id_bytes, escrow_amount, is_hitm, asset_id
+                    bounty_id_bytes, escrow_amount, is_hitm, asset_id, review_days
                 )
 
                 platform_account = get_default_account()
@@ -330,12 +335,16 @@ def approve_work(
     b.payout_type = "PAYOUT"
     db.commit()
 
-    # Adjust worker karma (+5)
+    # Adjust karma (v2 rules: +10 to worker, +5 to creator)
     worker = db.query(Agent).filter(Agent.address == b.worker).first()
     if worker:
-        worker.karma += 5
+        worker.karma += 10
         worker.completed_bounties += 1
-        db.commit()
+
+    creator = db.query(Agent).filter(Agent.address == b.creator).first()
+    if creator:
+        creator.karma += 5
+    db.commit()
 
     broker.publish("bounty.approved", {
         "bounty_id": bounty_id,
@@ -379,6 +388,20 @@ def reject_work(
     b.status = "rejected"
     b.rejection_count += 1
     db.commit()
+
+    # Karma System: Deduct karma from worker for rejection (v2 rules)
+    # -1 for 1st, -2 for 2nd, -5 for 3rd rejection
+    worker = db.query(Agent).filter(Agent.address == b.worker).first()
+    if worker:
+        penalty = 0
+        if b.rejection_count == 1:
+            penalty = 1
+        elif b.rejection_count == 2:
+            penalty = 2
+        elif b.rejection_count >= 3:
+            penalty = 5
+        worker.karma -= penalty
+        db.commit()
 
     # Notify worker
     notif = Notification(
