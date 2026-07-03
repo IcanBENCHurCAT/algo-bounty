@@ -3,12 +3,12 @@ import hashlib
 import logging
 import re
 import json
-import os
 import httpx
 from datetime import datetime, UTC
 from sqlalchemy.orm import Session
 from .database import Bounty, GitHubPR, Notification, Agent
 from .algod_client import NODE_ENV
+from .config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -126,7 +126,7 @@ def log_bot_comment(repo_url: str, issue_or_pr_number: int, comment_text: str):
     If GITHUB_TOKEN is set, posts to the real GitHub API.
     Otherwise, logs to a file and stdout.
     """
-    token = os.environ.get("GITHUB_TOKEN")
+    token = settings.GITHUB_TOKEN
 
     # Extract owner and repo from URL
     # Expected format: https://github.com/owner/repo
