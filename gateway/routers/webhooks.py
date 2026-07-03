@@ -15,6 +15,14 @@ async def github_webhook(request: Request, db: Session = Depends(get_db)):
     Verifies HMAC-SHA256 signature via X-Hub-Signature-256 header,
     validates event type, then dispatches.
     """
+    # --- Input validation: enforce content-type ---
+    content_type = request.headers.get("content-type", "")
+    if "application/json" not in content_type.lower():
+        return JSONResponse(
+            status_code=415,
+            content={"status": "rejected", "reason": "Unsupported Media Type: only application/json accepted"}
+        )
+
     # --- Signature verification (MUST be first) ---
     secret = os.environ.get("GITHUB_WEBHOOK_SECRET", "")
     signature = request.headers.get("X-Hub-Signature-256", "")

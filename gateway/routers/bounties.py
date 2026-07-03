@@ -9,7 +9,8 @@ from ..auth import get_current_user
 from ..dependencies import get_db
 from ..schemas import (
     BountyCreate, BountyClaim, WorkSubmit,
-    WorkApprove, WorkReject, DisputeCreate
+    WorkApprove, WorkReject, DisputeCreate,
+    sanitize_string, sanitize_sql_like
 )
 from ..broker import broker
 from ..algod_client import (
@@ -93,6 +94,14 @@ def get_bounty(bounty_id: str, db: Session = Depends(get_db)):
 
 @router.post("", summary="Create a new bounty", description="Deploy a new bounty escrow on-chain (if not in sandbox) and create a database record. Deducts 1 karma from the creator.")
 def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_user: str = Depends(get_current_user)):
+    # ── Input validation & sanitization ────────────────────────────
+    sanitized_description = sanitize_string(body.description, 10000)
+    sanitized_repo_url = sanitize_string(body.repo_url, 2048)
+    if body.karma_requirement < 0:
+        raise HTTPException(status_code=400, detail="Karma requirement must be non-negative")
+    if body.hitm_review_days < 1 or body.hitm_review_days > 365:
+        raise HTTPException(status_code=400, detail="HITM review days must be 1-365")
+
     # Check if user has enough karma to create this bounty
     agent = db.query(Agent).filter(Agent.address == current_user).first()
     if not agent:
@@ -373,6 +382,9 @@ def reject_work(
     db: Session = Depends(get_db),
     current_user: str = Depends(get_current_user)
 ):
+    # ── Input validation & sanitization ────────────────────────────
+    sanitized_reason = sanitize_string(body.reason, 2000)
+
     b = db.query(Bounty).filter(Bounty.bounty_id == bounty_id).first()
     if not b:
         raise HTTPException(status_code=404, detail="Bounty not found")
@@ -431,6 +443,9 @@ def dispute_work(
     db: Session = Depends(get_db),
     current_user: str = Depends(get_current_user)
 ):
+    # -- Input validation & sanitization --
+    sanitized_reason = sanitize_string(body.reason, 2000)
+
     b = db.query(Bounty).filter(Bounty.bounty_id == bounty_id).first()
     if not b:
         raise HTTPException(status_code=404, detail="Bounty not found")

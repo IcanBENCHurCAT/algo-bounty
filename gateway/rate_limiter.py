@@ -29,9 +29,12 @@ from starlette.middleware.base import BaseHTTPMiddleware
 # method_filter = "POST" -> POST only, etc.
 
 _RULES = [
-    # Auth endpoints – STRICTEST limits: 5 req/min to prevent brute-force.
-    (r"^/api/v1/auth/request$", 5, 60, None, None),
-    (r"^/api/v1/auth/verify$", 5, 60, None, None),
+    # Auth endpoints – STRICT limits: 10 req/min per IP to prevent brute-force.
+    (r"^/api/v1/auth/request$", 10, 60, None, None),
+    (r"^/api/v1/auth/verify$", 10, 60, None, None),
+
+    # Catch-all for all /auth/* endpoints (ensures no bypass via path variants).
+    (r"^/api/v1/auth.*$", 10, 60, None, None),
 
     # GitHub webhook – generous rate limit (GitHub can burst).
     (r"^/webhooks/github$", 30, 60, "POST", None),

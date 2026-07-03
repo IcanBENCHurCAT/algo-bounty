@@ -23,15 +23,17 @@ _DEFAULT_HEADERS: dict[str, str] = {
     "X-Frame-Options": "DENY",
     "X-XSS-Protection": "1; mode=block",
     "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
     "Content-Security-Policy": (
         "default-src 'self'; "
         "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
         "style-src 'self' 'unsafe-inline'; "
         "img-src 'self' data: https:; "
         "font-src 'self'; "
-        "connect-src 'self' https://mtivcwposaunlsiefwre.supabase.co;"
+        "connect-src 'self' https://mtivcwposaunlsiefwre.supabase.co "
+        "https://aljobounty.com https://www.aljobounty.com; "
+        "frame-ancestors 'none';"
     ),
-    "Referrer-Policy": "strict-origin-when-cross-origin",
     "Cache-Control": "no-store",
 }
 
@@ -70,14 +72,17 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
 
 
 # ── CORS with origin allowlist ───────────────────────────────────
-
-# Default allowed origins – update when deploying to production
+# Default allowed origins - NO wildcard (*) origins allowed
 _DEFAULT_ALLOWED_ORIGINS: list[str] = [
-    "https://algo-bounty-frontend-*.uc.a.run.app",
+    "https://aljobounty.com",
+    "https://www.aljobounty.com",
+    "http://localhost",
     "http://localhost:3000",
     "http://localhost:3001",
+    "http://127.0.0.1",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:3001",
 ]
-
 
 class CORSAllowlistMiddleware(BaseHTTPMiddleware):
     """Enforce an allowlist of allowed CORS origins.

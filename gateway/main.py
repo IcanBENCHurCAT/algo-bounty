@@ -23,13 +23,18 @@ from .routers import (
 # Initialize database
 init_db()
 
-# CORS origins allowlist – matches deployed frontend + local dev + vantage-labs domain
+# CORS origins allowlist – matches deployed frontend + local dev
+# NO wildcard (*) origins allowed — specific domains only
 ALLOWED_ORIGINS: list[str] = [
+    "https://aljobounty.com",
+    "https://www.aljobounty.com",
     "https://algo-bounty-frontend-*.uc.a.run.app",
     "https://vantage-labs.com",
     "https://*.vantage-labs.com",
+    "http://localhost",
     "http://localhost:3000",
     "http://localhost:3001",
+    "http://127.0.0.1",
     "http://127.0.0.1:3000",
     "http://127.0.0.1:3001",
 ]
@@ -69,12 +74,29 @@ print(f"[WEB3] Algorand network: {NODE_ENV} (sandbox={sandbox_active})")
 
 @app.get("/health")
 async def health_check():
-    """Public health check endpoint for load balancers and monitoring."""
+    """Public health check endpoint for load balancers and monitoring.
+
+    Returns service status, database connectivity, and version info.
+    Never crashes even if the database is down — reports status as disconnected.
+    """
+    db_status = "disconnected"
+    try:
+        from ..dependencies import get_db
+        # Quick DB connectivity test
+        from ..database import SessionLocal
+        db = SessionLocal()
+        db.execute("SELECT 1")
+        db.close()
+        db_status = "connected"
+    except Exception:
+        db_status = "disconnected"
+
     return {
-        "status": "healthy",
+        "status": "ok",
+        "db": db_status,
+        "version": app.version,
         "service": "algobounty-gateway",
         "timestamp": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
-        "version": app.version,
         "sandbox_active": sandbox_active,
         "node_env": NODE_ENV,
     }
