@@ -393,6 +393,30 @@ def deploy_escrow_on_testnet():
         return result
 
 
+def send_signed_transaction(signed_txn_b64: str):
+    """
+    Broadcast a base64-encoded signed transaction to the network.
+    Returns txid on success.
+    """
+    import base64
+
+    client = get_algod_client()
+    try:
+        # Decode base64 signed transaction
+        decoded_txn = base64.b64decode(signed_txn_b64)
+
+        # In some cases, the frontend might send a single signed transaction
+        # or a list of them. algosdk.v2client.algod.send_transaction expects a list.
+        # However, if it's already a single signed transaction, we might need to
+        # wrap it in a list or use send_raw_transaction.
+
+        txid = client.send_raw_transaction(decoded_txn)
+        return txid
+    except Exception as e:
+        print(f"[WEB3] Error sending transaction: {e}")
+        raise e
+
+
 # --- ABI type definitions ---
 # Note: These are reference strings for documentation.
 # The actual contract uses Puya external methods -- deployment is handled
