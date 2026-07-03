@@ -43,6 +43,10 @@ class Config:
         return self.get_secret("GITHUB_WEBHOOK_SECRET")
 
     @property
+    def WEBHOOK_API_KEY(self) -> str:
+        return self.get_secret("WEBHOOK_API_KEY")
+
+    @property
     def ALGORAND_NETWORK(self) -> str:
         return self.get_secret("ALGORAND_NETWORK", "testnet")
 
