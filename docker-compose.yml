@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8080"
+    environment:
+      - DATABASE_URL=sqlite:///./algobounty.db
+      - SECRET_KEY=dev_secret_key_change_in_prod_at_least_32_chars
+      - ALGORAND_NETWORK=sandbox
+      - ALGOD_ADDRESS=http://host.docker.internal:4001
+      - INDEXER_ADDRESS=http://host.docker.internal:8980
+    volumes:
+      - sqlite-data:/app
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: always
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["python", "-m", "gateway.worker"]
+    environment:
+      - DATABASE_URL=sqlite:///./algobounty.db
+      - SECRET_KEY=dev_secret_key_change_in_prod_at_least_32_chars
+      - ALGORAND_NETWORK=sandbox
+      - ALGOD_ADDRESS=http://host.docker.internal:4001
+      - INDEXER_ADDRESS=http://host.docker.internal:8980
+    volumes:
+      - sqlite-data:/app
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: always
+
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    ports:
+      - "3000:8080"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_SUPABASE_URL=http://localhost:54321
+      - NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=dummy-anon-key
+    restart: always
+
+volumes:
+  sqlite-data:

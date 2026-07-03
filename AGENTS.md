@@ -57,7 +57,35 @@ AlgoBounty consists of three main layers:
 - Install dependencies: `pip install -r requirements.txt`.
 - Set up `.env` in `gateway/` based on `.env.template`.
 
-### Running the Gateway & Worker
+### Running with Docker Compose (Local Dev & Demo)
+A centralized `docker-compose.yml` is provided at the project root to orchestrate the gateway (FastAPI), worker/indexer, and dashboard (Next.js) seamlessly using a local SQLite database fallback:
+```bash
+# Build and start all services (Gateway at http://localhost:8000, Dashboard at http://localhost:3000)
+docker-compose up --build
+
+# Run in background
+docker-compose up -d
+```
+- **Quirk: Client API Routing**: The frontend (`dashboard`) is built with `NEXT_PUBLIC_API_URL=http://localhost:8000`. Since queries originate from the user's browser, the frontend container must point to the *host's* localhost port `8000` rather than the docker network alias `gateway`.
+- **Quirk: Supabase Mocking**: The Next.js middleware initiates Supabase clients. For local SQLite mode, dummy credentials (`NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`) are passed via environment variables to bypass client initialization checks since the database queries go entirely to the Gateway API.
+
+### Local Algorand Sandbox (LocalNet) Setup
+To test on-chain features locally, run a local Algorand development node (LocalNet) on your host machine.
+
+#### Option A: Using AlgoKit (Recommended)
+The official and modern way to run a local network is using the **AlgoKit CLI**:
+1. Install AlgoKit (requires Python and pipx): `pipx install algokit`
+2. Start LocalNet: `algokit localnet start`
+3. Stop LocalNet: `algokit localnet stop`
+
+#### Option B: Using the Legacy Sandbox
+If you prefer the original sandbox:
+1. Clone the repository: `git clone https://github.com/algorand/sandbox.git`
+2. Start it: `./sandbox up` (runs on default dev private network ports `4001` and `8980`)
+
+The gateway services inside Docker connect to the host's LocalNet/Sandbox via `http://host.docker.internal` automatically.
+
+### Running the Gateway & Worker (Standalone)
 ```bash
 # Run the API server
 export PYTHONPATH=.
