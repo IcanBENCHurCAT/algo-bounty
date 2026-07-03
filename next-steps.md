@@ -12,10 +12,10 @@ The following features and improvements are planned for the next phase of develo
 - [x] **GitHub App Permissions**: Refine the permissions required for the GitHub App to ensure minimal access while still being able to post comments and link PRs.
 - [x] **PR Linking Logic**: Improve the robustness of linking PRs to bounties, handling cases where multiple PRs might refer to the same bounty.
 
-## 3. Frontend Improvements
-- **Real-time Status Updates**: Enhance the dashboard to show real-time on-chain status for bounties using the indexer's sync data.
-- **Wallet Support**: Expand beyond Pera Wallet to support other Algorand wallets like Defly and Edge.
-- **Bounty Creation UX**: Improve the UI for creating bounties, including better validation and feedback for on-chain deployment.
+## 3. Frontend Improvements [COMPLETED]
+- **Real-time Status Updates**: Implemented via `useEvents` hook subscribing to `/api/v1/events` SSE. Dashboard now refreshes automatically on bounty events.
+- **Wallet Support**: Expanded `useWallet` to support Defly and Edge wallets. Added a wallet selection menu to `WalletConnect`.
+- **Bounty Creation UX**: Created a dedicated multi-step bounty creation page (`/create`) with validation and deployment status feedback.
 
 ## 4. Indexer & Backend Robustness [COMPLETED]
 - [x] **Indexer Polling Refinement**: Moved to standalone worker `gateway/worker.py`.

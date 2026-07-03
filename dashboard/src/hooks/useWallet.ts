@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   getStoredToken,
   storeToken,
@@ -10,9 +10,12 @@ import {
   type AgentProfile,
 } from '@/lib/api';
 
+export type WalletType = 'pera' | 'defly' | 'edge';
+
 export interface WalletState {
   address: string | null;
   connected: boolean;
+  walletType: WalletType | null;
   jwt: string | null;
   karma: number;
   profile: AgentProfile | null;
@@ -24,7 +27,9 @@ interface WalletWindow extends Window {
   algoransdk?: {
     signTxn: (txn: string, sk: string) => Promise<string>;
   };
-  PeraWalletConnect?: any;
+  PeraWalletConnect?: new () => { connect: () => Promise<void>; account: string | null; signMessage: (data: { message: string }) => Promise<Uint8Array | Uint8Array[]>; disconnect?: () => void };
+  DeflyWalletConnect?: new () => { connect: () => Promise<void>; account: string | null; signMessage: (data: { message: string }) => Promise<Uint8Array | Uint8Array[]>; disconnect?: () => void };
+  EdgeWalletConnect?: new () => { connect: () => Promise<void>; account: string | null; signMessage: (data: { message: string }) => Promise<Uint8Array | Uint8Array[]>; disconnect?: () => void };
 }
 
 declare const window: WalletWindow;
@@ -35,6 +40,7 @@ export function useWallet() {
   const [state, setState] = useState<WalletState>({
     address: null,
     connected: false,
+    walletType: null,
     jwt: null,
     karma: 0,
     profile: null,
@@ -51,53 +57,62 @@ export function useWallet() {
     }
   }, []);
 
-  const connect = useCallback(async () => {
+  const connect = useCallback(async (type: WalletType = 'pera') => {
     setState((prev) => ({ ...prev, loading: true, error: null }));
 
     try {
-      // Detect Pera Wallet
-      const Pera = window.PeraWalletConnect;
-      if (!Pera) {
-        setState((prev) => ({
-          ...prev,
-          loading: false,
-          error:
-            'Pera Wallet is not installed. Please install Pera Wallet to connect.',
-        }));
-        return;
+      let wallet: { connect: () => Promise<void>; account: string | null; signMessage: (data: { message: string }) => Promise<Uint8Array | Uint8Array[]> };
+      let address: string | null = null;
+
+      if (type === 'pera') {
+        const Pera = window.PeraWalletConnect;
+        if (!Pera) throw new Error('Pera Wallet is not installed');
+        wallet = new Pera();
+        await wallet.connect();
+        address = wallet.account;
+      } else if (type === 'defly') {
+        const Defly = window.DeflyWalletConnect;
+        if (!Defly) throw new Error('Defly Wallet is not installed');
+        wallet = new Defly();
+        await wallet.connect();
+        address = wallet.account;
+      } else {
+        const Edge = window.EdgeWalletConnect;
+        if (!Edge) throw new Error('Edge Wallet is not installed');
+        wallet = new Edge();
+        await wallet.connect();
+        address = wallet.account;
       }
 
-      const pera = new Pera();
-
-      // Request connection
-      await pera.connect();
-      const address = pera.account;
-      if (!address) throw new Error('No account returned from Pera');
+      if (!address) throw new Error(`No account returned from ${type} wallet`);
 
       // Get challenge
       const challengeData: AuthChallenge = await requestChallenge();
       const challenge = challengeData.challenge;
       localStorage.setItem(CHALLENGE_KEY, challenge);
 
-      // Sign challenge with Pera
+      // Sign challenge
       let signature: string;
       try {
-        const signed = await pera.signMessage({ message: challenge });
+        const signed = await wallet.signMessage({ message: challenge });
         signature = Array.isArray(signed)
           ? Buffer.from(signed[0]).toString('base64')
           : Buffer.from(signed as Uint8Array).toString('base64');
       } catch (signErr) {
-        console.error('Pera sign error:', signErr);
-        throw new Error('Failed to sign challenge with Pera Wallet');
+        console.error(`${type} sign error:`, signErr);
+        throw new Error(`Failed to sign challenge with ${type} Wallet`);
       }
 
       // Verify with backend
       const response = await verifyAuth(address, signature, challenge);
 
       storeToken(response.jwt);
+      localStorage.setItem('algobounty_wallet_type', type);
+
       setState({
         address,
         connected: true,
+        walletType: type,
         jwt: response.jwt,
         karma: response.karma,
         profile: null,
@@ -120,10 +135,16 @@ export function useWallet() {
 
   const disconnect = useCallback(() => {
     clearToken();
+    const type = localStorage.getItem('algobounty_wallet_type');
+    localStorage.removeItem('algobounty_wallet_type');
+
     try {
-      if (window.PeraWalletConnect) {
-        const pera = new (window.PeraWalletConnect as any)();
-        pera.disconnect?.();
+      if (type === 'pera' && window.PeraWalletConnect) {
+        new window.PeraWalletConnect().disconnect?.();
+      } else if (type === 'defly' && window.DeflyWalletConnect) {
+        new window.DeflyWalletConnect().disconnect?.();
+      } else if (type === 'edge' && window.EdgeWalletConnect) {
+        new window.EdgeWalletConnect().disconnect?.();
       }
     } catch {
       // Ignore disconnect errors
@@ -131,6 +152,7 @@ export function useWallet() {
     setState({
       address: null,
       connected: false,
+      walletType: null,
       jwt: null,
       karma: 0,
       profile: null,
@@ -142,6 +164,8 @@ export function useWallet() {
   // Hydrate from localStorage on mount
   useEffect(() => {
     const jwt = getStoredToken();
+    const type = localStorage.getItem('algobounty_wallet_type') as WalletType | null;
+
     if (jwt) {
       // Validate by fetching profile
       (async () => {
@@ -151,6 +175,7 @@ export function useWallet() {
           setState({
             address: profile.address,
             connected: true,
+            walletType: type,
             jwt,
             karma: profile.karma,
             profile,
@@ -159,7 +184,8 @@ export function useWallet() {
           });
         } catch {
           clearToken();
-          setState((prev) => ({ ...prev, jwt: null, connected: false, loading: false }));
+          localStorage.removeItem('algobounty_wallet_type');
+          setState((prev) => ({ ...prev, jwt: null, walletType: null, connected: false, loading: false }));
         }
       })();
     }
