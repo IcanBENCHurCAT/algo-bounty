@@ -85,6 +85,9 @@ _K_CLAIM_TIMESTAMP = Bytes("claim_timestamp")       # uint64 - when claim was se
 _K_GITHUB_STATUS = Bytes("github_status")           # "pending", "pass", "fail"
 _K_DISPUTE_TIMESTAMP = Bytes("dispute_timestamp")   # uint64 - when dispute was filed
 _K_REVIEW_DAYS = Bytes("review_days")               # uint64 - review window in days
+_K_STATE = Bytes("state")                           # uint64 - global bounty state
+_K_MEDIATOR_ADDRESS = Bytes("mediator_address")     # 32-byte address for dispute resolution
+_K_INITIALIZED = Bytes("initialized")               # uint64 - protection against re-init
 
 
 # ============================================================================
@@ -131,11 +134,11 @@ def _is_agent() -> bool:
 
 
 def _state() -> UInt64:
-    return ptx.AppLocal.get(Int("state"))
+    return _box_get_uint64(_K_STATE)
 
 
 def _set_state(val: UInt64) -> None:
-    ptx.AppLocal.set(Int("state"), val)
+    _box_put_uint64(_K_STATE, val)
 
 
 def _require_rekey_not_modified() -> None:
@@ -154,11 +157,15 @@ def _verify_escrow_funding(escrow_amount: UInt64, asset_id: UInt64) -> None:
         escrow_amount: Expected amount (microALGO or ASA units)
         asset_id: 0 for ALGO native, ASA ID for token bounties
     """
+    # Must have exactly two transactions in the group: [Payment/Transfer, AppCall]
+    # This prevents malicious transaction grouping.
+    ptx.require(Global.group_size() == Int(2), "Group size must be 2")
+
     # Must have a previous transaction in the group (the payment)
-    ptx.require(Txn.group_index() > Int(1))
+    ptx.require(Txn.group_index() == Int(1), "App call must be second in group")
 
     # Get the previous transaction in the group
-    prev_tx = ptx.Gtxn[Txn.group_index() - Int(1)]
+    prev_tx = ptx.Gtxn[Int(0)]
 
     if asset_id > Int(0):
         # ASA bounty: verify asset transfer of exact amount to this app
@@ -173,6 +180,11 @@ def _verify_escrow_funding(escrow_amount: UInt64, asset_id: UInt64) -> None:
         ptx.require(
             prev_tx.asset_amount() == escrow_amount,
             "Asset amount mismatch"
+        )
+        # SECURITY FIX: Verify the contract is the receiver of the ASA
+        ptx.require(
+            prev_tx.asset_receiver() == Global.current_application_address(),
+            "Asset transfer must be to this app address"
         )
     else:
         # ALGO native bounty: verify payment of exact amount to this app
@@ -213,6 +225,25 @@ def _verify_escrow_balance(asset_id: UInt64, escrow_amount: UInt64) -> None:
         )
 
 
+def _send_payout(receiver: Account, amount: UInt64, asset_id: UInt64) -> None:
+    """Execute an on-chain payout via Inner Transaction."""
+    if asset_id == Int(0):
+        # microALGO payment
+        ptx.itxn.Payment(
+            receiver=receiver,
+            amount=amount,
+            fee=Int(0),  # Covered by caller (standard practice for app itxn)
+        ).submit()
+    else:
+        # ASA transfer
+        ptx.itxn.AssetTransfer(
+            xfer_asset=asset_id,
+            asset_receiver=receiver,
+            asset_amount=amount,
+            fee=Int(0),
+        ).submit()
+
+
 # ============================================================================
 # MAIN CONTRACT
 # ============================================================================
@@ -239,6 +270,7 @@ class EscrowContract(SmartContract):
         is_hitm: UInt64,
         asset_id: UInt64,
         review_days: UInt64,
+        mediator: Account,
     ) -> None:
         """
         Create a new bounty escrow.
@@ -258,6 +290,15 @@ class EscrowContract(SmartContract):
         ptx.require(Txn.on_completion() == op.OnCompletion.NoOp)
         _require_rekey_not_modified()
 
+        # SECURITY FIX: Prevent re-initialization
+        # We use a box to track if the bounty has already been initialized.
+        # This prevents an attacker from hijacking an existing app instance.
+        ptx.require(
+            ptx.Box.global_get_external(_K_INITIALIZED).status == Int(0),
+            "Bounty already initialized"
+        )
+        _box_put_uint64(_K_INITIALIZED, Int(1))
+
         # Validate inputs
         ptx.require(bounty_id.length() <= Int(64))
         ptx.require(escrow_amount > Int(0))
@@ -272,6 +313,7 @@ class EscrowContract(SmartContract):
 
         # Initialize state
         _set_state(OPEN)
+        _box_put_address(_K_MEDIATOR_ADDRESS, mediator)
         _box_put_uint64(_K_ESCROW_AMOUNT, escrow_amount)
         _box_put_uint64(_K_IS_HITM, is_hitm)
         _box_put_uint64(_K_ASSET_ID, asset_id)
@@ -415,10 +457,10 @@ class EscrowContract(SmartContract):
         _box_put_bytes(_K_PAYOUT_TYPE, PAYOUT)
         _set_state(CLOSED)
 
+        # Actual on-chain release of funds
+        _send_payout(_box_get_address(_K_AGENT_ADDRESS), escrow_amount, asset_id)
+
         Log(Bytes("work_approved"))
-        Log(Bytes("payout_pending"))
-        Log(_box_get_address(_K_AGENT_ADDRESS).address)
-        Log(escrow_amount.bytes)
 
     @Methods.external()
     def reject_work(self, reason: Bytes) -> None:
@@ -495,6 +537,16 @@ class EscrowContract(SmartContract):
         )
         ptx.require(mediator_signature.length() > Int(0))
 
+        # SECURITY FIX: Cryptographically verify mediator signature
+        # We verify that 'resolution' + app_id was signed by the mediator.
+        # This prevents signature replay attacks across different bounties.
+        mediator_addr = _box_get_address(_K_MEDIATOR_ADDRESS)
+        message = Global.current_application_id().to_bytes() + resolution
+        ptx.require(
+            op.ed25519verify(message, mediator_signature, mediator_addr.address),
+            "Invalid mediator signature"
+        )
+
         # SECURITY FIX: Verify escrow balance before payout
         escrow_amount = _box_get_uint64(_K_ESCROW_AMOUNT)
         asset_id = _box_get_uint64(_K_ASSET_ID)
@@ -503,15 +555,13 @@ class EscrowContract(SmartContract):
         if resolution == Bytes("agent_win"):
             _box_put_bytes(_K_PAYOUT_TYPE, PAYOUT)
             _set_state(CLOSED)
+            _send_payout(_box_get_address(_K_AGENT_ADDRESS), escrow_amount, asset_id)
             Log(Bytes("dispute_resolved_agent_win"))
         else:
             _box_put_bytes(_K_PAYOUT_TYPE, REFUND)
             _set_state(CLOSED)
+            _send_payout(_box_get_address(_K_CREATOR_ADDRESS), escrow_amount, asset_id)
             Log(Bytes("dispute_resolved_creator_win"))
-
-        Log(Bytes("payout_pending"))
-        Log(resolution)
-        Log(escrow_amount.bytes)
 
     @Methods.external()
     def auto_resolve_creator_win(self) -> None:
@@ -531,11 +581,13 @@ class EscrowContract(SmartContract):
 
         _box_put_bytes(_K_PAYOUT_TYPE, REFUND)
         _set_state(CLOSED)
-        Log(Bytes("dispute_auto_resolved_creator_win"))
 
-        Log(Bytes("payout_pending"))
-        Log(Bytes("payout_type"))
-        Log(Bytes("REFUND"))
+        # Actual on-chain refund
+        escrow_amount = _box_get_uint64(_K_ESCROW_AMOUNT)
+        asset_id = _box_get_uint64(_K_ASSET_ID)
+        _send_payout(_box_get_address(_K_CREATOR_ADDRESS), escrow_amount, asset_id)
+
+        Log(Bytes("dispute_auto_resolved_creator_win"))
 
     @Methods.external()
     def timeout_dispute(self) -> None:
@@ -576,12 +628,11 @@ class EscrowContract(SmartContract):
         _box_put_bytes(_K_PAYOUT_TYPE, SPLIT)
         _set_state(CLOSED)
 
+        # Split payout: half to creator, half to agent
+        _send_payout(_box_get_address(_K_CREATOR_ADDRESS), half_amount, asset_id)
+        _send_payout(_box_get_address(_K_AGENT_ADDRESS), half_amount, asset_id)
+
         Log(Bytes("dispute_timeout_split"))
-        Log(Bytes("payout_pending"))
-        Log(_box_get_address(_K_CREATOR_ADDRESS).address)
-        Log(half_amount.bytes)
-        Log(_box_get_address(_K_AGENT_ADDRESS).address)
-        Log(half_amount.bytes)
 
     @Methods.external()
     def auto_release(self) -> None:
@@ -609,10 +660,10 @@ class EscrowContract(SmartContract):
         _box_put_bytes(_K_PAYOUT_TYPE, PAYOUT)
         _set_state(CLOSED)
 
+        # Auto-release to agent
+        _send_payout(_box_get_address(_K_AGENT_ADDRESS), escrow_amount, asset_id)
+
         Log(Bytes("auto_released_hitm"))
-        Log(Bytes("payout_pending"))
-        Log(_box_get_address(_K_AGENT_ADDRESS).address)
-        Log(escrow_amount.bytes)
 
     @Methods.external()
     def claim_abandoned(self) -> None:
@@ -640,10 +691,10 @@ class EscrowContract(SmartContract):
         _box_put_bytes(_K_PAYOUT_TYPE, REFUND)
         _set_state(CLOSED)
 
+        # Refund to creator
+        _send_payout(_box_get_address(_K_CREATOR_ADDRESS), escrow_amount, asset_id)
+
         Log(Bytes("abandoned_refunded_creator"))
-        Log(Bytes("payout_pending"))
-        Log(_box_get_address(_K_CREATOR_ADDRESS).address)
-        Log(escrow_amount.bytes)
 
     @Methods.external()
     def expire_claim(self) -> None:

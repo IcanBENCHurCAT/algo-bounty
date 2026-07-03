@@ -129,18 +129,21 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
                 is_hitm = 1 if body.hitm else 0
                 review_days = int(body.hitm_review_days)
 
-                app_args = ABIType.from_string(
-                    "(bytes,uint64,uint64,uint64,uint64)"
-                ).encode(
-                    bounty_id_bytes, escrow_amount, is_hitm, asset_id, review_days
-                )
-
                 platform_account = get_default_account()
                 if platform_account is None:
                     raise HTTPException(
                         status_code=500,
                         detail="PLATFORM_PRIVATE_KEY not configured"
                     )
+
+                # Mediator is the platform account (default)
+                mediator_address = platform_account.address
+
+                app_args = ABIType.from_string(
+                    "(bytes,uint64,uint64,uint64,uint64,address)"
+                ).encode(
+                    bounty_id_bytes, escrow_amount, is_hitm, asset_id, review_days, mediator_address
+                )
 
                 from algosdk.transaction import ApplicationCreateTxn, OnComplete
                 create_txn = ApplicationCreateTxn(
