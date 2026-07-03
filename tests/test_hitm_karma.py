@@ -51,7 +51,8 @@ def test_karma_on_approve(db):
         creator="creator_addr",
         worker="worker_addr",
         amount=10,
-        is_hitm=True
+        is_hitm=True,
+        repo_url="https://github.com/test/repo"
     )
     db.add(bounty)
     db.commit()
@@ -73,7 +74,8 @@ def test_karma_on_progressive_reject(db):
         creator="creator_addr",
         worker="worker_addr",
         amount=10,
-        rejection_count=0
+        rejection_count=0,
+        repo_url="https://github.com/test/repo"
     )
     db.add(bounty)
     db.commit()
@@ -98,7 +100,7 @@ def test_karma_on_progressive_reject(db):
         assert worker.karma == 92  # 97 - 5 = 92
 
 def test_indexer_auto_release(db):
-    from gateway.main import indexer_polling_task
+    from gateway.worker import indexer_worker
 
     bounty = Bounty(
         bounty_id="b_hitm",
@@ -107,7 +109,8 @@ def test_indexer_auto_release(db):
         creator="creator_addr",
         worker="worker_addr",
         amount=10,
-        is_hitm=True
+        is_hitm=True,
+        repo_url="https://github.com/test/repo"
     )
     db.add(bounty)
     db.commit()
@@ -118,17 +121,15 @@ def test_indexer_auto_release(db):
         "logs": [base64.b64encode(b"auto_released_hitm").decode()]
     }]
 
-    # We need to ensure indexer_polling_task uses our session
-    with patch("gateway.indexer.fetch_app_logs", return_value=mock_logs), \
-         patch("gateway.database.SessionLocal", return_value=db), \
-         patch("asyncio.sleep", side_effect=[None, asyncio.CancelledError]):
+    with patch("gateway.worker.fetch_app_logs", return_value=mock_logs), \
+         patch("gateway.worker.poll_bounty_events", return_value=[]), \
+         patch("gateway.worker.SessionLocal", return_value=db), \
+         patch("asyncio.wait_for", side_effect=asyncio.CancelledError):
         try:
-            asyncio.run(indexer_polling_task())
+            asyncio.run(indexer_worker())
         except asyncio.CancelledError:
             pass
 
-    # Re-query instead of refresh because the task used its own session (mocked to our 'db')
-    # and might have closed it or committed.
     b = db.query(Bounty).filter(Bounty.bounty_id == "b_hitm").first()
     assert b.status == "closed"
     assert b.payout_type == "PAYOUT"
@@ -139,7 +140,7 @@ def test_indexer_auto_release(db):
     assert creator.karma == 102  # +2
 
 def test_indexer_dispute_timeout(db):
-    from gateway.main import indexer_polling_task
+    from gateway.worker import indexer_worker
 
     bounty = Bounty(
         bounty_id="b_dispute",
@@ -147,7 +148,8 @@ def test_indexer_dispute_timeout(db):
         status="disputed",
         creator="creator_addr",
         worker="worker_addr",
-        amount=10
+        amount=10,
+        repo_url="https://github.com/test/repo"
     )
     db.add(bounty)
     db.commit()
@@ -158,11 +160,12 @@ def test_indexer_dispute_timeout(db):
         "logs": [base64.b64encode(b"dispute_timeout_split").decode()]
     }]
 
-    with patch("gateway.indexer.fetch_app_logs", return_value=mock_logs), \
-         patch("gateway.database.SessionLocal", return_value=db), \
-         patch("asyncio.sleep", side_effect=[None, asyncio.CancelledError]):
+    with patch("gateway.worker.fetch_app_logs", return_value=mock_logs), \
+         patch("gateway.worker.poll_bounty_events", return_value=[]), \
+         patch("gateway.worker.SessionLocal", return_value=db), \
+         patch("asyncio.wait_for", side_effect=asyncio.CancelledError):
         try:
-            asyncio.run(indexer_polling_task())
+            asyncio.run(indexer_worker())
         except asyncio.CancelledError:
             pass
 
@@ -176,7 +179,7 @@ def test_indexer_dispute_timeout(db):
     assert creator.karma == 99  # -1
 
 def test_indexer_claim_expired(db):
-    from gateway.main import indexer_polling_task
+    from gateway.worker import indexer_worker
 
     bounty = Bounty(
         bounty_id="b_expired",
@@ -184,7 +187,8 @@ def test_indexer_claim_expired(db):
         status="claimed",
         creator="creator_addr",
         worker="worker_addr",
-        amount=10
+        amount=10,
+        repo_url="https://github.com/test/repo"
     )
     db.add(bounty)
     db.commit()
@@ -195,11 +199,12 @@ def test_indexer_claim_expired(db):
         "logs": [base64.b64encode(b"claim_expired").decode()]
     }]
 
-    with patch("gateway.indexer.fetch_app_logs", return_value=mock_logs), \
-         patch("gateway.database.SessionLocal", return_value=db), \
-         patch("asyncio.sleep", side_effect=[None, asyncio.CancelledError]):
+    with patch("gateway.worker.fetch_app_logs", return_value=mock_logs), \
+         patch("gateway.worker.poll_bounty_events", return_value=[]), \
+         patch("gateway.worker.SessionLocal", return_value=db), \
+         patch("asyncio.wait_for", side_effect=asyncio.CancelledError):
         try:
-            asyncio.run(indexer_polling_task())
+            asyncio.run(indexer_worker())
         except asyncio.CancelledError:
             pass
 

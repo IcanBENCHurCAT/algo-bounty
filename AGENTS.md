@@ -56,10 +56,15 @@ AlgoBounty consists of three main layers:
 - Install dependencies: `pip install -r requirements.txt`.
 - Set up `.env` in `gateway/` based on `.env.template`.
 
-### Running the Gateway
+### Running the Gateway & Worker
 ```bash
+# Run the API server
 export PYTHONPATH=.
 python gateway/main.py
+
+# Run the background indexer worker
+export PYTHONPATH=.
+python gateway/worker.py
 ```
 
 ### Running Tests
@@ -70,8 +75,13 @@ PYTHONPATH=. python -m pytest tests/
 
 ### Working with the Database
 - The primary DB is Supabase. If `SUPABASE_URL` is missing, it falls back to `algobounty.db` (SQLite).
-- Check `gateway/supabase_migration.py` for the canonical DDL and models.
+- Use Alembic for migrations: `alembic -c gateway/alembic.ini upgrade head`.
+- Check `gateway/supabase_migration.py` for the canonical SQLAlchemy models.
 - RLS policies are located in `supabase/rls_policies.sql`.
+
+### Configuration & Secrets
+- All secrets and configuration are centralized in `gateway/config.py`.
+- In production, ensure `SECRET_KEY`, `PLATFORM_PRIVATE_KEY`, and `GITHUB_TOKEN` are provided via environment variables or a configured secret manager.
 
 ### Smart Contract Integration
 - The contract is in `escrow.algo`.
@@ -101,6 +111,31 @@ Before implementing features, consult the corresponding design document:
 - **Python**: Follow PEP 8. Use type hints. Use `ruff` for linting.
 - **Frontend**: Use functional components and hooks. Follow the Next.js App Router conventions.
 - **Security**: Never hardcode secrets. Use environment variables. Verify all blockchain interactions.
+
+---
+
+## 7. GitHub App Setup
+
+For enhanced integration, it is recommended to use a GitHub App instead of a personal `GITHUB_TOKEN`.
+
+### Required Permissions
+- **Repository Permissions**:
+  - **Issues**: Read & write (to post comments and manage labels)
+  - **Pull requests**: Read & write (to link PRs and post status updates)
+  - **Metadata**: Read-only (required by default)
+- **Organization Permissions**: (Optional, if using organization-level features)
+- **Events**:
+  - **Issues**
+  - **Issue comment**
+  - **Pull request**
+  - **Pull request review**
+
+### Configuration
+Set the following environment variables in your `.env` file:
+- `GITHUB_APP_ID`: Your GitHub App ID.
+- `GITHUB_PRIVATE_KEY`: Your App's private key (content or path to `.pem` file).
+- `GITHUB_INSTALLATION_ID`: The installation ID for the repository.
+- `GITHUB_WEBHOOK_SECRET`: The secret used to sign webhook payloads.
 
 ---
 
