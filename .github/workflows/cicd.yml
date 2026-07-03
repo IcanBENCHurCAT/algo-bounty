@@ -6,6 +6,14 @@ on:
   pull_request:
     branches: [ main ]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
 env:
   PROJECT_ID: soul-seeker-500816
   REGION: us-central1
@@ -24,22 +32,36 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: '3.12'
+        cache: 'pip'
 
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pytest fastapi uvicorn PyJWT cryptography sqlalchemy httpx py-algorand-sdk
+        pip install pytest pytest-cov pytest-asyncio fastapi uvicorn PyJWT cryptography sqlalchemy httpx py-algorand-sdk
 
     - name: Run Test Suite
       env:
         PYTHONPATH: .
       run: |
-        pytest tests/ -v
+        pytest tests/ -v --cov=gateway --cov-report=term-missing --cov-report=xml
+
+    - name: Upload Coverage Report
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-report
+        path: coverage.xml
+
+    - name: Comment on PR with Coverage
+      if: github.event_name == 'pull_request'
+      uses: MishaKav/pytest-coverage-comment@v1.1.53
+      with:
+        pytest-xml-coverage-path: ./coverage.xml
+        github-token: ${{ secrets.GITHUB_TOKEN }}
 
   deploy-gateway:
     needs: test
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
+    environment: deployment # Routes this job through codeowner gate
     outputs:
       gateway-url: ${{ steps.deploy.outputs.gateway-url }}
 
@@ -96,8 +118,8 @@ jobs:
 
   deploy-frontend:
     needs: deploy-gateway
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
+    environment: deployment # Routes this job through codeowner gate
 
     steps:
     - name: Checkout Repository

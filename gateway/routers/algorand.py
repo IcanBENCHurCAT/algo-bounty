@@ -1,0 +1,36 @@
+from fastapi import APIRouter, HTTPException
+from ..algod_client import (
+    get_account_balance, get_asset_holders,
+    health_check as algo_health_check,
+)
+
+router = APIRouter(prefix="/api/v1/algorand", tags=["algorand"])
+
+@router.get("/health")
+def algorand_health():
+    """Health check for Algorand network."""
+    try:
+        status = algo_health_check()
+        if status.get("algod") and status.get("indexer"):
+            return {"status": "healthy", "network": status["network"], "algod": True, "indexer": True}
+        return {"status": "degraded", "network": status["network"], "algod": status.get("algod"), "indexer": status.get("indexer"), "error": status.get("error")}
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.get("/balance/{address}")
+def algorand_balance(address: str):
+    """Return ALGO balance for any address."""
+    try:
+        return get_account_balance(address)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/asset/{asset_id}/holders")
+def algorand_asset_holders(asset_id: int):
+    """Get asset holders for an ASA."""
+    try:
+        return get_asset_holders(asset_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

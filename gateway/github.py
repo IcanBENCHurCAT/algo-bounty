@@ -3,9 +3,10 @@ import hashlib
 import logging
 import re
 import json
-from datetime import datetime
+from datetime import datetime, UTC
 from sqlalchemy.orm import Session
 from .database import Bounty, GitHubPR, Notification, Agent
+from .algod_client import NODE_ENV
 
 logger = logging.getLogger(__name__)
 
@@ -45,10 +46,11 @@ def verify_webhook_signature(payload_bytes: bytes, signature: str, secret: str) 
         return False
 
     # Extract hex digest after "sha256="
-    expected = "sha256="
-    if not signature.startswith(expected):
+    prefix = "sha256="
+    if not signature.startswith(prefix):
         return False
-    expected_hex = signature[len(expected):]
+
+    expected_hex = signature.removeprefix(prefix)
 
     # Compute HMAC-SHA256
     computed = hmac.new(
@@ -74,11 +76,18 @@ def validate_webhook(event_type: str, secret: str, signature: str,
     # 1. Check if secret is configured
     secret_configured = bool(secret)
     if not secret_configured:
-        logger.warning(
-            "GitHub webhook signature verification SKIPPED: "
-            "GITHUB_WEBHOOK_SECRET is not set (dev mode)."
-        )
-        return True, delivery_id
+        if NODE_ENV == "sandbox":
+            logger.warning(
+                "GitHub webhook signature verification SKIPPED: "
+                "GITHUB_WEBHOOK_SECRET is not set (dev mode)."
+            )
+            return True, delivery_id
+        else:
+            logger.error(
+                f"GitHub webhook REJECTED: GITHUB_WEBHOOK_SECRET is not set in {NODE_ENV} mode "
+                f"(delivery={delivery_id}, ip={client_ip})"
+            )
+            return False, "GITHUB_WEBHOOK_SECRET not configured"
 
     # 2. Validate event type
     if not event_type:
@@ -115,7 +124,7 @@ def log_bot_comment(repo_url: str, issue_or_pr_number: int, comment_text: str):
     Writes bot comments to a log file and prints to stdout for local inspection.
     """
     log_file = "github_bot_comments.log"
-    timestamp = datetime.utcnow().isoformat()
+    timestamp = datetime.now(UTC).isoformat().replace("+00:00", "Z")
     log_entry = {
         "timestamp": timestamp,
         "repo_url": repo_url,
