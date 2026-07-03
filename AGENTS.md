@@ -102,4 +102,29 @@ Before implementing features, consult the corresponding design document:
 
 ---
 
+## 7. GitHub App Setup
+
+For enhanced integration, it is recommended to use a GitHub App instead of a personal `GITHUB_TOKEN`.
+
+### Required Permissions
+- **Repository Permissions**:
+  - **Issues**: Read & write (to post comments and manage labels)
+  - **Pull requests**: Read & write (to link PRs and post status updates)
+  - **Metadata**: Read-only (required by default)
+- **Organization Permissions**: (Optional, if using organization-level features)
+- **Events**:
+  - **Issues**
+  - **Issue comment**
+  - **Pull request**
+  - **Pull request review**
+
+### Configuration
+Set the following environment variables in your `.env` file:
+- `GITHUB_APP_ID`: Your GitHub App ID.
+- `GITHUB_PRIVATE_KEY`: Your App's private key (content or path to `.pem` file).
+- `GITHUB_INSTALLATION_ID`: The installation ID for the repository.
+- `GITHUB_WEBHOOK_SECRET`: The secret used to sign webhook payloads.
+
+---
+
 *Keep this document updated as the project evolves.*
