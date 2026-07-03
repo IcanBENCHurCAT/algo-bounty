@@ -98,7 +98,6 @@ jobs:
           --project="${PROJECT_ID}" \
           --region="${REGION}" \
           --image="${IMAGE_TAG}" \
-          --platform=managed \
           --allow-unauthenticated \
           --port=8080 \
           --memory=512Mi \
@@ -106,7 +105,7 @@ jobs:
           --concurrency=250 \
           --max-instances=10 \
           --timeout=300 \
-          --automatic-scaling-min-instances=0 \
+          --min-scale=0 \
           --set-env-vars="ALGORAND_NETWORK=testnet" \
           --set-env-vars="SUPABASE_URL=${SUPABASE_URL}" \
           --set-secrets="SECRET_KEY=projects/${PROJECT_ID}/secrets/algobounty_secret_key:latest" \
