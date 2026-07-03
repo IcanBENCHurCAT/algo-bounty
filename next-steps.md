@@ -18,7 +18,7 @@ The following features and improvements are planned for the next phase of develo
 - **Bounty Creation UX**: Improve the UI for creating bounties, including better validation and feedback for on-chain deployment.
 
 ## 4. Indexer & Backend Robustness
-- **Indexer Polling Refinement**: Optimize the background polling task to handle larger numbers of bounties and apps efficiently.
+- **Indexer Polling Refinement**: Move the background polling task to a dedicated asynchronous service (e.g., using Celery or a standalone worker process) to improve scalability and isolation from the main API.
 - **Database Migrations**: Continue using Alembic for all schema changes.
 - **Secret Management**: Move sensitive environment variables (e.g., `GITHUB_TOKEN`, `PLATFORM_PRIVATE_KEY`) to a secure secret manager in production.
 
