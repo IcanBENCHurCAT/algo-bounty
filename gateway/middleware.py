@@ -30,8 +30,7 @@ _DEFAULT_HEADERS: dict[str, str] = {
         "style-src 'self' 'unsafe-inline'; "
         "img-src 'self' data: https:; "
         "font-src 'self'; "
-        "connect-src 'self' https://mtivcwposaunlsiefwre.supabase.co "
-        "https://aljobounty.com https://www.aljobounty.com; "
+        "connect-src 'self' https://mtivcwposaunlsiefwre.supabase.co; "
         "frame-ancestors 'none';"
     ),
     "Cache-Control": "no-store",
@@ -72,14 +71,12 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
 
 
 # ── CORS with origin allowlist ───────────────────────────────────
+# TODO: make this configurable via env var (CORS_ALLOW_ORIGINS) so we can
+# add production domains without code changes once we have DNS set up.
 # Default allowed origins - NO wildcard (*) origins allowed
 _DEFAULT_ALLOWED_ORIGINS: list[str] = [
-    "https://aljobounty.com",
-    "https://www.aljobounty.com",
-    "http://localhost",
     "http://localhost:3000",
     "http://localhost:3001",
-    "http://127.0.0.1",
     "http://127.0.0.1:3000",
     "http://127.0.0.1:3001",
 ]

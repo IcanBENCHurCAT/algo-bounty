@@ -56,6 +56,7 @@ PLATFORM_PRIVATE_KEY=***    # Required — can't create escrow without it
 GITHUB_WEBHOOK_SECRET=***   # Required — webhooks rejected otherwise
 WEBHOOK_API_KEY=***         # Required — new middleware gate
 GITHUB_TOKEN=***            # Optional but recommended — PAT fallback works
+CORS_ALLOW_ORIGINS=***      # TODO: env var for CORS domains (not yet implemented)
 ALGORAND_NETWORK=testnet    # Required — which chain to use
 SUPABASE_URL=***            # Required — DB connection
 SUPABASE_SERVICE_ROLE_KEY=*** # Required — DB access

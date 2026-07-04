@@ -24,17 +24,15 @@ from .routers import (
 init_db()
 
 # CORS origins allowlist – matches deployed frontend + local dev
+# TODO: make this configurable via env var (CORS_ALLOW_ORIGINS) so we can
+# add production domains without code changes once we have DNS set up.
 # NO wildcard (*) origins allowed — specific domains only
 ALLOWED_ORIGINS: list[str] = [
-    "https://aljobounty.com",
-    "https://www.aljobounty.com",
     "https://algo-bounty-frontend-*.uc.a.run.app",
     "https://vantage-labs.com",
     "https://*.vantage-labs.com",
-    "http://localhost",
     "http://localhost:3000",
     "http://localhost:3001",
-    "http://127.0.0.1",
     "http://127.0.0.1:3000",
     "http://127.0.0.1:3001",
 ]
