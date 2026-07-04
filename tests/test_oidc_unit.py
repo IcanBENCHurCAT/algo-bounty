@@ -53,3 +53,25 @@ async def test_verify_github_oidc_token_mismatch():
 
         with pytest.raises(jwt.InvalidTokenError, match="Repository mismatch"):
             await verify_github_oidc_token(token, expected_repo="owner/repo")
+
+@pytest.mark.asyncio
+async def test_verify_github_oidc_token_key_not_found():
+    mock_jwks = {"keys": [{"kid": "kid_different"}]}
+    token = "header.payload.sig"
+    with patch("gateway.oidc.get_github_jwks", new_callable=AsyncMock) as mock_get_jwks, \
+         patch("jwt.get_unverified_header", return_value={"kid": "kid1"}):
+        mock_get_jwks.return_value = mock_jwks
+        with pytest.raises(jwt.InvalidTokenError, match="Public key with kid kid1 not found"):
+            await verify_github_oidc_token(token)
+
+@pytest.mark.asyncio
+async def test_verify_github_oidc_token_workflow_mismatch():
+    mock_jwks = {"keys": [{"kid": "kid1"}]}
+    token = "header.payload.sig"
+    with patch("gateway.oidc.get_github_jwks", new_callable=AsyncMock) as mock_get_jwks, \
+         patch("jwt.get_unverified_header", return_value={"kid": "kid1"}), \
+         patch("jwt.algorithms.RSAAlgorithm.from_jwk", return_value="public_key"), \
+         patch("jwt.decode", return_value={"repository": "owner/repo", "workflow": "wrong_wf"}):
+        mock_get_jwks.return_value = mock_jwks
+        with pytest.raises(jwt.InvalidTokenError, match="Workflow mismatch"):
+            await verify_github_oidc_token(token, expected_repo="owner/repo", expected_workflow="correct_wf")

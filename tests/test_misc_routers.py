@@ -1,4 +1,5 @@
 import pytest
+from unittest.mock import patch
 from gateway.database import Agent, Notification
 
 def test_get_agent_me(client, seeded_agents):
@@ -40,3 +41,32 @@ def test_mark_notification_read(client, seeded_agents, db_session):
 
     db_session.refresh(notif)
     assert notif.read is True
+
+def test_events_stream_endpoint(client):
+    async def mock_sub(*args, **kwargs):
+        yield "event: test\n\n"
+    with patch("gateway.routers.events.broker.subscribe", side_effect=mock_sub):
+        res = client.get("/api/v1/events")
+        assert res.status_code == 200
+        assert "text/event-stream" in res.headers.get("content-type", "")
+
+def test_oidc_verify_endpoint_exceptions(client):
+    import jwt
+    # 1. Expired signature
+    with patch("gateway.routers.oidc.verify_github_oidc_token", side_effect=jwt.ExpiredSignatureError("expired")):
+        res = client.post("/api/v1/oidc/verify", json={"token": "t"})
+        assert res.status_code == 401
+        assert "Token expired" in res.json()["detail"]
+
+    # 2. Invalid token
+    with patch("gateway.routers.oidc.verify_github_oidc_token", side_effect=jwt.InvalidTokenError("invalid")):
+        res = client.post("/api/v1/oidc/verify", json={"token": "t"})
+        assert res.status_code == 400
+        assert "Invalid token" in res.json()["detail"]
+
+    # 3. Verification error
+    with patch("gateway.routers.oidc.verify_github_oidc_token", side_effect=Exception("verification failed")):
+        res = client.post("/api/v1/oidc/verify", json={"token": "t"})
+        assert res.status_code == 500
+        assert "Verification error" in res.json()["detail"]
+

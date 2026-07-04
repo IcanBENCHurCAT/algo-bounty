@@ -117,3 +117,47 @@ def test_dispute_path():
     escrow.resolve_dispute("mediator1", "split")
     assert escrow.state == CLOSED
     assert escrow.payout_type == "SPLIT"
+
+def test_mock_escrow_error_paths():
+    import pytest
+    escrow = MockEscrowState("b_err", 100, False, "creator")
+    
+    with pytest.raises(ValueError, match="Creator cannot claim own bounty"):
+        escrow.claim("creator")
+        
+    with pytest.raises(ValueError, match="Bounty not in claimed or rejected state"):
+        escrow.submit_work("worker", "url")
+        
+    escrow.claim("worker")
+    with pytest.raises(ValueError, match="Bounty not open"):
+        escrow.claim("worker")
+        
+    with pytest.raises(ValueError, match="Only claiming worker can submit work"):
+        escrow.submit_work("stranger", "url")
+        
+    with pytest.raises(ValueError, match="Bounty not in submitted state"):
+        escrow.approve_work("creator")
+        
+    with pytest.raises(ValueError, match="Bounty not in submitted state"):
+        escrow.reject_work("creator")
+        
+    with pytest.raises(ValueError, match="Cannot open dispute at this state"):
+        escrow.dispute("worker")
+        
+    escrow.submit_work("worker", "url")
+    
+    with pytest.raises(ValueError, match="Only creator can approve work"):
+        escrow.approve_work("stranger")
+        
+    with pytest.raises(ValueError, match="Only creator can reject work"):
+        escrow.reject_work("stranger")
+        
+    with pytest.raises(ValueError, match="Only participants can open a dispute"):
+        escrow.dispute("stranger")
+        
+    escrow.reject_work("creator")
+    escrow.dispute("worker")
+    
+    escrow2 = MockEscrowState("b_err2", 100, False, "creator")
+    with pytest.raises(ValueError, match="Bounty not in disputed state"):
+        escrow2.resolve_dispute("mediator", "agent_win")
