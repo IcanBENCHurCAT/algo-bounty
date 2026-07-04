@@ -40,6 +40,9 @@ GITHUB_WEBHOOK_SECRET="$(${GCLOUD_PATH} secrets versions access latest \
 SUPABASE_SERVICE_ROLE_KEY="$(${GCLOUD_PATH} secrets versions access latest \
   --secret=algobounty_supabase_service_role_key --project="${PROJECT_ID}" 2>/dev/null)" || SUPABASE_SERVICE_ROLE_KEY=""
 
+DATABASE_URL="$(${GCLOUD_PATH} secrets versions access latest \
+  --secret=algobounty-db-url --project="${PROJECT_ID}" 2>/dev/null)" || DATABASE_URL=""
+
 if [ -z "${SECRET_KEY}" ]; then
   echo "⚠️  SECRET_KEY not found in Secret Manager — setting placeholder"
 fi
@@ -79,7 +82,8 @@ ${GCLOUD_PATH} run deploy "${SERVICE_NAME}" \
   --set-secrets="SECRET_KEY=algobounty_secret_key" \
   --set-secrets="PLATFORM_PRIVATE_KEY=algobounty_platform_private_key" \
   --set-secrets="GITHUB_WEBHOOK_SECRET=algobounty_github_webhook_secret" \
-  --set-secrets="SUPABASE_SERVICE_ROLE_KEY=algobounty_supabase_service_role_key"
+  --set-secrets="SUPABASE_SERVICE_ROLE_KEY=algobounty_supabase_service_role_key" \
+  --set-secrets="DATABASE_URL=algobounty-db-url:latest"
 
 echo ""
 echo "✅ AlgoBounty Gateway Deployment Complete!"
