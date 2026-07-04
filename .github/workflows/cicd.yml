@@ -27,12 +27,29 @@ jobs:
       with:
         python-version: '3.12'
         cache: 'pip'
+        cache-dependency-path: '**/requirements*.txt'
+
+    - name: Cache pip packages
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
 
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install pytest pytest-cov pytest-asyncio
         pip install -r requirements.txt
+
+    - name: Cache pytest
+      uses: actions/cache@v4
+      with:
+        path: .pytest_cache
+        key: ${{ runner.os }}-pytest-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pytest-
 
     - name: Run Test Suite
       env:
@@ -54,4 +71,3 @@ jobs:
       with:
         pytest-xml-coverage-path: ./coverage.xml
         github-token: ${{ secrets.GITHUB_TOKEN }}
-
