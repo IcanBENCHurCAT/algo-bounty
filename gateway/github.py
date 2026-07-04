@@ -16,31 +16,27 @@ from .config import settings
 
 logger = logging.getLogger(__name__)
 
-# Cache for GitHub App installation token
-_installation_token_cache = {"token": None, "expires_at": 0}
+# Cache for GitHub App installation token: { (installation_id): {"token": str, "expires_at": float} }
+_installation_token_cache = {}
 
-def get_github_bot_token() -> Optional[str]:
+async def get_github_bot_token(owner: Optional[str] = None, repo: Optional[str] = None) -> Optional[str]:
     """
     Get a GitHub token for the bot.
     Priority:
     1. GitHub App (App ID + Private Key + Installation ID)
     2. GITHUB_TOKEN environment variable
     """
-    app_id = os.environ.get("GITHUB_APP_ID")
-    private_key = os.environ.get("GITHUB_PRIVATE_KEY")
+    app_id = settings.GITHUB_APP_ID
+    private_key = settings.GITHUB_PRIVATE_KEY
     installation_id = os.environ.get("GITHUB_INSTALLATION_ID")
 
-    if not (app_id and private_key and installation_id):
-        return os.environ.get("GITHUB_TOKEN")
+    if not (app_id and private_key):
+        return settings.GITHUB_TOKEN
 
-    global _installation_token_cache
-    if _installation_token_cache["token"] and _installation_token_cache["expires_at"] > time.time() + 60:
-        return _installation_token_cache["token"]
-
+    # 1. Generate JWT for the GitHub App (needed for either fetching installation_id or exchanging for token)
     try:
-        # 1. Generate JWT for the GitHub App
         now = int(time.time())
-        payload = {
+        jwt_payload = {
             "iat": now - 60,
             "exp": now + (10 * 60),
             "iss": app_id
@@ -54,9 +50,40 @@ def get_github_bot_token() -> Optional[str]:
             # Replace escaped newlines if they exist (common when passing via env vars)
             private_key_contents = private_key.replace("\\n", "\n")
 
-        encoded_jwt = jwt.encode(payload, private_key_contents, algorithm="RS256")
+        encoded_jwt = jwt.encode(jwt_payload, private_key_contents, algorithm="RS256")
+    except Exception as e:
+        logger.error(f"Failed to generate GitHub App JWT: {e}")
+        return settings.GITHUB_TOKEN
 
-        # 2. Exchange JWT for an installation access token
+    # 2. Dynamically fetch installation_id if missing and owner/repo provided
+    if not installation_id and owner and repo:
+        try:
+            headers = {
+                "Authorization": f"Bearer {encoded_jwt}",
+                "Accept": "application/vnd.github.v3+json",
+                "User-Agent": "AlgoBounty-Gateway"
+            }
+            url = f"https://api.github.com/repos/{owner}/{repo}/installation"
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(url, headers=headers)
+                if resp.status_code == 200:
+                    installation_id = str(resp.json().get("id"))
+                else:
+                    logger.warning(f"Could not find GitHub installation for {owner}/{repo}: {resp.text}")
+        except Exception as e:
+            logger.error(f"Error fetching GitHub installation ID: {e}")
+
+    if not installation_id:
+        return settings.GITHUB_TOKEN
+
+    # 3. Check cache for this installation_id
+    global _installation_token_cache
+    cached = _installation_token_cache.get(installation_id)
+    if cached and cached["expires_at"] > time.time() + 60:
+        return cached["token"]
+
+    try:
+        # 4. Exchange JWT for an installation access token
         headers = {
             "Authorization": f"Bearer {encoded_jwt}",
             "Accept": "application/vnd.github.v3+json",
@@ -64,22 +91,20 @@ def get_github_bot_token() -> Optional[str]:
         }
         url = f"https://api.github.com/app/installations/{installation_id}/access_tokens"
 
-        with httpx.Client() as client:
-            resp = client.post(url, headers=headers)
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(url, headers=headers)
             resp.raise_for_status()
             data = resp.json()
 
-            _installation_token_cache["token"] = data["token"]
-            # Parse expiration
-            expires_at_str = data["expires_at"]
-            expires_at = datetime.fromisoformat(expires_at_str.replace("Z", "+00:00")).timestamp()
-            _installation_token_cache["expires_at"] = expires_at
-
+            _installation_token_cache[installation_id] = {
+                "token": data["token"],
+                "expires_at": datetime.fromisoformat(data["expires_at"].replace("Z", "+00:00")).timestamp()
+            }
             return data["token"]
     except Exception as e:
         logger.error(f"Failed to get GitHub App installation token: {e}")
         # Fallback to GITHUB_TOKEN if available
-        return os.environ.get("GITHUB_TOKEN")
+        return settings.GITHUB_TOKEN
 
 # Known GitHub webhook event types (non-exhaustive)
 KNOWN_EVENT_TYPES = {
@@ -195,35 +220,63 @@ def validate_webhook(event_type: str, secret: str, signature: str,
     return True, delivery_id
 
 
-def log_bot_comment(repo_url: str, issue_or_pr_number: int, comment_text: str):
+async def post_github_comment_and_labels(
+    repo_url: str,
+    number: int,
+    comment: Optional[str] = None,
+    add_labels: Optional[list[str]] = None,
+    remove_labels: Optional[list[str]] = None
+):
     """
-    GitHub bot comment.
-    If a valid GitHub token (App or Token) is found, posts to the real GitHub API.
-    Otherwise, logs to a file and stdout.
+    Post a comment and/or update labels on a GitHub issue or PR.
     """
-    token = get_github_bot_token()
-
     # Extract owner and repo from URL
-    # Expected format: https://github.com/owner/repo
     match = re.search(r'github\.com/([^/]+)/([^/]+)', repo_url)
-    if token and match:
-        owner = match.group(1)
-        repo = match.group(2)
-        api_url = f"https://api.github.com/repos/{owner}/{repo}/issues/{issue_or_pr_number}/comments"
+    owner = match.group(1) if match else None
+    repo = match.group(2) if match else None
 
-        try:
-            headers = {
-                "Authorization": f"Bearer {token}",
-                "Accept": "application/vnd.github.v3+json",
-                "User-Agent": "AlgoBounty-Gateway"
-            }
-            with httpx.Client() as client:
-                resp = client.post(api_url, json={"body": comment_text}, headers=headers)
-                resp.raise_for_status()
-                logger.info(f"Successfully posted comment to GitHub: {api_url}")
-                return
-        except Exception as e:
-            logger.error(f"Failed to post comment to GitHub: {e}")
+    token = await get_github_bot_token(owner, repo)
+
+    if token and owner and repo:
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github.v3+json",
+            "User-Agent": "AlgoBounty-Gateway"
+        }
+        async with httpx.AsyncClient() as client:
+            # 1. Post comment
+            if comment:
+                api_url = f"https://api.github.com/repos/{owner}/{repo}/issues/{number}/comments"
+                try:
+                    resp = await client.post(api_url, json={"body": comment}, headers=headers)
+                    resp.raise_for_status()
+                    logger.info(f"Successfully posted comment to GitHub: {api_url}")
+                except Exception as e:
+                    logger.error(f"Failed to post comment to GitHub: {e}")
+
+            # 2. Add labels
+            if add_labels:
+                api_url = f"https://api.github.com/repos/{owner}/{repo}/issues/{number}/labels"
+                try:
+                    resp = await client.post(api_url, json={"labels": add_labels}, headers=headers)
+                    resp.raise_for_status()
+                    logger.info(f"Successfully added labels to GitHub: {add_labels}")
+                except Exception as e:
+                    logger.error(f"Failed to add labels to GitHub: {e}")
+
+            # 3. Remove labels
+            if remove_labels:
+                for label in remove_labels:
+                    api_url = f"https://api.github.com/repos/{owner}/{repo}/issues/{number}/labels/{label}"
+                    try:
+                        resp = await client.delete(api_url, headers=headers)
+                        # 404 is acceptable if label wasn't there
+                        if resp.status_code != 404:
+                            resp.raise_for_status()
+                        logger.info(f"Successfully removed label from GitHub: {label}")
+                    except Exception as e:
+                        logger.error(f"Failed to remove label from GitHub {label}: {e}")
+        return
 
     # Fallback to logging
     log_file = "github_bot_comments.log"
@@ -231,14 +284,26 @@ def log_bot_comment(repo_url: str, issue_or_pr_number: int, comment_text: str):
     log_entry = {
         "timestamp": timestamp,
         "repo_url": repo_url,
-        "number": issue_or_pr_number,
-        "comment": comment_text
+        "number": number,
+        "comment": comment,
+        "add_labels": add_labels,
+        "remove_labels": remove_labels
     }
     with open(log_file, "a", encoding="utf-8") as f:
         f.write(json.dumps(log_entry) + "\n")
-    print(f"\n[MOCK GITHUB BOT] Commented on {repo_url}#{issue_or_pr_number}:\n{comment_text}\n")
 
-def handle_issue_event(db: Session, payload: dict):
+    print(f"\n[MOCK GITHUB BOT] Update on {repo_url}#{number}:")
+    if comment: print(f"Comment: {comment}")
+    if add_labels: print(f"Add Labels: {add_labels}")
+    if remove_labels: print(f"Remove Labels: {remove_labels}")
+
+async def log_bot_comment(repo_url: str, issue_or_pr_number: int, comment_text: str):
+    """
+    Deprecated: use post_github_comment_and_labels instead.
+    """
+    await post_github_comment_and_labels(repo_url, issue_or_pr_number, comment=comment_text)
+
+async def handle_issue_event(db: Session, payload: dict):
     """
     Handle GitHub issue webhook events.
     Convert issue to pending bounty if it has a 'bounty' label or title tag.
@@ -301,9 +366,9 @@ def handle_issue_event(db: Session, payload: dict):
         f"- **Bounty ID**: `ALGO-{issue_number}`\n\n"
         f"[📋 Deploy Escrow & Activate on Dashboard](http://localhost:8000/dashboard?bounty_id={bounty_id})"
     )
-    log_bot_comment(bounty.repo_url, issue_number, comment_text)
+    await post_github_comment_and_labels(bounty.repo_url, issue_number, comment=comment_text)
 
-def handle_pr_event(db: Session, payload: dict):
+async def handle_pr_event(db: Session, payload: dict):
     """
     Handle GitHub pull request webhook events.
     Auto-claims or links bounty based on PR references.
@@ -364,7 +429,11 @@ def handle_pr_event(db: Session, payload: dict):
                     f"The bounty status has transitioned to **CLAIMED**.\n"
                     f"Submit your work on the dashboard to trigger review."
                 )
-                log_bot_comment(bounty.repo_url, int(issue_number), comment_text)
+                await post_github_comment_and_labels(
+                    bounty.repo_url, int(issue_number),
+                    comment=comment_text,
+                    add_labels=["bounty:claimed"]
+                )
                 
             # If bounty is claimed, transition to submitted
             elif bounty.status == "claimed" and bounty.worker == author:
@@ -377,7 +446,12 @@ def handle_pr_event(db: Session, payload: dict):
                     f"The bounty status is now **SUBMITTED**.\n"
                     f"- **HITM Review**: {'Enabled (7-day window)' if bounty.is_hitm else 'Disabled (Trustless auto-release)'}"
                 )
-                log_bot_comment(bounty.repo_url, int(issue_number), comment_text)
+                await post_github_comment_and_labels(
+                    bounty.repo_url, int(issue_number),
+                    comment=comment_text,
+                    add_labels=["bounty:submitted"],
+                    remove_labels=["bounty:claimed"]
+                )
 
                 # Notify creator
                 creator_notif = Notification(
@@ -401,7 +475,12 @@ def handle_pr_event(db: Session, payload: dict):
                         f"PR #{pr_number} has been merged. Since this bounty was in **Trustless Mode**, "
                         f"the escrow has been closed, and funds have been automatically released to @{author}!"
                     )
-                    log_bot_comment(bounty.repo_url, int(issue_number), comment_text)
+                    await post_github_comment_and_labels(
+                        bounty.repo_url, int(issue_number),
+                        comment=comment_text,
+                        add_labels=["bounty:completed"],
+                        remove_labels=["bounty:submitted", "bounty:claimed"]
+                    )
 
                     # Reward karma
                     worker_agent = db.query(Agent).filter(Agent.address == author).first()
@@ -416,4 +495,4 @@ def handle_pr_event(db: Session, payload: dict):
                         f"PR #{pr_number} has been merged, but this bounty is in **HITM Mode** (Human-in-the-Middle).\n"
                         f"Creator @{bounty.creator} must sign the release transaction on the dashboard to pay the worker."
                     )
-                    log_bot_comment(bounty.repo_url, int(issue_number), comment_text)
+                    await post_github_comment_and_labels(bounty.repo_url, int(issue_number), comment=comment_text)

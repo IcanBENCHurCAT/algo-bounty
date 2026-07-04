@@ -44,7 +44,8 @@ def test_karma_on_create(db):
     creator = db.query(Agent).filter(Agent.address == "creator_addr").first()
     assert creator.karma == 99  # -1 for creation
 
-def test_karma_on_approve(db):
+@pytest.mark.asyncio
+async def test_karma_on_approve(db):
     bounty = Bounty(
         bounty_id="b_123",
         status="submitted",
@@ -59,7 +60,7 @@ def test_karma_on_approve(db):
 
     body = WorkApprove(signed_txn=None)
     with patch("gateway.routers.bounties.send_signed_transaction"):
-        approve_work("b_123", body, db, "creator_addr")
+        await approve_work("b_123", body, db, "creator_addr")
 
     worker = db.query(Agent).filter(Agent.address == "worker_addr").first()
     creator = db.query(Agent).filter(Agent.address == "creator_addr").first()
@@ -67,7 +68,8 @@ def test_karma_on_approve(db):
     assert worker.karma == 110  # +10
     assert creator.karma == 105  # +5
 
-def test_karma_on_progressive_reject(db):
+@pytest.mark.asyncio
+async def test_karma_on_progressive_reject(db):
     bounty = Bounty(
         bounty_id="b_123",
         status="submitted",
@@ -83,20 +85,20 @@ def test_karma_on_progressive_reject(db):
     body = WorkReject(reason="bad", signed_txn=None)
     with patch("gateway.routers.bounties.send_signed_transaction"):
         # 1st rejection
-        reject_work("b_123", body, db, "creator_addr")
+        await reject_work("b_123", body, db, "creator_addr")
         worker = db.query(Agent).filter(Agent.address == "worker_addr").first()
         assert worker.karma == 99  # -1
 
         # 2nd rejection (simulating re-submission and re-rejection)
         bounty.status = "submitted"
         db.commit()
-        reject_work("b_123", body, db, "creator_addr")
+        await reject_work("b_123", body, db, "creator_addr")
         assert worker.karma == 97  # 99 - 2 = 97
 
         # 3rd rejection
         bounty.status = "submitted"
         db.commit()
-        reject_work("b_123", body, db, "creator_addr")
+        await reject_work("b_123", body, db, "creator_addr")
         assert worker.karma == 92  # 97 - 5 = 92
 
 def test_indexer_auto_release(db):
