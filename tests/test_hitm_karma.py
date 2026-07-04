@@ -121,14 +121,17 @@ def test_indexer_auto_release(db):
         "logs": [base64.b64encode(b"auto_released_hitm").decode()]
     }]
 
+    mock_event = MagicMock()
+    mock_event.is_set.side_effect = [False, True]
+    async def mock_wait():
+        return True
+    mock_event.wait = mock_wait
+
     with patch("gateway.worker.fetch_app_logs", return_value=mock_logs), \
          patch("gateway.worker.poll_bounty_events", return_value=[]), \
          patch("gateway.worker.SessionLocal", return_value=db), \
-         patch("asyncio.wait_for", side_effect=asyncio.CancelledError):
-        try:
-            asyncio.run(indexer_worker())
-        except asyncio.CancelledError:
-            pass
+         patch("gateway.worker.asyncio.Event", return_value=mock_event):
+        asyncio.run(indexer_worker())
 
     b = db.query(Bounty).filter(Bounty.bounty_id == "b_hitm").first()
     assert b.status == "closed"
@@ -160,14 +163,17 @@ def test_indexer_dispute_timeout(db):
         "logs": [base64.b64encode(b"dispute_timeout_split").decode()]
     }]
 
+    mock_event = MagicMock()
+    mock_event.is_set.side_effect = [False, True]
+    async def mock_wait():
+        return True
+    mock_event.wait = mock_wait
+
     with patch("gateway.worker.fetch_app_logs", return_value=mock_logs), \
          patch("gateway.worker.poll_bounty_events", return_value=[]), \
          patch("gateway.worker.SessionLocal", return_value=db), \
-         patch("asyncio.wait_for", side_effect=asyncio.CancelledError):
-        try:
-            asyncio.run(indexer_worker())
-        except asyncio.CancelledError:
-            pass
+         patch("gateway.worker.asyncio.Event", return_value=mock_event):
+        asyncio.run(indexer_worker())
 
     b = db.query(Bounty).filter(Bounty.bounty_id == "b_dispute").first()
     assert b.status == "closed"
@@ -199,14 +205,17 @@ def test_indexer_claim_expired(db):
         "logs": [base64.b64encode(b"claim_expired").decode()]
     }]
 
+    mock_event = MagicMock()
+    mock_event.is_set.side_effect = [False, True]
+    async def mock_wait():
+        return True
+    mock_event.wait = mock_wait
+
     with patch("gateway.worker.fetch_app_logs", return_value=mock_logs), \
          patch("gateway.worker.poll_bounty_events", return_value=[]), \
          patch("gateway.worker.SessionLocal", return_value=db), \
-         patch("asyncio.wait_for", side_effect=asyncio.CancelledError):
-        try:
-            asyncio.run(indexer_worker())
-        except asyncio.CancelledError:
-            pass
+         patch("gateway.worker.asyncio.Event", return_value=mock_event):
+        asyncio.run(indexer_worker())
 
     b = db.query(Bounty).filter(Bounty.bounty_id == "b_expired").first()
     assert b.status == "open"
