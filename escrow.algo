@@ -499,7 +499,7 @@ class EscrowContract(SmartContract):
         _require_rekey_not_modified()
 
         state = _state()
-        ptx.require(state == SUBMITTED | state == REJECTED)
+        ptx.require((state == SUBMITTED) | (state == REJECTED))
         ptx.require(_is_creator() | _is_agent())
         ptx.require(reason.length() > Int(0))
         ptx.require(reason.length() <= MAX_DISPUTE_REASON_BYTES)
@@ -532,8 +532,8 @@ class EscrowContract(SmartContract):
 
         ptx.require(_state() == DISPUTED)
         ptx.require(
-            resolution == Bytes("agent_win")
-            | resolution == Bytes("creator_win")
+            (resolution == Bytes("agent_win"))
+            | (resolution == Bytes("creator_win"))
         )
         ptx.require(mediator_signature.length() > Int(0))
 
@@ -582,9 +582,12 @@ class EscrowContract(SmartContract):
         _box_put_bytes(_K_PAYOUT_TYPE, REFUND)
         _set_state(CLOSED)
 
-        # Actual on-chain refund
+        # SECURITY FIX: Verify escrow balance before payout
         escrow_amount = _box_get_uint64(_K_ESCROW_AMOUNT)
         asset_id = _box_get_uint64(_K_ASSET_ID)
+        _verify_escrow_balance(asset_id, escrow_amount)
+
+        # Actual on-chain refund
         _send_payout(_box_get_address(_K_CREATOR_ADDRESS), escrow_amount, asset_id)
 
         Log(Bytes("dispute_auto_resolved_creator_win"))
@@ -787,9 +790,9 @@ class EscrowContract(SmartContract):
         _require_rekey_not_modified()
 
         ptx.require(
-            status == Bytes("pass")
-            | status == Bytes("fail")
-            | status == Bytes("pending")
+            (status == Bytes("pass"))
+            | (status == Bytes("fail"))
+            | (status == Bytes("pending"))
         )
 
         _box_put_bytes(_K_GITHUB_STATUS, status)
