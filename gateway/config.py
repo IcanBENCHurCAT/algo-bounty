@@ -51,6 +51,25 @@ class Config:
         return self.get_secret("ALGORAND_NETWORK", "testnet")
 
     @property
+    def ALGOD_ADDRESS(self) -> str:
+        return self.get_secret("ALGOD_ADDRESS", "https://testnet-api.algonode.cloud")
+
+    @property
+    def ALGOD_TOKEN(self) -> str:
+        default = ""
+        if self.ALGORAND_NETWORK == "sandbox":
+            default = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        return self.get_secret("ALGOD_TOKEN", default)
+
+    @property
+    def INDEXER_ADDRESS(self) -> str:
+        return self.get_secret("INDEXER_ADDRESS", "https://testnet-indexer.algonode.cloud")
+
+    @property
+    def INDEXER_TOKEN(self) -> str:
+        return self.get_secret("INDEXER_TOKEN", self.ALGOD_TOKEN)
+
+    @property
     def SUPABASE_URL(self) -> str:
         return self.get_secret("SUPABASE_URL")
 
