@@ -43,9 +43,13 @@ def test_mark_notification_read(client, seeded_agents, db_session):
     assert notif.read is True
 
 def test_events_stream_endpoint(client):
-    res = client.get("/api/v1/events")
-    assert res.status_code == 200
-    assert "text/event-stream" in res.headers.get("content-type", "")
+    async def mock_sub(*args, **kwargs):
+        if False:
+            yield
+    with patch("gateway.routers.events.broker.subscribe", side_effect=mock_sub):
+        res = client.get("/api/v1/events")
+        assert res.status_code == 200
+        assert "text/event-stream" in res.headers.get("content-type", "")
 
 def test_oidc_verify_endpoint_exceptions(client):
     import jwt
