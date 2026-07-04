@@ -49,17 +49,37 @@ SUPABASE_URL = settings.SUPABASE_URL
 DATABASE_URL = settings.DATABASE_URL
 
 
+def _normalize_db_url(url: str) -> str:
+    """Normalize a database URL for SQLAlchemy 2.0 compatibility.
+
+    Replaces "postgres://" with "postgresql://" because
+    SQLAlchemy 2.0 no longer accepts the bare "postgres://" scheme.
+    Leaves "postgresql://" and "sqlite:///" URLs unchanged.
+    """
+    if url and url.startswith("postgres://") and not url.startswith("postgresql://"):
+        return "postgresql" + url[len("postgres"):]
+    return url
+
+
 def build_engine():
-    """Return (async_engine, sync_engine) — PostgreSQL via Supabase or SQLite fallback."""
+    """Return (async_engine, sync_engine) — PostgreSQL via Supabase or SQLite fallback.
+
+    DATABASE_URL is read from the environment (via config.py settings).
+    If the URL starts with "postgres://", it is automatically converted
+    to "postgresql://" to comply with SQLAlchemy 2.0.
+
+    SQLite fallback (sqlite:///./algobounty.db) is used when
+    DATABASE_URL is not set or is explicitly an SQLite URL.
+    """
 
     # Prefer SUPABASE_URL for Supabase projects; fall back to DATABASE_URL
     url = SUPABASE_URL or DATABASE_URL
 
-    if url and "supabase" in url.lower():
-        # Supabase PostgreSQL — async engine via asyncpg, sync via psycopg2
-        return _build_postgres_engine(url, is_asyncpg=True)
-    elif url and url.startswith("postgresql"):
-        # Generic PostgreSQL (e.g. Supabase direct)
+    if url:
+        url = _normalize_db_url(url)
+
+    if url and ("supabase" in url.lower() or url.startswith("postgresql")):
+        # PostgreSQL (Supabase or generic)
         return _build_postgres_engine(url, is_asyncpg=True)
     else:
         # Fallback: SQLite for local dev

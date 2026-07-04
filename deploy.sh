@@ -79,7 +79,8 @@ ${GCLOUD_PATH} run deploy "${SERVICE_NAME}" \
   --set-secrets="SECRET_KEY=algobounty_secret_key" \
   --set-secrets="PLATFORM_PRIVATE_KEY=algobounty_platform_private_key" \
   --set-secrets="GITHUB_WEBHOOK_SECRET=algobounty_github_webhook_secret" \
-  --set-secrets="SUPABASE_SERVICE_ROLE_KEY=algobounty_supabase_service_role_key"
+  --set-secrets="SUPABASE_SERVICE_ROLE_KEY=algobounty_supabase_service_role_key" \
+  --set-secrets="DATABASE_URL=algobounty-db-url:latest"
 
 echo ""
 echo "✅ AlgoBounty Gateway Deployment Complete!"
