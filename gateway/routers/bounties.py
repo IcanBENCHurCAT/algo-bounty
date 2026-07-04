@@ -145,22 +145,23 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
                     bounty_id_bytes, escrow_amount, is_hitm, asset_id, review_days, mediator_address
                 )
 
-                from algosdk.transaction import ApplicationCreateTxn, OnComplete
+                from algosdk.transaction import ApplicationCreateTxn, OnComplete, StateSchema
                 create_txn = ApplicationCreateTxn(
                     sender=platform_account.address,
                     sp=params,
                     on_complete=OnComplete.NoOpOC,
-                    app_args=[app_args],
-                    program=compiled_program,
                     approval_program=compiled_program,
                     clear_program=compiled_program,
+                    global_schema=StateSchema(0, 0),
+                    local_schema=StateSchema(0, 0),
+                    app_args=[app_args],
                 )
 
                 signed_txn = create_txn.sign(platform_account.private_key)
                 tx_id = client.send_transaction([signed_txn])
 
                 # Wait for confirmation
-                from algosdk.waiting import wait_for_confirmation
+                from algosdk.transaction import wait_for_confirmation
                 pending_info = wait_for_confirmation(client, tx_id, 4)
                 if pending_info:
                     app_id = pending_info.get("application-index")

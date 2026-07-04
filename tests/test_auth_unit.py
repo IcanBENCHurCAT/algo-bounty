@@ -64,3 +64,25 @@ def test_secret_key_missing_error():
     # Restore correct SECRET_KEY in gateway.auth
     import gateway.auth
     reload(gateway.auth)
+
+def test_auth_verify_router_endpoints(client, db_session):
+    # 1. Invalid signature
+    res = client.post("/api/v1/auth/verify", json={
+        "address": "ADDR_INVALID",
+        "signature": "sig",
+        "challenge": "ch"
+    })
+    assert res.status_code == 401
+    assert "Invalid wallet signature" in res.json()["detail"]
+    
+    # 2. Valid signature for a new agent (implicit registration)
+    with patch("gateway.routers.auth.verify_signature", return_value=True):
+        res = client.post("/api/v1/auth/verify", json={
+            "address": "NEW_ADDR_IMPLICIT",
+            "signature": "sig",
+            "challenge": "ch"
+        })
+        assert res.status_code == 200
+        assert res.json()["address"] == "NEW_ADDR_IMPLICIT"
+        assert res.json()["karma"] == 25
+

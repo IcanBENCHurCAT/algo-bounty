@@ -56,3 +56,41 @@ def test_handle_pr_merged_trustless(db_session):
 
     worker = db_session.query(Agent).filter(Agent.address == "W1").first()
     assert worker.karma == 35 # 30 + 5
+
+def test_github_webhook_endpoint_invalid_json(client):
+    with patch("gateway.routers.webhooks.validate_webhook", return_value=(True, "")):
+        res = client.post("/webhooks/github",
+                          content=b"invalid_json_garbage",
+                          headers={"X-GitHub-Event": "issues"})
+        assert res.status_code == 400
+        assert "Invalid JSON payload" in res.json()["reason"]
+
+def test_github_webhook_events_dispatch(client, db_session):
+    # Mock handlers
+    with patch("gateway.routers.webhooks.validate_webhook", return_value=(True, "")), \
+         patch("gateway.routers.webhooks.handle_issue_event") as mock_issue, \
+         patch("gateway.routers.webhooks.handle_pr_event") as mock_pr:
+         
+        # 1. issues event
+        res = client.post("/webhooks/github", json={"action": "opened"}, headers={"X-GitHub-Event": "issues"})
+        assert res.status_code == 200
+        mock_issue.assert_called_once()
+        mock_issue.reset_mock()
+        
+        # 2. pull_request event
+        res = client.post("/webhooks/github", json={"action": "opened"}, headers={"X-GitHub-Event": "pull_request"})
+        assert res.status_code == 200
+        mock_pr.assert_called_once()
+        mock_pr.reset_mock()
+        
+        # 3. issue_comment event
+        res = client.post("/webhooks/github", json={"action": "created"}, headers={"X-GitHub-Event": "issue_comment"})
+        assert res.status_code == 200
+        mock_issue.assert_called_once()
+        mock_issue.reset_mock()
+        
+        # 4. pull_request_review event
+        res = client.post("/webhooks/github", json={"action": "submitted"}, headers={"X-GitHub-Event": "pull_request_review"})
+        assert res.status_code == 200
+        mock_pr.assert_called_once()
+
