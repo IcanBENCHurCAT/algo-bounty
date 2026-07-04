@@ -30,15 +30,18 @@ async def test_worker_hitm_auto_release(db_session, seeded_agents):
         }
     ]
 
+    mock_event = MagicMock()
+    mock_event.is_set.side_effect = [False, True]
+    async def mock_wait():
+        return True
+    mock_event.wait = mock_wait
+
     with patch("gateway.worker.SessionLocal", return_value=db_session), \
          patch("gateway.worker.poll_bounty_events", return_value=[]), \
          patch("gateway.worker.fetch_app_logs", return_value=mock_logs), \
-         patch("asyncio.wait_for", side_effect=asyncio.CancelledError): # To stop the loop
+         patch("gateway.worker.asyncio.Event", return_value=mock_event):
 
-        try:
-            await indexer_worker()
-        except asyncio.CancelledError:
-            pass
+        await indexer_worker()
 
     # Fetch from DB again instead of refreshing stale object if it was detached
     b = db_session.query(Bounty).filter(Bounty.bounty_id == "b_hitm").first()
@@ -72,15 +75,18 @@ async def test_worker_claim_expired(db_session, seeded_agents):
         }
     ]
 
+    mock_event = MagicMock()
+    mock_event.is_set.side_effect = [False, True]
+    async def mock_wait():
+        return True
+    mock_event.wait = mock_wait
+
     with patch("gateway.worker.SessionLocal", return_value=db_session), \
          patch("gateway.worker.poll_bounty_events", return_value=[]), \
          patch("gateway.worker.fetch_app_logs", return_value=mock_logs), \
-         patch("asyncio.wait_for", side_effect=asyncio.CancelledError):
+         patch("gateway.worker.asyncio.Event", return_value=mock_event):
 
-        try:
-            await indexer_worker()
-        except asyncio.CancelledError:
-            pass
+        await indexer_worker()
 
     b = db_session.query(Bounty).filter(Bounty.bounty_id == "b_expired").first()
     assert b.status == "open"

@@ -37,7 +37,8 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pytest pytest-cov pytest-asyncio fastapi uvicorn PyJWT cryptography sqlalchemy httpx py-algorand-sdk
+        pip install pytest pytest-cov pytest-asyncio
+        pip install -r requirements.txt
 
     - name: Run Test Suite
       env:
