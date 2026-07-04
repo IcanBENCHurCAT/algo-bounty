@@ -20,7 +20,7 @@ def test_github_webhook_endpoint_invalid_sig(client):
     with patch.dict("os.environ", {"GITHUB_WEBHOOK_SECRET": "secret", "NODE_ENV": "production"}):
         res = client.post("/webhooks/github",
                           content=b"payload",
-                          headers={"X-GitHub-Event": "issues", "X-Hub-Signature-256": "sha256=invalid"})
+                          headers={"Content-Type": "application/json", "X-GitHub-Event": "issues", "X-Hub-Signature-256": "sha256=invalid"})
         assert res.status_code == 403
 
 def test_handle_pr_merged_trustless(db_session):
@@ -61,7 +61,7 @@ def test_github_webhook_endpoint_invalid_json(client):
     with patch("gateway.routers.webhooks.validate_webhook", return_value=(True, "")):
         res = client.post("/webhooks/github",
                           content=b"invalid_json_garbage",
-                          headers={"X-GitHub-Event": "issues"})
+                          headers={"Content-Type": "application/json", "X-GitHub-Event": "issues"})
         assert res.status_code == 400
         assert "Invalid JSON payload" in res.json()["reason"]
 

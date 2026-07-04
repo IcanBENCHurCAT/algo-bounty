@@ -77,7 +77,7 @@ def test_create_bounty_missing_agent(client):
     # Agent doesn't exist in DB yet, but verify creates it.
     # To test missing agent profile, we mock get_current_user to return a missing agent address but db query returns None.
     with patch("gateway.routers.bounties.get_current_user", return_value="STRANGER_ADDR"):
-        res2 = client.post("/api/v1/bounties", json={"description": "desc", "amount": 1000, "repo_url": "r"}, headers={"Authorization": f"Bearer {token}"})
+        res2 = client.post("/api/v1/bounties", json={"description": "desc", "amount": 1000, "repo_url": "https://r"}, headers={"Authorization": f"Bearer {token}"})
         assert res2.status_code == 403
         assert "Agent profile missing" in res2.json()["detail"]
 
