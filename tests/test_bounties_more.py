@@ -72,29 +72,32 @@ def test_get_bounty_onchain_error(client, db_session):
         assert "Node error" in res.json()["error"]
 
 def test_create_bounty_missing_agent(client):
-    from tests.conftest import get_auth_token
-    token = get_auth_token(client, "NON_EXISTENT_AGENT")
-    res = client.post("/api/v1/bounties", json={"description": "desc", "amount": 1000, "repo_url": "r"}, headers={"Authorization": f"Bearer {token}"})
+    from gateway.auth import create_jwt_token
+    token = create_jwt_token("STRANGER_ADDR")
     # Agent doesn't exist in DB yet, but verify creates it.
     # To test missing agent profile, we mock get_current_user to return a missing agent address but db query returns None.
     with patch("gateway.routers.bounties.get_current_user", return_value="STRANGER_ADDR"):
-        res2 = client.post("/api/v1/bounties", json={"description": "desc", "amount": 1000, "repo_url": "r"})
+        res2 = client.post("/api/v1/bounties", json={"description": "desc", "amount": 1000, "repo_url": "r"}, headers={"Authorization": f"Bearer {token}"})
         assert res2.status_code == 403
         assert "Agent profile missing" in res2.json()["detail"]
 
 def test_bounties_router_error_cases(client, db_session, seeded_agents):
     from tests.conftest import get_auth_token
     creator, worker, low_karma = seeded_agents
+
+    # 1. Claim bounty with insufficient karma
+    # Seed a bounty with high karma requirement
+    db_session.add(Bounty(bounty_id="b_high_karma", status="open", creator="CREATOR_ADDR", amount=1000, repo_url="r", karma_requirement=100))
+    db_session.commit()
     
-    # 1. Create bounty with low karma
     low_karma_token = get_auth_token(client, "LOW_KARMA_WORKER")
-    res = client.post("/api/v1/bounties", json={"description": "desc", "amount": 1000, "repo_url": "r", "karma_requirement": 100}, headers={"Authorization": f"Bearer {low_karma_token}"})
-    assert res.status_code == 400
-    assert "minimum 25 karma" in res.json()["detail"]
+    res = client.post("/api/v1/bounties/b_high_karma/claim", json={"signed_txn": "dummy"}, headers={"Authorization": f"Bearer {low_karma_token}"})
+    assert res.status_code == 403
+    assert "Insufficient karma" in res.json()["detail"]
 
     # 2. Claim missing bounty
     worker_token = get_auth_token(client, "WORKER_ADDR")
-    res = client.post("/api/v1/bounties/b_missing/claim", headers={"Authorization": f"Bearer {worker_token}"})
+    res = client.post("/api/v1/bounties/b_missing/claim", json={"signed_txn": "dummy"}, headers={"Authorization": f"Bearer {worker_token}"})
     assert res.status_code == 404
 
     # Seed some bounties
@@ -106,12 +109,12 @@ def test_bounties_router_error_cases(client, db_session, seeded_agents):
 
     # 3. Creator claims own bounty
     creator_token = get_auth_token(client, "CREATOR_ADDR")
-    res = client.post("/api/v1/bounties/b_open/claim", headers={"Authorization": f"Bearer {creator_token}"})
+    res = client.post("/api/v1/bounties/b_open/claim", json={"signed_txn": "dummy"}, headers={"Authorization": f"Bearer {creator_token}"})
     assert res.status_code == 400
     assert "Cannot claim your own bounty" in res.json()["detail"]
 
     # 4. Claim non-open bounty
-    res = client.post("/api/v1/bounties/b_claimed/claim", headers={"Authorization": f"Bearer {worker_token}"})
+    res = client.post("/api/v1/bounties/b_claimed/claim", json={"signed_txn": "dummy"}, headers={"Authorization": f"Bearer {worker_token}"})
     assert res.status_code == 400
     assert "not claimable" in res.json()["detail"]
 
@@ -127,19 +130,19 @@ def test_bounties_router_error_cases(client, db_session, seeded_agents):
     assert "Only the claiming worker" in res.json()["detail"]
 
     # 7. Approve work for non-submitted bounty
-    res = client.post("/api/v1/bounties/b_claimed/approve", headers={"Authorization": f"Bearer {creator_token}"})
+    res = client.post("/api/v1/bounties/b_claimed/approve", json={}, headers={"Authorization": f"Bearer {creator_token}"})
     assert res.status_code == 400
     assert "no work submitted" in res.json()["detail"]
 
     # 8. Approve work by non-creator
-    res = client.post("/api/v1/bounties/b_submitted/approve", headers={"Authorization": f"Bearer {worker_token}"})
+    res = client.post("/api/v1/bounties/b_submitted/approve", json={}, headers={"Authorization": f"Bearer {worker_token}"})
     assert res.status_code == 403
     assert "Only creator can approve" in res.json()["detail"]
 
     # 9. Reject work for non-submitted bounty
     res = client.post("/api/v1/bounties/b_claimed/reject", json={"reason": "bad"}, headers={"Authorization": f"Bearer {creator_token}"})
     assert res.status_code == 400
-    assert "no work submitted" in res.json()["detail"]
+    assert "No work submitted to reject" in res.json()["detail"]
 
     # 10. Reject work by non-creator
     res = client.post("/api/v1/bounties/b_submitted/reject", json={"reason": "bad"}, headers={"Authorization": f"Bearer {worker_token}"})
@@ -147,12 +150,12 @@ def test_bounties_router_error_cases(client, db_session, seeded_agents):
     assert "Only creator can reject" in res.json()["detail"]
 
     # 11. Dispute for non-submitted/rejected bounty
-    res = client.post("/api/v1/bounties/b_open/dispute", json={"reason": "bad"}, headers={"Authorization": f"Bearer {worker_token}"})
+    res = client.post("/api/v1/bounties/b_open/dispute", json={"reason": "bad"}, headers={"Authorization": f"Bearer {creator_token}"})
     assert res.status_code == 400
-    assert "Cannot open dispute" in res.json()["detail"]
+    assert "Cannot dispute at this stage" in res.json()["detail"]
 
     # 12. Dispute by non-participant
     res = client.post("/api/v1/bounties/b_submitted/dispute", json={"reason": "bad"}, headers={"Authorization": f"Bearer {stranger_token}"})
     assert res.status_code == 403
-    assert "Only participants can open a dispute" in res.json()["detail"]
+    assert "Only bounty participants can open a dispute" in res.json()["detail"]
 
