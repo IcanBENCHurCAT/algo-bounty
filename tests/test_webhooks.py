@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 from gateway.github import verify_webhook_signature, handle_pr_event
 from gateway.database import Bounty, Agent
 
@@ -23,7 +23,8 @@ def test_github_webhook_endpoint_invalid_sig(client):
                           headers={"X-GitHub-Event": "issues", "X-Hub-Signature-256": "sha256=invalid"})
         assert res.status_code == 403
 
-def test_handle_pr_merged_trustless(db_session):
+@pytest.mark.asyncio
+async def test_handle_pr_merged_trustless(db_session):
     # Create bounty in trustless mode (is_hitm=False)
     # Status must be 'claimed' or 'submitted' for merged PR to trigger payout
     db_session.add(Bounty(bounty_id="b_123", status="submitted", creator="C1", worker="W1", amount=1000, is_hitm=False, repo_url="https://github.com/owner/repo"))
@@ -45,10 +46,11 @@ def test_handle_pr_merged_trustless(db_session):
         }
     }
 
-    with patch("gateway.github.get_github_bot_token", return_value="fake_token"), \
-         patch("httpx.Client.post") as mock_post:
+    from unittest.mock import AsyncMock
+    with patch("gateway.github.get_github_bot_token", return_value=AsyncMock(return_value="fake_token")), \
+         patch("httpx.AsyncClient.post") as mock_post:
         mock_post.return_value = MagicMock(status_code=201)
-        handle_pr_event(db_session, payload)
+        await handle_pr_event(db_session, payload)
 
     bounty = db_session.query(Bounty).filter(Bounty.bounty_id == "b_123").first()
     assert bounty.status == "closed"
@@ -58,18 +60,17 @@ def test_handle_pr_merged_trustless(db_session):
     assert worker.karma == 35 # 30 + 5
 
 def test_github_webhook_endpoint_invalid_json(client):
-    with patch("gateway.routers.webhooks.validate_webhook", return_value=(True, "")):
-        res = client.post("/webhooks/github",
-                          content=b"invalid_json_garbage",
-                          headers={"X-GitHub-Event": "issues"})
-        assert res.status_code == 400
-        assert "Invalid JSON payload" in res.json()["reason"]
+    res = client.post("/webhooks/github",
+                        content=b"invalid_json_garbage",
+                        headers={"X-GitHub-Event": "issues"})
+    assert res.status_code == 400
+    assert "Invalid JSON payload" in res.json()["reason"]
 
-def test_github_webhook_events_dispatch(client, db_session):
+@pytest.mark.asyncio
+async def test_github_webhook_events_dispatch(client, db_session):
     # Mock handlers
-    with patch("gateway.routers.webhooks.validate_webhook", return_value=(True, "")), \
-         patch("gateway.routers.webhooks.handle_issue_event") as mock_issue, \
-         patch("gateway.routers.webhooks.handle_pr_event") as mock_pr:
+    with patch("gateway.routers.webhooks.handle_issue_event", new_callable=AsyncMock) as mock_issue, \
+         patch("gateway.routers.webhooks.handle_pr_event", new_callable=AsyncMock) as mock_pr:
          
         # 1. issues event
         res = client.post("/webhooks/github", json={"action": "opened"}, headers={"X-GitHub-Event": "issues"})

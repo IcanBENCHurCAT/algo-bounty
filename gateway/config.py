@@ -35,6 +35,18 @@ class Config:
         return self.get_secret("GITHUB_TOKEN")
 
     @property
+    def GITHUB_APP_ID(self) -> str:
+        return self.get_secret("GITHUB_APP_ID")
+
+    @property
+    def GITHUB_CLIENT_ID(self) -> str:
+        return self.get_secret("GITHUB_CLIENT_ID")
+
+    @property
+    def GITHUB_PRIVATE_KEY(self) -> str:
+        return self.get_secret("GITHUB_PRIVATE_KEY")
+
+    @property
     def PLATFORM_PRIVATE_KEY(self) -> str:
         return self.get_secret("PLATFORM_PRIVATE_KEY")
 
