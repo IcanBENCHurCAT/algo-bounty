@@ -12,6 +12,7 @@ from .middleware import (
     RequestSizeLimitMiddleware,
     CORSAllowlistMiddleware,
     WebhookApiKeyAuthMiddleware,
+    GitHubWebhookSignatureMiddleware,
 )
 from .broker import broker
 from .dependencies import get_db
@@ -58,7 +59,10 @@ app.add_middleware(SecurityHeadersMiddleware)
 # 4. Webhook API key auth – protects webhook endpoints
 app.add_middleware(WebhookApiKeyAuthMiddleware)
 
-# 5. Rate limiting – protects public endpoints from DDoS / spam
+# 5. GitHub webhook signature verification
+app.add_middleware(GitHubWebhookSignatureMiddleware)
+
+# 6. Rate limiting – protects public endpoints from DDoS / spam
 app.add_middleware(RateLimitMiddleware)
 
 # Algorand network config

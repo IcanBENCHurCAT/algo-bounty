@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from ..database import Bounty, Agent, GitHubPR, Notification
 from ..auth import get_current_user
 from ..dependencies import get_db
+from ..github import post_github_comment_and_labels, extract_bounty_ids
 from ..schemas import (
     BountyCreate, BountyClaim, WorkSubmit,
     WorkApprove, WorkReject, DisputeCreate
@@ -208,7 +209,7 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
     }
 
 @router.post("/{bounty_id}/claim", summary="Claim a bounty", description="Allows a worker to claim an open bounty. Validates karma requirements and processes on-chain claim if a signed transaction is provided.")
-def claim_bounty(
+async def claim_bounty(
     bounty_id: str,
     body: BountyClaim,
     db: Session = Depends(get_db),
@@ -253,10 +254,24 @@ def claim_bounty(
     db.add(notif)
     db.commit()
 
+    # GitHub Update
+    repo_url, issue_num = _get_bounty_github_info(b)
+    if repo_url and issue_num:
+        comment_text = (
+            f"🤝 **Bounty Claimed!**\n\n"
+            f"Agent `{current_user}` has claimed this bounty on the AlgoBounty Dashboard.\n"
+            f"The bounty status has transitioned to **CLAIMED**."
+        )
+        await post_github_comment_and_labels(
+            repo_url, issue_num,
+            comment=comment_text,
+            add_labels=["bounty:claimed"]
+        )
+
     return {"bounty_id": bounty_id, "status": "claimed", "worker": current_user, "tx_id": tx_id}
 
 @router.post("/{bounty_id}/submit", summary="Submit work for a bounty", description="Allows the claiming worker to submit their solution (PR URL). Updates bounty status to 'submitted'.")
-def submit_work(
+async def submit_work(
     bounty_id: str,
     body: WorkSubmit,
     db: Session = Depends(get_db),
@@ -310,10 +325,25 @@ def submit_work(
         "tx_id": tx_id
     })
 
+    # GitHub Update
+    repo_url, issue_num = _get_bounty_github_info(b)
+    if repo_url and issue_num:
+        comment_text = (
+            f"🚀 **Solution Submitted!**\n\n"
+            f"Agent `{current_user}` has submitted their work: {body.pr_url}\n"
+            f"The bounty status is now **SUBMITTED**."
+        )
+        await post_github_comment_and_labels(
+            repo_url, issue_num,
+            comment=comment_text,
+            add_labels=["bounty:submitted"],
+            remove_labels=["bounty:claimed"]
+        )
+
     return {"bounty_id": bounty_id, "status": "submitted", "tx_id": tx_id}
 
 @router.post("/{bounty_id}/approve", summary="Approve submitted work", description="Allows the creator to approve the submitted work, closing the bounty and releasing funds. Awards +10 karma to worker and +5 to creator.")
-def approve_work(
+async def approve_work(
     bounty_id: str,
     body: WorkApprove,
     db: Session = Depends(get_db),
@@ -364,10 +394,25 @@ def approve_work(
     db.add(notif)
     db.commit()
 
+    # GitHub Update
+    repo_url, issue_num = _get_bounty_github_info(b)
+    if repo_url and issue_num:
+        comment_text = (
+            f"🎉 **Bounty Completed & Funds Released!**\n\n"
+            f"Creator `{current_user}` has approved the work. "
+            f"The escrow has been closed and funds released to `{b.worker}`."
+        )
+        await post_github_comment_and_labels(
+            repo_url, issue_num,
+            comment=comment_text,
+            add_labels=["bounty:completed"],
+            remove_labels=["bounty:submitted", "bounty:claimed"]
+        )
+
     return {"bounty_id": bounty_id, "status": "closed", "payout_type": "PAYOUT", "tx_id": tx_id}
 
 @router.post("/{bounty_id}/reject", summary="Reject submitted work", description="Allows the creator to reject submitted work. Increments rejection count and applies progressive karma penalties to the worker.")
-def reject_work(
+async def reject_work(
     bounty_id: str,
     body: WorkReject,
     db: Session = Depends(get_db),
@@ -422,10 +467,25 @@ def reject_work(
         "tx_id": tx_id
     })
 
+    # GitHub Update
+    repo_url, issue_num = _get_bounty_github_info(b)
+    if repo_url and issue_num:
+        comment_text = (
+            f"❌ **Solution Rejected**\n\n"
+            f"Creator `{current_user}` has rejected the submitted solution.\n"
+            f"**Reason**: {body.reason}\n"
+            f"Bounty status: **REJECTED** (Worker can resubmit)."
+        )
+        await post_github_comment_and_labels(
+            repo_url, issue_num,
+            comment=comment_text,
+            remove_labels=["bounty:submitted"]
+        )
+
     return {"bounty_id": bounty_id, "status": "rejected", "rejection_count": b.rejection_count, "tx_id": tx_id}
 
 @router.post("/{bounty_id}/dispute", summary="Open a dispute", description="Allows either the creator or the worker to open a dispute if the work is in submitted or rejected state.")
-def dispute_work(
+async def dispute_work(
     bounty_id: str,
     body: DisputeCreate,
     db: Session = Depends(get_db),
@@ -466,7 +526,37 @@ def dispute_work(
         "tx_id": tx_id
     })
 
+    # GitHub Update
+    repo_url, issue_num = _get_bounty_github_info(b)
+    if repo_url and issue_num:
+        comment_text = (
+            f"⚠️ **Dispute Opened**\n\n"
+            f"Participant `{current_user}` has opened a dispute.\n"
+            f"**Reason**: {body.reason}\n"
+            f"Bounty status: **DISPUTED**."
+        )
+        await post_github_comment_and_labels(
+            repo_url, issue_num,
+            comment=comment_text,
+            add_labels=["bounty:disputed"]
+        )
+
     return {"bounty_id": bounty_id, "status": "disputed", "tx_id": tx_id}
+
+def _get_bounty_github_info(bounty: Bounty) -> tuple[Optional[str], Optional[int]]:
+    """Helper to extract GitHub owner/repo and issue number from bounty."""
+    if not bounty.repo_url:
+        return None, None
+
+    # Try to extract issue number from bounty_id (b_123)
+    issue_num = None
+    if bounty.bounty_id.startswith("b_"):
+        try:
+            issue_num = int(bounty.bounty_id[2:])
+        except ValueError:
+            pass
+
+    return bounty.repo_url, issue_num
 
 @router.get("/{bounty_id}/onchain", summary="Poll on-chain status", description="Retrieve the current status of the bounty's escrow application directly from the Algorand blockchain.")
 def get_bounty_onchain(bounty_id: str, db: Session = Depends(get_db)):
