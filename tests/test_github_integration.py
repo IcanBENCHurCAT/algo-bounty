@@ -26,7 +26,8 @@ async def test_oidc_verify_endpoint_success(client):
         assert response.json()["status"] == "verified"
         assert response.json()["payload"] == mock_payload
 
-def test_handle_issue_event(db_session):
+@pytest.mark.asyncio
+async def test_handle_issue_event(db_session):
     payload = {
         "action": "opened",
         "issue": {
@@ -41,17 +42,18 @@ def test_handle_issue_event(db_session):
         }
     }
 
-    with patch("gateway.github.get_github_bot_token", return_value="fake_token"), \
-         patch("httpx.Client.post") as mock_post:
+    with patch("gateway.github.get_github_bot_token", return_value=AsyncMock(return_value="fake_token")), \
+         patch("httpx.AsyncClient.post") as mock_post:
         mock_post.return_value = MagicMock(status_code=201)
-        handle_issue_event(db_session, payload)
+        await handle_issue_event(db_session, payload)
 
     bounty = db_session.query(Bounty).filter(Bounty.bounty_id == "b_101").first()
     assert bounty is not None
     assert bounty.amount == 5000000
     assert bounty.status == "pending_payment"
 
-def test_handle_pr_event_claim(db_session):
+@pytest.mark.asyncio
+async def test_handle_pr_event_claim(db_session):
     # Create bounty
     db_session.add(Bounty(bounty_id="b_202", status="open", creator="C1", amount=1000, repo_url="https://github.com/owner/repo"))
     db_session.commit()
@@ -70,10 +72,10 @@ def test_handle_pr_event_claim(db_session):
         }
     }
 
-    with patch("gateway.github.get_github_bot_token", return_value="fake_token"), \
-         patch("httpx.Client.post") as mock_post:
+    with patch("gateway.github.get_github_bot_token", return_value=AsyncMock(return_value="fake_token")), \
+         patch("httpx.AsyncClient.post") as mock_post:
         mock_post.return_value = MagicMock(status_code=201)
-        handle_pr_event(db_session, payload)
+        await handle_pr_event(db_session, payload)
 
     bounty = db_session.query(Bounty).filter(Bounty.bounty_id == "b_202").first()
     assert bounty.status == "claimed"

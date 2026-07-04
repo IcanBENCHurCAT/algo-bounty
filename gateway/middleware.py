@@ -161,3 +161,51 @@ class WebhookApiKeyAuthMiddleware(BaseHTTPMiddleware):
             )
 
         return await call_next(request)
+
+
+# ── GitHub Webhook Signature Verification ──────────────────────
+
+class GitHubWebhookSignatureMiddleware(BaseHTTPMiddleware):
+    """Verify GitHub webhook signature for requests to /webhooks/github."""
+
+    async def dispatch(self, request: Request, call_next) -> Response:
+        if request.url.path != "/webhooks/github":
+            return await call_next(request)
+
+        # 1. Verification is only required if GITHUB_WEBHOOK_SECRET is set
+        from .config import settings
+        from .github import verify_webhook_signature
+        import json
+
+        secret = settings.GITHUB_WEBHOOK_SECRET
+        signature = request.headers.get("X-Hub-Signature-256", "")
+
+        # Read raw body
+        body_bytes = await request.body()
+
+        # 2. Verify signature
+        if secret:
+            if not verify_webhook_signature(body_bytes, signature, secret):
+                return Response(
+                    content='{"status": "rejected", "reason": "Invalid signature"}',
+                    status_code=403,
+                    media_type="application/json",
+                )
+
+        # 3. Store body and parsed payload in request state for downstream use
+        request.state.github_body = body_bytes
+        try:
+            request.state.github_payload = json.loads(body_bytes.decode("utf-8"))
+        except Exception:
+            return Response(
+                content='{"status": "rejected", "reason": "Invalid JSON payload"}',
+                status_code=400,
+                media_type="application/json",
+            )
+
+        # 4. We need to override the request.body() method so that the router can read it again if needed,
+        # but since we're using request.state, we can just update the router to use request.state.
+        # Alternatively, we can use a custom Request subclass or wrap the call.
+        # For FastAPI, the simplest is often request.state.
+
+        return await call_next(request)

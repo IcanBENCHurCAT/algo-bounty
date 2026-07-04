@@ -76,10 +76,13 @@ ${GCLOUD_PATH} run deploy "${SERVICE_NAME}" \
   --set-env-vars="SUPABASE_URL=${SUPABASE_URL}" \
   --set-env-vars="NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}" \
   --set-env-vars="NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}" \
+  --set-env-vars="GITHUB_APP_ID=4213538" \
+  --set-env-vars="GITHUB_CLIENT_ID=Iv23liTViZTezzWtUaul" \
   --set-secrets="SECRET_KEY=algobounty_secret_key" \
   --set-secrets="PLATFORM_PRIVATE_KEY=algobounty_platform_private_key" \
   --set-secrets="GITHUB_WEBHOOK_SECRET=algobounty_github_webhook_secret" \
-  --set-secrets="SUPABASE_SERVICE_ROLE_KEY=algobounty_supabase_service_role_key"
+  --set-secrets="SUPABASE_SERVICE_ROLE_KEY=algobounty_supabase_service_role_key" \
+  --set-secrets="GITHUB_PRIVATE_KEY=algobounty-github-private-key:latest"
 
 echo ""
 echo "✅ AlgoBounty Gateway Deployment Complete!"
