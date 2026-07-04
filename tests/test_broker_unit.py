@@ -71,7 +71,8 @@ async def test_broker_connection_tracking_and_cleanup():
     await asyncio.sleep(0.05)
     
     # Check cleanup stale
-    broker.listeners["stale_ip"] = {"queues": [], "registered_at": 0}
+    import time
+    broker.listeners["stale_ip"] = {"queues": [], "registered_at": time.monotonic() - 100}
     # Monotonic subtraction should be large
     await broker._cleanup_stale()
     assert "stale_ip" not in broker.listeners
@@ -79,7 +80,7 @@ async def test_broker_connection_tracking_and_cleanup():
     # Start cleanup background task loop
     broker.CLEANUP_INTERVAL_SECONDS = 0.01
     await broker.start_cleanup()
-    broker.listeners["stale_ip2"] = {"queues": [], "registered_at": 0}
+    broker.listeners["stale_ip2"] = {"queues": [], "registered_at": time.monotonic() - 100}
     await asyncio.sleep(0.05)
     assert "stale_ip2" not in broker.listeners
     
