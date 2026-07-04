@@ -44,8 +44,7 @@ def test_mark_notification_read(client, seeded_agents, db_session):
 
 def test_events_stream_endpoint(client):
     async def mock_sub(*args, **kwargs):
-        if False:
-            yield
+        yield "event: test\n\n"
     with patch("gateway.routers.events.broker.subscribe", side_effect=mock_sub):
         res = client.get("/api/v1/events")
         assert res.status_code == 200

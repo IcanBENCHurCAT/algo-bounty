@@ -102,3 +102,44 @@ def test_rate_limiter_sse_connections():
             res = client.get("/api/v1/events")
             assert res.status_code == 429
             assert "Rate limit exceeded" in res.json()["error"]
+
+def test_rate_limiter_more_rules():
+    app = FastAPI()
+    app.add_middleware(RateLimitMiddleware)
+    
+    @app.get("/api/v1/non-matching-route")
+    def no_match():
+        return {"status": "ok"}
+        
+    @app.post("/api/v1/events")
+    def post_events():
+        return {"status": "ok"}
+        
+    @app.get("/api/v1/events")
+    def sse_ok():
+        return {"status": "ok"}
+        
+    client = TestClient(app)
+    
+    # 1. No rule matched
+    with patch.dict(os.environ, {"TESTING": "False"}):
+        res = client.get("/api/v1/non-matching-route")
+        assert res.status_code == 200
+
+    from gateway.rate_limiter import _RULES_COMPILED
+    import re
+    sse_rule = (re.compile(r"^/api/v1/events$"), 2, 60, "GET", "connections")
+    
+    with patch("gateway.rate_limiter._RULES_COMPILED", [sse_rule]):
+        with patch.dict(os.environ, {"TESTING": "False"}):
+            _connection_log.clear()
+            
+            # 2. Method mismatch (rules say GET only, we send POST)
+            res = client.post("/api/v1/events")
+            assert res.status_code == 200
+            
+            # 3. Connection is allowed (count increments and decrements correctly)
+            res = client.get("/api/v1/events")
+            assert res.status_code == 200
+            assert _connection_log.get("testclient", 0) == 0 # decremented back to 0 in finally block
+
