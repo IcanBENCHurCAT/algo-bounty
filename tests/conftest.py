@@ -8,6 +8,7 @@ from unittest.mock import patch
 # Set environment before importing gateway modules
 os.environ["ALGORAND_NETWORK"] = "sandbox"
 os.environ["SECRET_KEY"] = "test_dummy_secret_key_at_least_32_characters_long"
+os.environ["TESTING"] = "True"
 
 from gateway.main import app, get_db
 from gateway.database import Base, Agent
