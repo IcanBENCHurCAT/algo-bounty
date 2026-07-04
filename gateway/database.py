@@ -1,20 +1,21 @@
 """
 AlgoBounty database module — Supabase PostgreSQL as the primary database.
 
-Uses the engine, models, and DDL from supabase_migration.py.
-SQLite is available only as an explicit local-dev fallback when
-SUPABASE_URL is not set.
+Retrieves the database URL from the DATABASE_URL environment variable.
+If the URL starts with "postgres://" (Supabase/Heroku default style),
+automatically replaces it with "postgresql://" to comply with
+SQLAlchemy 2.0 standards.
+
+SQLite fallback (sqlite:///./algobounty.db) is used when DATABASE_URL
+is not set or explicitly starts with "sqlite".
+
+When using PostgreSQL, connect_args (e.g. check_same_thread=False) is
+never applied — that flag is SQLite-specific.
 
 Exports:
     init_db, SessionLocal, Base, engine, sync_engine, async_engine
     Agent, Bounty, GitHubPR, Notification
 """
-
-
-# ---------------------------------------------------------------------------
-# Import the canonical Supabase implementation (reference DDL, models,
-# engine builder, and async helpers).
-# ---------------------------------------------------------------------------
 
 from .supabase_migration import (
     Base,

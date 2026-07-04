@@ -6,6 +6,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .database import init_db
 from .rate_limiter import RateLimitMiddleware
+from .config import settings
 from .algod_client import NODE_ENV, is_sandbox
 from .middleware import (
     SecurityHeadersMiddleware,
@@ -67,6 +68,8 @@ app.add_middleware(RateLimitMiddleware)
 # Algorand network config
 sandbox_active = is_sandbox()
 print(f"[WEB3] Algorand network: {NODE_ENV} (sandbox={sandbox_active})")
+print(f"[WEB3] Algorand Node: {settings.ALGOD_ADDRESS}")
+print(f"[WEB3] Algorand Indexer: {settings.INDEXER_ADDRESS}")
 
 # ── Health Check ─────────────────────────────────────────────────
 

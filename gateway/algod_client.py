@@ -14,75 +14,19 @@ from algosdk.v2client import algod, indexer
 from algosdk import account
 from .config import settings
 
-# --- Tier 1: Sandbox (local dev only) ---
-SANDBOX_ALGOD = settings.get_secret("ALGOD_ADDRESS", "http://10.0.0.67:4001")
-SANDBOX_TOKEN = settings.get_secret("ALGOD_TOKEN",
-    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
-SANDBOX_INDEXER = settings.get_secret("INDEXER_ADDRESS", "http://10.0.0.67:8980")
-SANDBOX_INDEXER_TOKEN = settings.get_secret("INDEXER_TOKEN", SANDBOX_TOKEN)
-
-# --- Tier 2: Algorand Testnet (production fallback) ---
-TESTNET_ALGOD = settings.get_secret(
-    "TESTNET_ALGOD_URL", "https://testnet-api.algonode.cloud"
-)
-TESTNET_INDEXER = settings.get_secret(
-    "TESTNET_INDEXER_URL", "https://testnet-indexer.algonode.cloud"
-)
-TESTNET_TOKEN = settings.get_secret("TESTNET_ALGOD_TOKEN", "")  # public, no auth
-
-# --- Tier 3: Mainnet (future) ---
-MAINNET_ALGOD = settings.get_secret(
-    "MAINNET_ALGOD_URL", "https://mainnet-api.algonode.cloud"
-)
-MAINNET_INDEXER = settings.get_secret(
-    "MAINNET_INDEXER_URL", "https://mainnet-indexer.algonode.cloud"
-)
-MAINNET_TOKEN = settings.get_secret("MAINNET_ALGOD_TOKEN", "")  # public, no auth
-
 # Current active network: sandbox | testnet | mainnet
-# Default to testnet for production deployments
 NODE_ENV = settings.ALGORAND_NETWORK
-
-# --- Network config lookup ---
-_NETWORK_CONFIG = {
-    "sandbox": {
-        "algod": SANDBOX_ALGOD,
-        "indexer": SANDBOX_INDEXER,
-        "algod_token": SANDBOX_TOKEN,
-        "indexer_token": SANDBOX_INDEXER_TOKEN,
-    },
-    "testnet": {
-        "algod": TESTNET_ALGOD,
-        "indexer": TESTNET_INDEXER,
-        "algod_token": TESTNET_TOKEN,
-        "indexer_token": TESTNET_TOKEN,
-    },
-    "mainnet": {
-        "algod": MAINNET_ALGOD,
-        "indexer": MAINNET_INDEXER,
-        "algod_token": MAINNET_TOKEN,
-        "indexer_token": MAINNET_TOKEN,
-    },
-}
-
-
-def _network_cfg():
-    """Get config dict for the active network."""
-    return _NETWORK_CONFIG.get(NODE_ENV, _NETWORK_CONFIG["testnet"])
-
 
 # --- Client factories ---
 
 def get_algod_client():
     """Return the Algod client for the active network."""
-    cfg = _network_cfg()
-    return algod.AlgodClient(cfg["algod_token"], cfg["algod"])
+    return algod.AlgodClient(settings.ALGOD_TOKEN, settings.ALGOD_ADDRESS)
 
 
 def get_indexer_client():
     """Return the Indexer client for the active network."""
-    cfg = _network_cfg()
-    return indexer.IndexerClient(cfg["indexer_token"], cfg["indexer"])
+    return indexer.IndexerClient(settings.INDEXER_TOKEN, settings.INDEXER_ADDRESS)
 
 
 def is_sandbox():
