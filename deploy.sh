@@ -3,8 +3,8 @@
 # AlgoBounty Gateway — GCP Cloud Run Deployment
 #
 # Deploys the AlgoBounty FastAPI gateway to Cloud Run.
-# Uses Supabase for database (not Cloud SQL).
-# All sensitive values are pulled from Secret Manager.
+# Uses Supabase for database (PostgreSQL via Supabase).
+# All sensitive values are pulled from GCP Secret Manager.
 #
 # Usage: ./deploy.sh
 # ═══════════════════════════════════════════════════════════════════
@@ -40,8 +40,14 @@ GITHUB_WEBHOOK_SECRET="$(${GCLOUD_PATH} secrets versions access latest \
 SUPABASE_SERVICE_ROLE_KEY="$(${GCLOUD_PATH} secrets versions access latest \
   --secret=algobounty_supabase_service_role_key --project="${PROJECT_ID}" 2>/dev/null)" || SUPABASE_SERVICE_ROLE_KEY=""
 
+SUPABASE_PUBLISHABLE_KEY="$(${GCLOUD_PATH} secrets versions access latest \
+  --secret=algobounty_supabase_publishable_key --project="${PROJECT_ID}" 2>/dev/null)" || SUPABASE_PUBLISHABLE_KEY=""
+
 DATABASE_URL="$(${GCLOUD_PATH} secrets versions access latest \
   --secret=algobounty-db-url --project="${PROJECT_ID}" 2>/dev/null)" || DATABASE_URL=""
+
+GITHUB_PRIVATE_KEY="$(${GCLOUD_PATH} secrets versions access latest \
+  --secret=algobounty_github_private_key --project="${PROJECT_ID}" 2>/dev/null)" || GITHUB_PRIVATE_KEY=""
 
 if [ -z "${SECRET_KEY}" ]; then
   echo "⚠️  SECRET_KEY not found in Secret Manager — setting placeholder"
@@ -59,8 +65,6 @@ echo ""
 echo "🚀 Deploying to Cloud Run…"
 
 SUPABASE_URL="${SUPABASE_URL:-https://mtivcwposaunlsiefwre.supabase.co}"
-NEXT_PUBLIC_SUPABASE_URL="${NEXT_PUBLIC_SUPABASE_URL:-${SUPABASE_URL}}"
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY="${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:-}"
 
 ${GCLOUD_PATH} run deploy "${SERVICE_NAME}" \
   --project="${PROJECT_ID}" \
@@ -77,15 +81,16 @@ ${GCLOUD_PATH} run deploy "${SERVICE_NAME}" \
   --automatic-scaling-min-instances=0 \
   --set-env-vars="ALGORAND_NETWORK=testnet" \
   --set-env-vars="SUPABASE_URL=${SUPABASE_URL}" \
-  --set-env-vars="NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}" \
-  --set-env-vars="NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}" \
+  --set-env-vars="SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}" \
+  --set-env-vars="NEXT_PUBLIC_SUPABASE_URL=${SUPABASE_URL}" \
+  --set-env-vars="NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${SUPA…KEY}" \
   --set-env-vars="GITHUB_APP_ID=4213538" \
   --set-env-vars="GITHUB_CLIENT_ID=Iv23liTViZTezzWtUaul" \
-  --set-secrets="SECRET_KEY=algobounty_secret_key" \
-  --set-secrets="PLATFORM_PRIVATE_KEY=algobounty_platform_private_key" \
-  --set-secrets="GITHUB_WEBHOOK_SECRET=algobounty_github_webhook_secret" \
-  --set-secrets="SUPABASE_SERVICE_ROLE_KEY=algobounty_supabase_service_role_key" \
-  --set-secrets="GITHUB_PRIVATE_KEY=algobounty-github-private-key:latest"
+  --set-secrets="SECRET_KEY=algobo…test" \
+  --set-secrets="PLATFORM_PRIVATE_KEY=algobo…test" \
+  --set-secrets="GITHUB_WEBHOOK_SECRET=algobo…test" \
+  --set-secrets="SUPABASE_SERVICE_ROLE_KEY=algobo…test" \
+  --set-secrets="GITHUB_PRIVATE_KEY=algobo…test" \
   --set-secrets="DATABASE_URL=algobounty-db-url:latest"
 
 echo ""
