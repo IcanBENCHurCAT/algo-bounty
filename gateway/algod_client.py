@@ -367,15 +367,16 @@ def deploy_escrow_on_testnet():
         params.fee = 2000  # Minimum fee
         params.flat_fee = True
 
-        from algosdk.transaction import ApplicationCreateTxn, OnComplete
+        from algosdk.transaction import ApplicationCreateTxn, OnComplete, StateSchema
         create_txn = ApplicationCreateTxn(
             sender=platform_account.address,
             sp=params,
             on_complete=OnComplete.NoOpOC,
-            app_args=[],
-            program=compiled_program,
             approval_program=compiled_program,
             clear_program=compiled_program,
+            global_schema=StateSchema(0, 0),
+            local_schema=StateSchema(0, 0),
+            app_args=[],
         )
 
         # Step 4: Sign and send
@@ -384,7 +385,7 @@ def deploy_escrow_on_testnet():
         result["tx_id"] = tx_id
 
         # Step 5: Wait for confirmation
-        from algosdk.waiting import wait_for_confirmation
+        from algosdk.transaction import wait_for_confirmation
         pending_info = wait_for_confirmation(client, tx_id, 4)
         if pending_info:
             app_id = pending_info.get("application-index")

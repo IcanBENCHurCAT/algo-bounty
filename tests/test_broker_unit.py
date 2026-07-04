@@ -44,3 +44,49 @@ async def test_broker_connection_limit():
         async for _ in broker.subscribe("1.1.1.1"):
             pass
     assert exc.value.status_code == 429
+
+@pytest.mark.asyncio
+async def test_broker_connection_tracking_and_cleanup():
+    broker = EventBroker()
+    
+    # Check active counts
+    assert broker.get_active_connections("1.1.1.1") == 0
+    assert broker.get_total_active_connections() == 0
+    
+    # Subscribe one connection
+    gen = broker.subscribe("1.1.1.1")
+    task = asyncio.create_task(gen.__anext__())
+    await asyncio.sleep(0.05)
+    
+    assert broker.get_active_connections("1.1.1.1") == 1
+    assert broker.get_total_active_connections() == 1
+    
+    # Stop connection and clean up
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+        
+    await asyncio.sleep(0.05)
+    
+    # Check cleanup stale
+    broker.listeners["stale_ip"] = {"queues": [], "registered_at": 0}
+    # Monotonic subtraction should be large
+    await broker._cleanup_stale()
+    assert "stale_ip" not in broker.listeners
+    
+    # Start cleanup background task loop
+    broker.CLEANUP_INTERVAL_SECONDS = 0.01
+    await broker.start_cleanup()
+    broker.listeners["stale_ip2"] = {"queues": [], "registered_at": 0}
+    await asyncio.sleep(0.05)
+    assert "stale_ip2" not in broker.listeners
+    
+    # Cancel cleanup task to finish nicely
+    broker.cleanup_task.cancel()
+    try:
+        await broker.cleanup_task
+    except asyncio.CancelledError:
+        pass
+
