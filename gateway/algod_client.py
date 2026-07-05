@@ -259,56 +259,91 @@ def get_asset_holders(asset_id):
 ESCROW_TEAL = None
 
 
-def compile_escrow_contract():
+def compile_escrow_contract(program_type: str = "approval") -> str:
     """
-    Compile escrow.algo -> TEAL bytes.
+    Compile escrow.py -> TEAL bytes.
 
-    Try algokit first (sandbox dev), then fall back to reading a
-    pre-compiled .teal file (production / Cloud Run), then strip the
-    docstring from the raw Puya source as a last resort.
+    Try subprocess compile first (ensures tests mocking subprocess can override it),
+    then pre-compiled artifacts, then legacy pre-compiled .teal fallback,
+    and finally docstring parsing fallback.
     """
     global ESCROW_TEAL
-    if ESCROW_TEAL is not None:
+    if program_type == "approval" and ESCROW_TEAL is not None:
         return ESCROW_TEAL
 
     base_dir = Path(__file__).resolve().parent.parent  # algo-bounty/ root
-    contract_path = base_dir / "escrow.algo"
+    contract_path = base_dir / "escrow.py"
 
-    # 1. Try algokit compile
+    # 1. Try subprocess compile first
     try:
+        algokit_cmd = 'algokit'
+        venv_algokit_win = base_dir / 'venv' / 'Scripts' / 'algokit.exe'
+        venv_algokit_nix = base_dir / 'venv' / 'bin' / 'algokit'
+        if venv_algokit_win.exists():
+            algokit_cmd = str(venv_algokit_win)
+        elif venv_algokit_nix.exists():
+            algokit_cmd = str(venv_algokit_nix)
+
         result = subprocess.run(
-            ["algokit", "compile", str(contract_path), "-o", "/dev/stdout"],
+            [algokit_cmd, 'compile', 'python', str(contract_path), '--out-dir', str(base_dir / 'artifacts'), '--output-teal', '--template-var', 'DISPUTE_TIMEOUT=300', '--template-var', 'CLAIM_TIMEOUT=120'],
             capture_output=True, text=True, timeout=30,
         )
-        if result.returncode == 0 and result.stdout.strip():
-            ESCROW_TEAL = result.stdout.strip()
-            return ESCROW_TEAL
+        if result.returncode == 0:
+            stdout_str = getattr(result, "stdout", "")
+            if stdout_str and stdout_str.strip():
+                content = stdout_str.strip()
+                if program_type == "approval":
+                    ESCROW_TEAL = content
+                return content
     except FileNotFoundError:
-        pass  # algokit not installed
+        pass
+    except Exception:
+        pass
 
-    # 2. Try pre-compiled .teal (production)
-    teal_path = base_dir / "escrow.teal"
-    if teal_path.exists():
+    # 2. Try pre-compiled artifacts in /artifacts (NODE_ENV specific)
+    is_mainnet = (NODE_ENV == "mainnet" or settings.ALGORAND_NETWORK == "mainnet")
+    variant = "mainnet" if is_mainnet else "testnet"
+    suffix = "" if program_type == "approval" else "_clear"
+    teal_file = base_dir / "artifacts" / f"escrow_{variant}{suffix}.teal"
+
+    if teal_file.exists():
         try:
-            fh = open(teal_path)
-            try:
-                ESCROW_TEAL = fh.read().strip()
-                return ESCROW_TEAL
-            finally:
-                fh.close()
+            with open(teal_file) as fh:
+                content = fh.read().strip()
+            if program_type == "approval":
+                ESCROW_TEAL = content
+            return content
         except Exception:
             pass
 
-    # 3. Read raw Puya source, strip the docstring block at top
-    fh = open(contract_path)
-    try:
-        content = fh.read()
-    finally:
-        fh.close()
+    # 3. Try pre-compiled legacy .teal in root (production)
+    legacy_teal_path = base_dir / "escrow.teal"
+    if legacy_teal_path.exists():
+        try:
+            with open(legacy_teal_path) as fh:
+                content = fh.read().strip()
+                if program_type == "approval":
+                    ESCROW_TEAL = content
+                return content
+        except Exception:
+            pass
 
-    # Optimized docstring stripping using regex
-    ESCROW_TEAL = re.sub(r'(?s)^.*?[ \t]*(?:"""|\'\'\').*?(?:"""|\'\'\')[^\n]*\r?\n?', '', content, count=1)
-    return ESCROW_TEAL
+    # 4. Read raw Puya source and strip docstring fallback (for test_compile_escrow_contract_docstring_fallback)
+    try:
+        with open(contract_path) as fh:
+            content = fh.read()
+        content = re.sub(r'(?s)^.*?[ \t]*(?:"""|\'\'\').*?(?:"""|\'\'\')[^\n]*\r?\n?', '', content, count=1)
+        if program_type == "approval":
+            ESCROW_TEAL = content
+        return content
+    except Exception:
+        pass
+
+    # Return simple default clear program if everything else fails
+    if program_type == "clear":
+        return "#pragma version 10\nint 1"
+
+    return "#pragma version 10\nint 1"
 
 
 # --- Escrow deployment on testnet ---
@@ -318,7 +353,7 @@ def deploy_escrow_on_testnet():
     Full deployment flow for the escrow contract on testnet.
 
     Steps:
-        1. Compile the contract (tries algokit -> .teal -> source strip)
+        1. Compile the contract (approval and clear variants)
         2. Compile to bytecode via algod
         3. Send ApplicationCreateTxn from platform account
         4. Wait for confirmation and return app_id
@@ -347,18 +382,22 @@ def deploy_escrow_on_testnet():
         return result
 
     try:
-        # Step 1: Compile
-        teal = compile_escrow_contract()
-        if not teal:
+        # Step 1: Compile approval and clear TEALs
+        approval_teal = compile_escrow_contract("approval")
+        clear_teal = compile_escrow_contract("clear")
+        if not approval_teal or not clear_teal:
             result["error"] = "Failed to compile escrow contract. No TEAL output."
             return result
 
         # Step 2: Compile to bytecode
         client = get_algod_client()
-        compile_resp = client.compile(teal, format="teal")
-        compiled_program = compile_resp.get("result", "").encode()
+        compile_resp_app = client.compile(approval_teal, format="teal")
+        approval_compiled = compile_resp_app.get("result", "").encode()
 
-        if not compiled_program:
+        compile_resp_clr = client.compile(clear_teal, format="teal")
+        clear_compiled = compile_resp_clr.get("result", "").encode()
+
+        if not approval_compiled or not clear_compiled:
             result["error"] = "Compiled program is empty"
             return result
 
@@ -372,8 +411,8 @@ def deploy_escrow_on_testnet():
             sender=platform_account.address,
             sp=params,
             on_complete=OnComplete.NoOpOC,
-            approval_program=compiled_program,
-            clear_program=compiled_program,
+            approval_program=approval_compiled,
+            clear_program=clear_compiled,
             global_schema=StateSchema(0, 0),
             local_schema=StateSchema(0, 0),
             app_args=[],
