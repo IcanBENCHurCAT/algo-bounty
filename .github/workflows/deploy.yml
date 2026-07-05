@@ -63,10 +63,31 @@ jobs:
           --min-scale=0 \
           --set-env-vars="ALGORAND_NETWORK=testnet" \
           --set-env-vars="SUPABASE_URL=${SUPABASE_URL}" \
-          --set-secrets="SECRET_KEY=projects/${PROJECT_ID}/secrets/algobounty_secret_key:latest" \
+          --set-secrets="SECRET_KEY=projects/${PROJECT_ID}/secrets/algobounty-jwt-secret:latest" \
           --set-secrets="PLATFORM_PRIVATE_KEY=projects/${PROJECT_ID}/secrets/algobounty_platform_private_key:latest" \
-          --set-secrets="GITHUB_WEBHOOK_SECRET=projects/${PROJECT_ID}/secrets/algobounty_github_webhook_secret:latest" \
-          --set-secrets="SUPABASE_SERVICE_ROLE_KEY=projects/${PROJECT_ID}/secrets/algobounty_supabase_service_role_key:latest"
+          --set-secrets="GITHUB_WEBHOOK_SECRET=projects/${PROJECT_ID}/secrets/algobounty-github-webhook-secret:latest" \
+          --set-secrets="SUPABASE_SERVICE_ROLE_KEY=projects/${PROJECT_ID}/secrets/algobounty_supabase_service_role_key:latest" \
+          --set-secrets="GITHUB_PRIVATE_KEY=projects/${PROJECT_ID}/secrets/algobounty-github-private-key:latest"
+
+        # Deploy Indexer to Cloud Run
+        gcloud run deploy algo-bounty-indexer \
+          --project="${PROJECT_ID}" \
+          --region="${REGION}" \
+          --image="${IMAGE_TAG}" \
+          --command="python" \
+          --args="gateway/worker.py" \
+          --memory=256Mi \
+          --cpu=0.25 \
+          --min-instances=1 \
+          --max-instances=1 \
+          --no-cpu-throttling \
+          --set-env-vars="ALGORAND_NETWORK=testnet" \
+          --set-env-vars="SUPABASE_URL=${SUPABASE_URL}" \
+          --set-secrets="SECRET_KEY=projects/${PROJECT_ID}/secrets/algobounty-jwt-secret:latest" \
+          --set-secrets="PLATFORM_PRIVATE_KEY=projects/${PROJECT_ID}/secrets/algobounty_platform_private_key:latest" \
+          --set-secrets="GITHUB_WEBHOOK_SECRET=projects/${PROJECT_ID}/secrets/algobounty-github-webhook-secret:latest" \
+          --set-secrets="SUPABASE_SERVICE_ROLE_KEY=projects/${PROJECT_ID}/secrets/algobounty_supabase_service_role_key:latest" \
+          --set-secrets="GITHUB_PRIVATE_KEY=projects/${PROJECT_ID}/secrets/algobounty-github-private-key:latest"
 
         echo "gateway-url=$(gcloud run services describe ${GATEWAY_SERVICE} --project="${PROJECT_ID}" --region="${REGION}" --format='value(status.url)')" >> $GITHUB_OUTPUT
 
