@@ -142,5 +142,19 @@ async def indexer_worker():
     finally:
         print("[WORKER] Indexer polling worker stopped.")
 
+from fastapi import FastAPI
+import uvicorn
+
+worker_app = FastAPI(title="AlgoBounty Indexer Worker")
+
+@worker_app.get("/health")
+def health():
+    return {"status": "ok", "message": "Indexer worker is active."}
+
+@worker_app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(indexer_worker())
+
 if __name__ == "__main__":
-    asyncio.run(indexer_worker())
+    port = int(os.environ.get("PORT", 8080))
+    uvicorn.run(worker_app, host="0.0.0.0", port=port)
