@@ -36,7 +36,8 @@ COPY --from=builder /install /usr/local
 
 # Copy application source and assets
 COPY gateway/ ./gateway/
-COPY escrow.algo ./escrow.algo
+COPY escrow.py ./escrow.py
+COPY artifacts/ ./artifacts/
 COPY gateway/alembic.ini ./gateway/alembic.ini
 COPY gateway/migrations/ ./gateway/migrations/
 
