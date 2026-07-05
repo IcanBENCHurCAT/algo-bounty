@@ -116,10 +116,12 @@ def test_get_asset_holders_error():
 
 def test_compile_escrow_contract_subprocess_ok():
     with patch("gateway.algod_client.ESCROW_TEAL", None), \
-         patch("subprocess.run") as mock_sub:
-        mock_sub.return_value = MagicMock(returncode=0, stdout="compiled_teal")
+         patch("subprocess.run") as mock_sub, \
+         patch("pathlib.Path.exists", return_value=True), \
+         patch("builtins.open", mock_open(read_data="approval_teal")):
+        mock_sub.return_value = MagicMock(returncode=0)
         res = algod_client.compile_escrow_contract()
-        assert res == "compiled_teal"
+        assert res == "approval_teal"
 
 def test_compile_escrow_contract_precompiled_ok():
     with patch("gateway.algod_client.ESCROW_TEAL", None), \

@@ -14,6 +14,22 @@ from algosdk.v2client import algod, indexer
 from algosdk import account
 from .config import settings
 
+
+# --- Algokit path helper ---
+class AlgokitConfig:
+    """Resolve algokit executable path."""
+    _algokit = None
+
+    @property
+    def algokit(self):
+        if self._algokit is None:
+            try:
+                import shutil
+                self._algokit = shutil.which("algokit") or "algokit"
+            except Exception:
+                self._algokit = "algokit"
+        return self._algokit
+
 # --- Tier 1: Sandbox (local dev only) ---
 SANDBOX_ALGOD = settings.get_secret("ALGOD_ADDRESS", "http://10.0.0.67:4001")
 SANDBOX_TOKEN = settings.get_secret("ALGOD_TOKEN",
@@ -261,7 +277,7 @@ ESCROW_TEAL = None
 
 def compile_escrow_contract():
     """
-    Compile escrow.algo -> TEAL bytes.
+    Compile escrow.py (PuyaPy 5.x) -> approval TEAL bytes.
 
     Try algokit first (sandbox dev), then fall back to reading a
     pre-compiled .teal file (production / Cloud Run), then strip the
@@ -272,17 +288,25 @@ def compile_escrow_contract():
         return ESCROW_TEAL
 
     base_dir = Path(__file__).resolve().parent.parent  # algo-bounty/ root
-    contract_path = base_dir / "escrow.algo"
+    contract_path = base_dir / "escrow.py"
 
     # 1. Try algokit compile
     try:
         result = subprocess.run(
-            ["algokit", "compile", str(contract_path), "-o", "/dev/stdout"],
+            [
+                str(AlgokitConfig().algokit),
+                "compile", "py", str(contract_path),
+                "--out-dir", str(base_dir),
+                "--output-teal"
+            ],
             capture_output=True, text=True, timeout=30,
         )
-        if result.returncode == 0 and result.stdout.strip():
-            ESCROW_TEAL = result.stdout.strip()
-            return ESCROW_TEAL
+        if result.returncode == 0:
+            teal_file = base_dir / "EscrowContract.approval.teal"
+            if teal_file.exists():
+                with open(teal_file) as tf:
+                    ESCROW_TEAL = tf.read().strip()
+                    return ESCROW_TEAL
     except FileNotFoundError:
         pass  # algokit not installed
 
@@ -318,10 +342,10 @@ def deploy_escrow_on_testnet():
     Full deployment flow for the escrow contract on testnet.
 
     Steps:
-        1. Compile the contract (tries algokit -> .teal -> source strip)
-        2. Compile to bytecode via algod
-        3. Send ApplicationCreateTxn from platform account
-        4. Wait for confirmation and return app_id
+        1. Compile escrow.py via algokit compile py -> EscrowContract.approval.teal + EscrowContract.clear.teal
+        2. Compile approval TEAL to bytecode via algod
+        3. Compile clear TEAL to bytecode via algod
+        4. Send ApplicationCreateTxn from platform account
 
     Returns dict with deployment result.
     """
@@ -356,11 +380,23 @@ def deploy_escrow_on_testnet():
         # Step 2: Compile to bytecode
         client = get_algod_client()
         compile_resp = client.compile(teal, format="teal")
-        compiled_program = compile_resp.get("result", "").encode()
+        compiled_approval = compile_resp.get("result", "").encode()
 
-        if not compiled_program:
-            result["error"] = "Compiled program is empty"
+        if not compiled_approval:
+            result["error"] = "Compiled approval program is empty"
             return result
+
+        # Step 2b: Compile clear program from EscrowContract.clear.teal
+        base_dir = Path(__file__).resolve().parent.parent
+        clear_teal_path = base_dir / "EscrowContract.clear.teal"
+        if clear_teal_path.exists():
+            with open(clear_teal_path) as ct:
+                clear_teal = ct.read().strip().encode()
+            compile_resp_clear = client.compile(clear_teal, format="teal")
+            compiled_clear = compile_resp_clear.get("result", "").encode()
+        else:
+            # Fallback: use approval program for clear
+            compiled_clear = compiled_approval
 
         # Step 3: Create deployment transaction
         params = client.suggested_params()
@@ -372,8 +408,8 @@ def deploy_escrow_on_testnet():
             sender=platform_account.address,
             sp=params,
             on_complete=OnComplete.NoOpOC,
-            approval_program=compiled_program,
-            clear_program=compiled_program,
+            approval_program=compiled_approval,
+            clear_program=compiled_clear,
             global_schema=StateSchema(0, 0),
             local_schema=StateSchema(0, 0),
             app_args=[],
