@@ -60,6 +60,7 @@ class EscrowContract(ARC4Contract):
         self.review_days = Box(UInt64, key="review_days")
         self.state_box = Box(UInt64, key="state")
         self.mediator_address = Box(Account, key="mediator_address")
+        self.treasury_address = Box(Account, key="treasury_address")
         self.initialized = Box(UInt64, key="initialized")
         self.oidc_token = Box(Bytes, key="oidc_token")
 
@@ -113,6 +114,7 @@ class EscrowContract(ARC4Contract):
         asset_id: UInt64,
         review_days: UInt64,
         mediator: Account,
+        treasury: Account,
     ) -> None:
         assert Txn.type_enum == TransactionType.ApplicationCall
         assert Txn.on_completion == OnCompleteAction.NoOp
@@ -147,6 +149,7 @@ class EscrowContract(ARC4Contract):
         # Initialize state
         self.state_box.value = UInt64(OPEN)
         self.mediator_address.value = mediator
+        self.treasury_address.value = treasury
         self.escrow_amount.value = escrow_amount
         self.is_hitm.value = is_hitm
         self.asset_id.value = asset_id
@@ -250,7 +253,11 @@ class EscrowContract(ARC4Contract):
         self.payout_type.value = Bytes(PAYOUT)
         self.state_box.value = UInt64(CLOSED)
 
-        self._send_payout(self.agent_address.value, escrow_amount, asset_id)
+        fee = escrow_amount * 2 // 100
+        remaining_amount = escrow_amount - fee
+
+        self._send_payout(self.treasury_address.value, fee, asset_id)
+        self._send_payout(self.agent_address.value, remaining_amount, asset_id)
 
         log(Bytes(b"work_approved"))
 
@@ -356,11 +363,14 @@ class EscrowContract(ARC4Contract):
         asset_id = self.asset_id.value
         self._verify_escrow_balance(asset_id, escrow_amount)
 
-        half_amount = escrow_amount // 2
+        fee = escrow_amount * 2 // 100
+        remaining_amount = escrow_amount - fee
+        half_amount = remaining_amount // 2
 
         self.payout_type.value = Bytes(SPLIT)
         self.state_box.value = UInt64(CLOSED)
 
+        self._send_payout(self.treasury_address.value, fee, asset_id)
         self._send_payout(self.creator_address.value, half_amount, asset_id)
         self._send_payout(self.agent_address.value, half_amount, asset_id)
 
