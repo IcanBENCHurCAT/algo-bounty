@@ -14,7 +14,9 @@ from .middleware import (
     WebhookApiKeyAuthMiddleware,
     GitHubWebhookSignatureMiddleware,
 )
+import asyncio
 from .broker import broker
+from .worker import indexer_worker
 from .dependencies import get_db
 from .routers import (
     auth, bounties, algorand, agents,
@@ -40,6 +42,10 @@ async def lifespan(app: FastAPI):
     # Start SSE cleanup background task on app startup
     await broker.start_cleanup()
     print(f"[SSE] Started cleanup task (interval={broker.CLEANUP_INTERVAL_SECONDS}s, stale_timeout={broker.STALE_TIMEOUT_SECONDS}s)")
+
+    # Start indexer polling background task
+    asyncio.create_task(indexer_worker())
+    print("[INDEXER] Started background indexer polling task")
 
     yield
 
