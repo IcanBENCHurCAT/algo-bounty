@@ -3,7 +3,7 @@ import os
 import signal
 import base64
 from gateway.database import SessionLocal, Bounty, Agent
-from gateway.indexer import poll_bounty_events, fetch_app_logs
+from gateway.indexer import poll_bounty_events, fetch_app_logs, read_box_value, sync_bounty_from_chain
 
 async def indexer_worker():
     """Standalone worker process to poll Algorand indexer for bounty events."""
@@ -37,7 +37,40 @@ async def indexer_worker():
                             bounty = db.query(Bounty).filter(Bounty.app_id == app_id).first()
                             if bounty:
                                 # General sync placeholder
-                                pass
+                                try:
+                                    state_raw = read_box_value(app_id, "state")
+                                    if state_raw:
+                                        import struct
+                                        # read_box_value might return the raw string if decode failed
+                                        # But let's safely decode hex if needed
+                                        if isinstance(state_raw, str):
+                                            try:
+                                                state_bytes = bytes.fromhex(state_raw)
+                                            except ValueError:
+                                                state_bytes = state_raw.encode('utf-8')
+                                        else:
+                                            state_bytes = state_raw
+
+                                        if len(state_bytes) == 8:
+                                            state_int = struct.unpack('>Q', state_bytes)[0]
+
+                                            state_map = {
+                                                0: "open",
+                                                1: "claimed",
+                                                2: "submitted",
+                                                3: "rejected",
+                                                4: "disputed",
+                                                5: "closed",
+                                                6: "closed",  # split
+                                                7: "open"     # claim expired
+                                            }
+
+                                            new_status = state_map.get(state_int)
+                                            if new_status and bounty.status != new_status:
+                                                sync_bounty_from_chain(db, bounty.bounty_id, new_status)
+                                                print(f"[WORKER] Synced bounty {bounty.bounty_id} state to {new_status}")
+                                except Exception as e:
+                                    print(f"[WORKER] Error syncing general state for {bounty.bounty_id}: {e}")
                         last_round = max(e.get("round", 0) for e in events)
 
                     # 2. Sync specific logs for active bounties (HITM, Dispute, Claim Expiry)
