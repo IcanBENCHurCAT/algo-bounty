@@ -170,6 +170,12 @@ class EscrowContract(ARC4Contract):
         assert Txn.sender != self.creator_address.value, "Cannot claim your own bounty"
         assert self.agent_address.value == Account(Bytes(32 * b"\x00")), "Bounty already claimed"
 
+        # Validate that the claiming agent has opted in to the reward ASA (if asset bounty)
+        asset_id = self.asset_id.value
+        if asset_id > 0:
+            balance, exists = op.AssetHoldingGet.asset_balance(Txn.sender, asset_id)
+            assert exists, "Claiming agent must opt-in to the asset first"
+
         self.agent_address.value = Txn.sender
         self.state_box.value = UInt64(CLAIMED)
 
