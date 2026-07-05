@@ -37,10 +37,10 @@ dashboard-legacy/
 # Supabase
 supabase/
 
-# Algosdk artifacts (keep escrow.algo)
+# Algosdk artifacts (keep escrow.py)
 *.teal
 *.algo
-!escrow.algo
+!escrow.py
 
 # Workspace files
 *.orig

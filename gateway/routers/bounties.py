@@ -114,12 +114,17 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
         try:
             client = get_algod_client()
 
-            # Compile the escrow contract
-            teal = compile_escrow_contract()
-            compile_resp = client.compile(teal, format="teal")
-            compiled_program = compile_resp.get("result", "").encode()
+            # Compile the escrow contract (approval and clear program)
+            approval_teal = compile_escrow_contract("approval")
+            clear_teal = compile_escrow_contract("clear")
+            
+            compile_resp_app = client.compile(approval_teal, format="teal")
+            approval_compiled = compile_resp_app.get("result", "").encode()
 
-            if compiled_program:
+            compile_resp_clr = client.compile(clear_teal, format="teal")
+            clear_compiled = compile_resp_clr.get("result", "").encode()
+
+            if approval_compiled and clear_compiled:
                 params = client.suggested_params()
 
                 # Encode app args
@@ -151,8 +156,8 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
                     sender=platform_account.address,
                     sp=params,
                     on_complete=OnComplete.NoOpOC,
-                    approval_program=compiled_program,
-                    clear_program=compiled_program,
+                    approval_program=approval_compiled,
+                    clear_program=clear_compiled,
                     global_schema=StateSchema(0, 0),
                     local_schema=StateSchema(0, 0),
                     app_args=[app_args],
