@@ -120,9 +120,12 @@ PYTHONPATH=. python -m pytest tests/
 ### Frontend Hooks
 - `useWallet`: Manages connection to Pera, Defly, and Edge wallets.
 - `useEvents`: Subscribes to `/api/v1/events` SSE and triggers callbacks for real-time updates.
-- Mock signatures are often used in dev (suffix `-MOCK_SIG`). In production-ready code, ensure strict verification.
-- **HITM Mode**: When `is_hitm=True`, the contract sets a `review_deadline`. If the creator doesn't act, the `indexer_polling_task` detects the `auto_released_hitm` log and updates the DB.
-- **Karma System (v2)**: Karma changes are applied both in `gateway/routers/bounties.py` (for API-driven actions) and `gateway/main.py` (for on-chain timeouts/logs).
+
+### HITM Mode
+When `is_hitm=True`, the contract sets a `review_deadline`. If the creator doesn't act, the `indexer_polling_task` detects the `auto_released_hitm` log and updates the DB.
+
+### Karma System (v2)
+Karma changes are applied both in `gateway/routers/bounties.py` (for API-driven actions) and `gateway/main.py` (for on-chain timeouts/logs).
 
 ### Middleware Implementation
 - When adding middleware to the Gateway, inherit from `starlette.middleware.base.BaseHTTPMiddleware` to avoid signature mismatches.
@@ -132,11 +135,14 @@ PYTHONPATH=. python -m pytest tests/
 ## 5. Design Documents Reference
 
 Before implementing features, consult the corresponding design document:
+- **v0**: Rust Chain Autopsy (forensic analysis of prior project failures).
 - **v1**: TEAL Escrow Contract spec.
 - **v2**: Karma/Reputation System.
+- **v3**: Verification via wallet signatures (covered in v0 and v2).
 - **v4**: Dashboard & API spec.
 - **v5**: GitHub Integration (The Bridge).
 - **v6**: Human-in-the-Middle (HITM) Mode.
+- **v7**: Project Handover (see CONTRACTOR-BRIEF.md).
 
 ---
 
@@ -170,6 +176,41 @@ Set the following environment variables in your `.env` file:
 - `GITHUB_PRIVATE_KEY`: Your App's private key (content or path to `.pem` file).
 - `GITHUB_INSTALLATION_ID`: The installation ID for the repository.
 - `GITHUB_WEBHOOK_SECRET`: The secret used to sign webhook payloads.
+
+---
+
+## 8. Current Implementation Status (Updated 2026-07-05)
+
+### ✅ Completed
+- **Smart Contract**: `escrow.algo` (748 lines Puya) compiled to TEAL (`EscrowContract.approval.teal`, `EscrowContract.clear.teal`). Use `algokit compile py escrow.algo` or run `python compile_teal.py`.
+- **Backend Gateway**: FastAPI with 32 endpoints, Supabase DB, SSE broker, rate limiting, security middleware, Alembic migrations.
+- **Frontend Dashboard**: Next.js with Pera/Defly/Edge wallet connect, bounty creation flow, real-time SSE updates, Profile & Notifications pages.
+- **GitHub Integration**: Webhook handler with HMAC verification, OIDC bridge for automated payouts, live PR/issue linking.
+- **Security**: JWT secret required (no fallback), MOCK_SIG bypass removed, HMAC verification, CORS, rate limiting, security headers.
+- **Tests**: 94/95 passing. One known failure: `test_compile_escrow_contract_docstring_fallback` in `test_algod_client.py` (brittle assertion).
+- **CI/CD**: GitHub Actions workflow, Dockerfile, Cloud Run deploy scripts.
+
+### 🔴 Priority 1 — Must Do First
+1. **Real on-chain integration** (`gateway/algod_client.py`): Bounty creation, claim, submit, approve/reject are DB-only. Need PyAlgoSDK to deploy escrow contract and execute real transactions on testnet.
+2. **Indexer background task** (`gateway/indexer.py`): `poll_bounty_events()` exists but no scheduler runs it. Chain state never syncs to DB. Add APScheduler or similar.
+3. **Fix test failure**: `tests/test_algod_client.py::test_compile_escrow_contract_docstring_fallback` — assertion expects string but gets None.
+
+### 🟡 Priority 2 — Important
+4. **Full GitHub webhook flow**: `gateway/github.py` handler exists, but bot commenting and PR→bounty linking are stubs (`log_bot_comment` just prints).
+5. **Frontend on-chain status**: Dashboard shows DB state, not real escrow status. Wire up on-chain data display.
+6. **Expand test suite**: Target 80%+ coverage. Currently minimal on escrow edge cases (timeouts, disputes, ghosting scenarios).
+7. **Bulk transaction search**: Optimize `indexer_polling_task` to use single `search_transactions` call for all app IDs.
+
+### 🔵 Priority 3 — Nice to Have
+8. **Active cleanup triggering**: Gateway should actively call on-chain methods (`expire_claim`, `auto_release`, `timeout_dispute`) when internal deadlines hit.
+9. **Defly/Edge wallet on-chain status**: Wallet selection menu exists but needs real integration for those wallets.
+
+### Key Files for Contractors
+- **Smart contract**: `escrow.algo` (Puya source), `compile_teal.py` (build script), `EscrowContract.approval.teal` (compiled output)
+- **On-chain interaction**: `gateway/algod_client.py` — health check, balance, holders, compile — needs tx execution
+- **Bounty lifecycle**: `gateway/main.py` — all CRUD + claim/submit/approve/reject/dispute endpoints
+- **Indexer**: `gateway/indexer.py` — polling functions, needs scheduler
+- **Tests**: `tests/` — 19 test files, 94 passing
 
 ---
 
