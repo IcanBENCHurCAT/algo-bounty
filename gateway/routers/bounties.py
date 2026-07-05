@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from ..database import Bounty, Agent, GitHubPR, Notification
 from ..auth import get_current_user
+from ..config import settings
 from ..dependencies import get_db
 from ..github import post_github_comment_and_labels, extract_bounty_ids
 from ..schemas import (
@@ -144,11 +145,13 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
 
                 # Mediator is the platform account (default)
                 mediator_address = platform_account.address
+                # Treasury is also the platform account (default)
+                treasury_address = platform_account.address
 
                 app_args = ABIType.from_string(
-                    "(bytes,uint64,uint64,uint64,uint64,address)"
+                    "(bytes,uint64,uint64,uint64,uint64,address,address)"
                 ).encode(
-                    bounty_id_bytes, escrow_amount, is_hitm, asset_id, review_days, mediator_address
+                    bounty_id_bytes, escrow_amount, is_hitm, asset_id, review_days, mediator_address, treasury_address
                 )
 
                 from algosdk.transaction import ApplicationCreateTxn, OnComplete, StateSchema
@@ -234,6 +237,9 @@ async def claim_bounty(
         raise HTTPException(status_code=403, detail=f"Insufficient karma. Required: {b.karma_requirement}")
 
     # Broadcase on-chain transaction
+    if settings.ALGORAND_NETWORK != "sandbox" and not body.signed_txn:
+        raise HTTPException(status_code=400, detail="signed_txn is required")
+
     tx_id = None
     if body.signed_txn:
         try:
@@ -291,6 +297,9 @@ async def submit_work(
         raise HTTPException(status_code=403, detail="Only the claiming worker can submit work")
 
     # Broadcast on-chain transaction
+    if settings.ALGORAND_NETWORK != "sandbox" and not body.signed_txn:
+        raise HTTPException(status_code=400, detail="signed_txn is required")
+
     tx_id = None
     if body.signed_txn:
         try:
@@ -363,6 +372,9 @@ async def approve_work(
         raise HTTPException(status_code=400, detail="Bounty has no work submitted to approve")
 
     # Broadcast on-chain transaction
+    if settings.ALGORAND_NETWORK != "sandbox" and not body.signed_txn:
+        raise HTTPException(status_code=400, detail="signed_txn is required")
+
     tx_id = None
     if body.signed_txn:
         try:
