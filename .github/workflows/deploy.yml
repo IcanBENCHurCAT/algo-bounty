@@ -14,7 +14,8 @@ env:
   FRONTEND_SERVICE: algo-bounty-frontend
 
 jobs:
-  deploy-gateway:
+  deploy-testnet-gateway:
+    name: Deploy Testnet Gateway
     runs-on: ubuntu-latest
     environment: deployment # Routes this job through codeowner gate
     outputs:
@@ -46,6 +47,7 @@ jobs:
         IMAGE_TAG="gcr.io/${PROJECT_ID}/${GATEWAY_SERVICE}:$(git rev-parse --short HEAD)-$(date +%s)"
 
         # Build and push image
+        cp gateway/Dockerfile Dockerfile
         gcloud builds submit . --tag "${IMAGE_TAG}" --timeout=600
 
         # Deploy to Cloud Run
@@ -93,8 +95,9 @@ jobs:
 
         echo "gateway-url=$(gcloud run services describe ${GATEWAY_SERVICE} --project="${PROJECT_ID}" --region="${REGION}" --format='value(status.url)')" >> $GITHUB_OUTPUT
 
-  deploy-frontend:
-    needs: deploy-gateway
+  deploy-testnet-frontend:
+    name: Deploy Testnet Frontend
+    needs: deploy-testnet-gateway
     runs-on: ubuntu-latest
     environment: deployment # Routes this job through codeowner gate
 
@@ -141,7 +144,7 @@ jobs:
           --min-scale=0 \
           --set-env-vars="NEXT_PUBLIC_SUPABASE_URL=${SUPABASE_URL}" \
           --set-env-vars="NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${SUPABASE_PUBLISHABLE_KEY}" \
-          --set-env-vars="NEXT_PUBLIC_API_URL=${{ needs.deploy-gateway.outputs.gateway-url }}"
+          --set-env-vars="NEXT_PUBLIC_API_URL=${{ needs.deploy-testnet-gateway.outputs.gateway-url }}"
 
         echo "frontend-url=$(gcloud run services describe ${FRONTEND_SERVICE} --project="${PROJECT_ID}" --region="${REGION}" --format='value(status.url)')" >> $GITHUB_OUTPUT
 
@@ -149,5 +152,5 @@ jobs:
       if: success()
       run: |
         echo "## AlgoBounty Deployment Successful" >> $GITHUB_STEP_SUMMARY
-        echo "- **Gateway**: ${{ needs.deploy-gateway.outputs.gateway-url }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Gateway**: ${{ needs.deploy-testnet-gateway.outputs.gateway-url }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Frontend**: ${{ steps.deploy.outputs.frontend-url }}" >> $GITHUB_STEP_SUMMARY
