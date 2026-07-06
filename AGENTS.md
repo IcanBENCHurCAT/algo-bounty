@@ -25,15 +25,21 @@ AlgoBounty consists of three main layers:
 ```text
 .
 ├── gateway/                # FastAPI Backend
+│   ├── routers/            # Domain-specific FastAPI routers
 │   ├── algod_client.py     # Algorand blockchain client
 │   ├── auth.py             # Wallet signature & JWT logic
+│   ├── broker.py           # SSE Event stream broker
 │   ├── database.py         # SQLAlchemy models & DB init
 │   ├── github.py           # GitHub webhook & bot logic
-│   ├── main.py             # FastAPI entry point & routes
+│   ├── indexer.py          # On-chain event poller
+│   ├── main.py             # FastAPI entry point
+│   ├── middleware.py       # Security, CORS, and limits middleware
+│   ├── oidc.py             # GitHub OIDC integration
+│   ├── worker.py           # Background indexer task
 │   └── supabase_migration.py # Supabase/Postgres setup
 ├── dashboard/              # Next.js Frontend (App Router)
 ├── supabase/               # Database RLS policies
-├── tests/                  # Backend test suite
+├── tests/                  # Modular Pytest test suite
 ├── escrow.algo             # Main Smart Contract (Puya/pyTEAL)
 ├── v0-v7-*.md              # Design Documents (READ THESE FIRST)
 └── CONTRACTOR-BRIEF.md      # High-level implementation roadmap
@@ -46,6 +52,7 @@ AlgoBounty consists of three main layers:
 - **Backend**: Python 3.12+, FastAPI, SQLAlchemy, Pydantic, `py-algorand-sdk`.
 - **Frontend**: Next.js, TypeScript, Tailwind CSS.
 - **Database**: PostgreSQL (Supabase), Alembic for migrations.
+- **Testing**: `pytest`, `pytest-asyncio`.
 - **Linting/Formatting**: `ruff` for Python.
 
 ---
@@ -97,10 +104,13 @@ python gateway/worker.py
 ```
 
 ### Running Tests
-Use `pytest` and ensure `PYTHONPATH` is set to the root directory:
+Use `pytest` with `pytest-asyncio` for asynchronous tests. Ensure `PYTHONPATH` is set to the root directory:
 ```bash
 PYTHONPATH=. python -m pytest tests/
 ```
+- We have transitioned from monolithic tests (like `test_gateway.py`) to modular suites (e.g., `tests/test_misc_routers.py`, `tests/test_bounty_lifecycle_extended.py`) to prevent environment collisions.
+- In CI workflows, `TESTING="True"` is strictly required to bypass rate limits and enable test-specific mocks.
+- To mock `Config` properties (like `ALGORAND_NETWORK`) in unit tests, use `PropertyMock` on `gateway.config.Config.<PROPERTY_NAME>`.
 
 ### Working with the Database
 - The primary DB is Supabase. If `SUPABASE_URL` is missing, it falls back to `algobounty.db` (SQLite).
@@ -112,20 +122,28 @@ PYTHONPATH=. python -m pytest tests/
 - All secrets and configuration are centralized in `gateway/config.py`.
 - In production, ensure `SECRET_KEY`, `PLATFORM_PRIVATE_KEY`, and `GITHUB_TOKEN` are provided via environment variables or a configured secret manager.
 
-### Smart Contract Integration
-- The contract is in `escrow.algo`.
-- Integration logic resides in `gateway/algod_client.py`.
-- Frontend uses `createBounty` API which triggers deployment flows.
+### Smart Contract Integration (`escrow.algo`)
+- **State Management**: The contract state machine utilizes Global Boxes (e.g., `_K_STATE`) rather than per-user Local State, ensuring status is universally shared across all participants. A dedicated `_K_INITIALIZED` box prevents re-initialization attacks.
+- **Fund Transfers**: All fund transfers (payouts, refunds, splits) are executed securely via Algorand Inner Transactions (`itxn`), replacing older reliance on external transaction grouping or off-chain logging.
+- **Fees**: The contract supports fee collection by calculating and sending a 2% fee to a Treasury Account (passed during bounty creation) upon successful payouts.
+- **Mediator Validation**: Dispute resolution requires cryptographic verification of a mediator signature using `op.ed25519verify` against an address stored during bounty creation.
+- **Integration**: The ABI signature for bounty creation is strictly `(bytes,uint64,uint64,uint64,uint64,address,address)`.
+
+### Security & Authentication Rules
+- **Mock Signatures**: The backend restricts mock signatures (e.g., `-MOCK_SIG`) or bypassed `signed_txn` payloads strictly to local environments where `ALGORAND_NETWORK` is set to `sandbox`. On `testnet` or `mainnet`, strict signature verification and payload transmission are enforced.
+- **Secret Keys**: `SECRET_KEY` and `GITHUB_TOKEN` are mandatory for `testnet` and `mainnet`. The app will intentionally crash on startup if these are missing.
+- **Middleware Integration**: Custom middleware (e.g., `GitHubWebhookSignatureMiddleware`) inherits from `starlette.middleware.base.BaseHTTPMiddleware` and correctly reads the raw request body to validate HMAC signatures.
+
+### Deployment & Operational Notes
+- **Background Worker**: The indexer worker (`gateway/worker.py`) deployed via Cloud Run must be configured with flags `--no-cpu-throttling`, `--min-instances 1`, and `--max-instances 1` to ensure continuous execution without downscaling.
+- **Database Engine**: In `gateway/database.py`, `connect_args={"check_same_thread": False}` is strictly reserved for SQLite. For PostgreSQL, the engine strictly requires `postgresql+asyncpg://`.
+- **Secrets Naming**: GCP Secret Manager secrets mapped in GitHub Actions use hyphens instead of underscores (e.g., `algobounty-jwt-secret`, `algobounty-github-webhook-secret`).
 
 ### Frontend Hooks
 - `useWallet`: Manages connection to Pera, Defly, and Edge wallets.
 - `useEvents`: Subscribes to `/api/v1/events` SSE and triggers callbacks for real-time updates.
-- Mock signatures are often used in dev (suffix `-MOCK_SIG`). In production-ready code, ensure strict verification.
 - **HITM Mode**: When `is_hitm=True`, the contract sets a `review_deadline`. If the creator doesn't act, the `indexer_polling_task` detects the `auto_released_hitm` log and updates the DB.
 - **Karma System (v2)**: Karma changes are applied both in `gateway/routers/bounties.py` (for API-driven actions) and `gateway/main.py` (for on-chain timeouts/logs).
-
-### Middleware Implementation
-- When adding middleware to the Gateway, inherit from `starlette.middleware.base.BaseHTTPMiddleware` to avoid signature mismatches.
 
 ---
 
