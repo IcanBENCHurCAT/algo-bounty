@@ -8,7 +8,8 @@ permissions:
   contents: read
 
 env:
-  PROJECT_ID: 546240368861
+  PROJECT_ID: soul-seeker-500816
+  PROJECT_NUMBER: 546240368861
   REGION: us-central1
   GATEWAY_SERVICE: algo-bounty-gateway
   FRONTEND_SERVICE: algo-bounty-frontend
@@ -63,12 +64,12 @@ jobs:
           --min-instances=0 \
           --set-env-vars="ALGORAND_NETWORK=testnet" \
           --set-env-vars="SUPABASE_URL=${{ secrets.SUPABASE_URL }}" \
-          --set-secrets="DATABASE_URL=projects/${{ env.PROJECT_ID }}/secrets/algobounty-db-url:latest" \
-          --set-secrets="SECRET_KEY=projects/${{ env.PROJECT_ID }}/secrets/algobounty-jwt-secret:latest" \
-          --set-secrets="PLATFORM_PRIVATE_KEY=projects/${{ env.PROJECT_ID }}/secrets/algobounty_platform_private_key:latest" \
-          --set-secrets="GITHUB_WEBHOOK_SECRET=projects/${{ env.PROJECT_ID }}/secrets/algobounty-github-webhook-secret:latest" \
-          --set-secrets="SUPABASE_SERVICE_ROLE_KEY=projects/${{ env.PROJECT_ID }}/secrets/algobounty_supabase_service_role_key:latest" \
-          --set-secrets="GITHUB_PRIVATE_KEY=projects/${{ env.PROJECT_ID }}/secrets/algobounty-github-private-key:latest"
+          --set-secrets="DATABASE_URL=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-db-url:latest" \
+          --set-secrets="SECRET_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-jwt-secret:latest" \
+          --set-secrets="PLATFORM_PRIVATE_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty_platform_private_key:latest" \
+          --set-secrets="GITHUB_WEBHOOK_SECRET=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-github-webhook-secret:latest" \
+          --set-secrets="SUPABASE_SERVICE_ROLE_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty_supabase_service_role_key:latest" \
+          --set-secrets="GITHUB_PRIVATE_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-github-private-key:latest"
 
     - name: Deploy Indexer to Cloud Run
       run: |
@@ -85,12 +86,12 @@ jobs:
           --no-cpu-throttling \
           --set-env-vars="ALGORAND_NETWORK=testnet" \
           --set-env-vars="SUPABASE_URL=${{ secrets.SUPABASE_URL }}" \
-          --set-secrets="DATABASE_URL=projects/${{ env.PROJECT_ID }}/secrets/algobounty-db-url:latest" \
-          --set-secrets="SECRET_KEY=projects/${{ env.PROJECT_ID }}/secrets/algobounty-jwt-secret:latest" \
-          --set-secrets="PLATFORM_PRIVATE_KEY=projects/${{ env.PROJECT_ID }}/secrets/algobounty_platform_private_key:latest" \
-          --set-secrets="GITHUB_WEBHOOK_SECRET=projects/${{ env.PROJECT_ID }}/secrets/algobounty-github-webhook-secret:latest" \
-          --set-secrets="SUPABASE_SERVICE_ROLE_KEY=projects/${{ env.PROJECT_ID }}/secrets/algobounty_supabase_service_role_key:latest" \
-          --set-secrets="GITHUB_PRIVATE_KEY=projects/${{ env.PROJECT_ID }}/secrets/algobounty-github-private-key:latest"
+          --set-secrets="DATABASE_URL=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-db-url:latest" \
+          --set-secrets="SECRET_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-jwt-secret:latest" \
+          --set-secrets="PLATFORM_PRIVATE_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty_platform_private_key:latest" \
+          --set-secrets="GITHUB_WEBHOOK_SECRET=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-github-webhook-secret:latest" \
+          --set-secrets="SUPABASE_SERVICE_ROLE_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty_supabase_service_role_key:latest" \
+          --set-secrets="GITHUB_PRIVATE_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-github-private-key:latest"
 
     - name: Set Gateway URL Output
       id: deploy
