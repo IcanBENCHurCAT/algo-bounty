@@ -1,0 +1,4 @@
+ [run] 
+omit = 
+  */demo_integration_test.py 
+  */deploy_escrow.py
