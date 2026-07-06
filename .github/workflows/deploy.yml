@@ -60,7 +60,7 @@ jobs:
           --concurrency=250 \
           --max-instances=10 \
           --timeout=300 \
-          --min-scale=0 \
+          --min-instances=0 \
           --set-env-vars="ALGORAND_NETWORK=testnet" \
           --set-env-vars="SUPABASE_URL=${{ secrets.SUPABASE_URL }}" \
           --set-secrets="DATABASE_URL=projects/${{ env.PROJECT_ID }}/secrets/algobounty-db-url:latest" \
@@ -141,7 +141,7 @@ jobs:
           --cpu=1 \
           --concurrency=250 \
           --timeout=60 \
-          --min-scale=0 \
+          --min-instances=0 \
           --set-env-vars="NEXT_PUBLIC_SUPABASE_URL=${{ secrets.SUPABASE_URL }}" \
           --set-env-vars="NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${{ secrets.SUPABASE_PUBLISHABLE_KEY }}" \
           --set-env-vars="NEXT_PUBLIC_API_URL=${{ needs.deploy-testnet-gateway.outputs.gateway-url }}"
