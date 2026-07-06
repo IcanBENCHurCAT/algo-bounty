@@ -28,11 +28,17 @@ class Config:
 
     @property
     def SECRET_KEY(self) -> str:
-        return self.get_secret("SECRET_KEY")
+        val = self.get_secret("SECRET_KEY")
+        if self.ALGORAND_NETWORK in ("testnet", "mainnet") and not val:
+            raise RuntimeError("SECRET_KEY must be set in testnet/mainnet")
+        return val
 
     @property
     def GITHUB_TOKEN(self) -> str:
-        return self.get_secret("GITHUB_TOKEN")
+        val = self.get_secret("GITHUB_TOKEN")
+        if self.ALGORAND_NETWORK in ("testnet", "mainnet") and not val:
+            raise RuntimeError("GITHUB_TOKEN must be set in testnet/mainnet")
+        return val
 
     @property
     def GITHUB_APP_ID(self) -> str:
@@ -48,7 +54,10 @@ class Config:
 
     @property
     def PLATFORM_PRIVATE_KEY(self) -> str:
-        return self.get_secret("PLATFORM_PRIVATE_KEY")
+        val = self.get_secret("PLATFORM_PRIVATE_KEY")
+        if self.ALGORAND_NETWORK in ("testnet", "mainnet") and not val:
+            raise RuntimeError("PLATFORM_PRIVATE_KEY must be set in testnet/mainnet")
+        return val
 
     @property
     def GITHUB_WEBHOOK_SECRET(self) -> str:
@@ -69,5 +78,13 @@ class Config:
     @property
     def DATABASE_URL(self) -> str:
         return self.get_secret("DATABASE_URL")
+
+    @property
+    def ESCROW_TEMPLATE_APP_ID(self) -> int:
+        val = self.get_secret("ESCROW_TEMPLATE_APP_ID", "0")
+        try:
+            return int(val)
+        except ValueError:
+            return 0
 
 settings = Config()
