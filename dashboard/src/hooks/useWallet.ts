@@ -161,6 +161,45 @@ export function useWallet() {
     });
   }, []);
 
+  const signTransaction = useCallback(async (unsignedTxnBase64: string): Promise<string> => {
+    const type = localStorage.getItem('algobounty_wallet_type') || state.walletType;
+    if (!state.connected || !state.address) {
+      return '';
+    }
+    if (!type) throw new Error('Wallet not connected');
+
+    // Decode base64 to Uint8Array bytes
+    const rawBytes = Uint8Array.from(atob(unsignedTxnBase64), c => c.charCodeAt(0));
+
+    let signedBase64 = '';
+    if (type === 'pera') {
+      const Pera = window.PeraWalletConnect;
+      if (!Pera) throw new Error('Pera Wallet is not installed');
+      const wallet = new Pera();
+      await wallet.connect();
+      const txnsToSign = [{ txn: rawBytes, signers: [state.address] }];
+      const signedTxns = await (wallet as any).signTransaction([txnsToSign]);
+      signedBase64 = btoa(String.fromCharCode.apply(null, Array.from(signedTxns[0])));
+    } else if (type === 'defly') {
+      const Defly = window.DeflyWalletConnect;
+      if (!Defly) throw new Error('Defly Wallet is not installed');
+      const wallet = new Defly();
+      await wallet.connect();
+      const txnsToSign = [{ txn: rawBytes, signers: [state.address] }];
+      const signedTxns = await (wallet as any).signTransaction([txnsToSign]);
+      signedBase64 = btoa(String.fromCharCode.apply(null, Array.from(signedTxns[0])));
+    } else {
+      const Edge = window.EdgeWalletConnect;
+      if (!Edge) throw new Error('Edge Wallet is not installed');
+      const wallet = new Edge();
+      await wallet.connect();
+      const txnsToSign = [{ txn: rawBytes, signers: [state.address] }];
+      const signedTxns = await (wallet as any).signTransaction([txnsToSign]);
+      signedBase64 = btoa(String.fromCharCode.apply(null, Array.from(signedTxns[0])));
+    }
+    return signedBase64;
+  }, [state.walletType, state.address, state.connected]);
+
   // Hydrate from localStorage on mount
   useEffect(() => {
     const jwt = getStoredToken();
@@ -195,6 +234,7 @@ export function useWallet() {
     ...state,
     connect,
     disconnect,
+    signTransaction,
     setProfile: (p: AgentProfile) =>
       setState((prev) => ({ ...prev, profile: p, karma: p.karma })),
   };

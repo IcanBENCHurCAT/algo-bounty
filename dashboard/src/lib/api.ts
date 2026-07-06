@@ -142,6 +142,21 @@ export async function createBounty(
   return res.json();
 }
 
+export async function getClaimTxn(
+  bountyId: string,
+  token: string,
+): Promise<{ unsigned_txn: string }> {
+  const res = await fetch(`${API_BASE}/api/v1/bounties/${bountyId}/claim/txn`, {
+    method: 'POST',
+    headers: authHeaders(token),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => null);
+    throw new Error(err?.error?.message || `Failed to generate claim transaction: ${res.status}`);
+  }
+  return res.json();
+}
+
 export async function claimBounty(
   bountyId: string,
   body: { signed_txn: string },
@@ -172,6 +187,21 @@ export async function submitWork(
   if (!res.ok) {
     const err = await res.json().catch(() => null);
     throw new Error(err?.error?.message || `Failed to submit work: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function getApproveTxn(
+  bountyId: string,
+  token: string,
+): Promise<{ unsigned_txn: string }> {
+  const res = await fetch(`${API_BASE}/api/v1/bounties/${bountyId}/approve/txn`, {
+    method: 'POST',
+    headers: authHeaders(token),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => null);
+    throw new Error(err?.error?.message || `Failed to generate approve transaction: ${res.status}`);
   }
   return res.json();
 }
