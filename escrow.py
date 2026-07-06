@@ -49,7 +49,6 @@ class EscrowContract(ARC4Contract):
         self.agent_address = Box(Account, key="agent_address")
         self.proof_url = Box(Bytes, key="proof_url")
         self.proof_data = Box(Bytes, key="proof_data")
-        self.created_timestamp = Box(UInt64, key="created_timestamp")
         self.bounty_id = Box(Bytes, key="bounty_id")
         self.dispute_reason = Box(Bytes, key="dispute_reason")
         self.dispute_initiator = Box(Account, key="dispute_initiator")
@@ -61,8 +60,27 @@ class EscrowContract(ARC4Contract):
         self.state_box = Box(UInt64, key="state")
         self.mediator_address = Box(Account, key="mediator_address")
         self.treasury_address = Box(Account, key="treasury_address")
-        self.initialized = Box(UInt64, key="initialized")
         self.oidc_token = Box(Bytes, key="oidc_token")
+
+    def _get_asset_id(self) -> UInt64:
+        val, exists = self.asset_id.maybe()
+        return val if exists else UInt64(0)
+
+    def _get_is_hitm(self) -> UInt64:
+        val, exists = self.is_hitm.maybe()
+        return val if exists else UInt64(0)
+
+    def _get_review_days(self) -> UInt64:
+        val, exists = self.review_days.maybe()
+        return val if exists else UInt64(0)
+
+    def _get_agent_address(self) -> Account:
+        val, exists = self.agent_address.maybe()
+        return val if exists else Account(Bytes(32 * b"\x00"))
+
+    def _get_rejection_count(self) -> UInt64:
+        val, exists = self.rejection_count.maybe()
+        return val if exists else UInt64(0)
 
     def _verify_escrow_funding(self, escrow_amount: UInt64, asset_id: UInt64) -> None:
         assert Global.group_size == 2, "Group size must be 2"
@@ -106,6 +124,10 @@ class EscrowContract(ARC4Contract):
             ).submit()
 
     @arc4.abimethod(create="require")
+    def deploy(self) -> None:
+        pass
+
+    @arc4.abimethod
     def create_bounty(
         self,
         bounty_id: Bytes,
@@ -121,9 +143,8 @@ class EscrowContract(ARC4Contract):
         assert Txn.rekey_to == Account(Bytes(32 * b"\x00"))
 
         # SECURITY FIX: Prevent re-initialization
-        val, exists = self.initialized.maybe()
+        val, exists = self.state_box.maybe()
         assert not exists, "Bounty already initialized"
-        self.initialized.value = UInt64(1)
 
         # Validate inputs
         assert bounty_id.length <= 64
@@ -140,25 +161,20 @@ class EscrowContract(ARC4Contract):
                 fee=0,
             ).submit()
 
-        # SECURITY FIX: Verify escrow funding from previous transaction in group
-        self._verify_escrow_funding(escrow_amount, asset_id)
-
-        # SECURITY FIX: Verify the contract actually holds the funds
-        self._verify_escrow_balance(asset_id, escrow_amount)
-
         # Initialize state
         self.state_box.value = UInt64(OPEN)
         self.mediator_address.value = mediator
         self.treasury_address.value = treasury
         self.escrow_amount.value = escrow_amount
-        self.is_hitm.value = is_hitm
-        self.asset_id.value = asset_id
-        self.review_days.value = review_days
-        self.created_timestamp.value = Global.latest_timestamp
         self.bounty_id.value = bounty_id
         self.creator_address.value = Txn.sender
-        self.agent_address.value = Account(Bytes(32 * b"\x00"))
-        self.rejection_count.value = UInt64(0)
+
+        if is_hitm > 0:
+            self.is_hitm.value = is_hitm
+        if asset_id > 0:
+            self.asset_id.value = asset_id
+        if review_days > 0:
+            self.review_days.value = review_days
 
         log(Bytes(b"bounty_created"))
         log(bounty_id)
@@ -171,10 +187,10 @@ class EscrowContract(ARC4Contract):
 
         assert self.state_box.value == OPEN
         assert Txn.sender != self.creator_address.value, "Cannot claim your own bounty"
-        assert self.agent_address.value == Account(Bytes(32 * b"\x00")), "Bounty already claimed"
+        assert self._get_agent_address() == Account(Bytes(32 * b"\x00")), "Bounty already claimed"
 
         # Validate that the claiming agent has opted in to the reward ASA (if asset bounty)
-        asset_id = self.asset_id.value
+        asset_id = self._get_asset_id()
         if asset_id > 0:
             balance, exists = op.AssetHoldingGet.asset_balance(Txn.sender, asset_id)
             assert exists, "Claiming agent must opt-in to the asset first"
@@ -209,14 +225,21 @@ class EscrowContract(ARC4Contract):
             self.state_box.value = UInt64(SUBMITTED)
 
             # HITM: Set review deadline if enabled
-            if self.is_hitm.value == 1:
-                self.review_deadline.value = Global.latest_timestamp + self.review_days.value * 86400
+            is_hitm_val, hitm_exists = self.is_hitm.maybe()
+            if hitm_exists and is_hitm_val == 1:
+                review_days_val, days_exists = self.review_days.maybe()
+                days = review_days_val if days_exists else UInt64(0)
+                self.review_deadline.value = Global.latest_timestamp + days * 86400
 
             log(Bytes(b"work_submitted"))
 
         elif current == REJECTED:
-            assert Txn.sender == self.agent_address.value, "Only claiming agent can submit work"
-            assert self.rejection_count.value < MAX_REJECTIONS
+            agent_val, agent_exists = self.agent_address.maybe()
+            assert agent_exists and Txn.sender == agent_val, "Only claiming agent can submit work"
+            
+            rej_val, rej_exists = self.rejection_count.maybe()
+            rejections = rej_val if rej_exists else UInt64(0)
+            assert rejections < MAX_REJECTIONS
 
             assert proof_url.length > 0
             assert proof_url.length <= MAX_URL_BYTES
@@ -225,12 +248,15 @@ class EscrowContract(ARC4Contract):
 
             self.proof_url.value = proof_url
             self.proof_data.value = proof_data
-            self.rejection_count.value = self.rejection_count.value + 1
+            self.rejection_count.value = rejections + 1
             self.state_box.value = UInt64(SUBMITTED)
 
             # HITM: Reset review deadline on revision if enabled
-            if self.is_hitm.value == 1:
-                self.review_deadline.value = Global.latest_timestamp + self.review_days.value * 86400
+            is_hitm_val, hitm_exists = self.is_hitm.maybe()
+            if hitm_exists and is_hitm_val == 1:
+                review_days_val, days_exists = self.review_days.maybe()
+                days = review_days_val if days_exists else UInt64(0)
+                self.review_deadline.value = Global.latest_timestamp + days * 86400
 
             log(Bytes(b"work_revise_submitted"))
 
@@ -247,7 +273,7 @@ class EscrowContract(ARC4Contract):
         assert Txn.sender == self.creator_address.value, "Only creator can approve work"
 
         escrow_amount = self.escrow_amount.value
-        asset_id = self.asset_id.value
+        asset_id = self._get_asset_id()
         self._verify_escrow_balance(asset_id, escrow_amount)
 
         self.payout_type.value = Bytes(PAYOUT)
@@ -257,7 +283,7 @@ class EscrowContract(ARC4Contract):
         remaining_amount = escrow_amount - fee
 
         self._send_payout(self.treasury_address.value, fee, asset_id)
-        self._send_payout(self.agent_address.value, remaining_amount, asset_id)
+        self._send_payout(self._get_agent_address(), remaining_amount, asset_id)
 
         log(Bytes(b"work_approved"))
 
@@ -269,9 +295,9 @@ class EscrowContract(ARC4Contract):
 
         assert self.state_box.value == SUBMITTED
         assert Txn.sender == self.creator_address.value, "Only creator can reject work"
-        assert self.rejection_count.value < MAX_REJECTIONS
+        assert self._get_rejection_count() < MAX_REJECTIONS
 
-        self.rejection_count.value = self.rejection_count.value + 1
+        self.rejection_count.value = self._get_rejection_count() + 1
         self.state_box.value = UInt64(REJECTED)
 
         log(Bytes(b"work_rejected"))
@@ -285,7 +311,7 @@ class EscrowContract(ARC4Contract):
 
         state = self.state_box.value
         assert state == SUBMITTED or state == REJECTED
-        assert Txn.sender == self.creator_address.value or Txn.sender == self.agent_address.value
+        assert Txn.sender == self.creator_address.value or Txn.sender == self._get_agent_address()
         assert reason.length > 0
         assert reason.length <= MAX_DISPUTE_REASON_BYTES
 
@@ -312,13 +338,13 @@ class EscrowContract(ARC4Contract):
         assert op.ed25519verify(message, mediator_signature, mediator_addr.bytes), "Invalid mediator signature"
 
         escrow_amount = self.escrow_amount.value
-        asset_id = self.asset_id.value
+        asset_id = self._get_asset_id()
         self._verify_escrow_balance(asset_id, escrow_amount)
 
         if resolution == Bytes(b"agent_win"):
             self.payout_type.value = Bytes(PAYOUT)
             self.state_box.value = UInt64(CLOSED)
-            self._send_payout(self.agent_address.value, escrow_amount, asset_id)
+            self._send_payout(self._get_agent_address(), escrow_amount, asset_id)
             log(Bytes(b"dispute_resolved_agent_win"))
         else:
             self.payout_type.value = Bytes(REFUND)
@@ -333,7 +359,7 @@ class EscrowContract(ARC4Contract):
 
         assert self.state_box.value == DISPUTED
 
-        created_ts = self.created_timestamp.value
+        created_ts = self.dispute_timestamp.value
         timeout = UInt64(14 * 24 * 60 * 60)  # 14 days
         assert Global.latest_timestamp > created_ts + timeout
 
@@ -341,7 +367,7 @@ class EscrowContract(ARC4Contract):
         self.state_box.value = UInt64(CLOSED)
 
         escrow_amount = self.escrow_amount.value
-        asset_id = self.asset_id.value
+        asset_id = self._get_asset_id()
         self._verify_escrow_balance(asset_id, escrow_amount)
 
         self._send_payout(self.creator_address.value, escrow_amount, asset_id)
@@ -360,7 +386,7 @@ class EscrowContract(ARC4Contract):
         assert Global.latest_timestamp > dispute_ts + dispute_timeout, "Dispute timeout not yet reached"
 
         escrow_amount = self.escrow_amount.value
-        asset_id = self.asset_id.value
+        asset_id = self._get_asset_id()
         self._verify_escrow_balance(asset_id, escrow_amount)
 
         fee = escrow_amount * 2 // 100
@@ -372,7 +398,7 @@ class EscrowContract(ARC4Contract):
 
         self._send_payout(self.treasury_address.value, fee, asset_id)
         self._send_payout(self.creator_address.value, half_amount, asset_id)
-        self._send_payout(self.agent_address.value, half_amount, asset_id)
+        self._send_payout(self._get_agent_address(), half_amount, asset_id)
 
         log(Bytes(b"dispute_timeout_split"))
 
@@ -382,19 +408,19 @@ class EscrowContract(ARC4Contract):
         assert Txn.on_completion == OnCompleteAction.NoOp
 
         assert self.state_box.value == SUBMITTED
-        assert self.is_hitm.value == 1
+        assert self._get_is_hitm() == 1
 
         deadline = self.review_deadline.value
         assert Global.latest_timestamp >= deadline
 
         escrow_amount = self.escrow_amount.value
-        asset_id = self.asset_id.value
+        asset_id = self._get_asset_id()
         self._verify_escrow_balance(asset_id, escrow_amount)
 
         self.payout_type.value = Bytes(PAYOUT)
         self.state_box.value = UInt64(CLOSED)
 
-        self._send_payout(self.agent_address.value, escrow_amount, asset_id)
+        self._send_payout(self._get_agent_address(), escrow_amount, asset_id)
 
         log(Bytes(b"auto_released_hitm"))
 
@@ -405,11 +431,11 @@ class EscrowContract(ARC4Contract):
         assert Txn.rekey_to == Account(Bytes(32 * b"\x00"))
 
         assert self.state_box.value == REJECTED
-        assert self.rejection_count.value >= MAX_REJECTIONS
+        assert self._get_rejection_count() >= MAX_REJECTIONS
         assert Txn.sender == self.creator_address.value
 
         escrow_amount = self.escrow_amount.value
-        asset_id = self.asset_id.value
+        asset_id = self._get_asset_id()
         self._verify_escrow_balance(asset_id, escrow_amount)
 
         self.payout_type.value = Bytes(REFUND)
@@ -433,7 +459,7 @@ class EscrowContract(ARC4Contract):
         self.state_box.value = UInt64(CLAIM_EXPIRED)
         log(Bytes(b"claim_expired"))
         log(self.bounty_id.value)
-        log(self.agent_address.value.bytes)
+        log(self._get_agent_address().bytes)
         log(Bytes(b"karma_penalty_20"))
 
         # SECURITY FIX: Revert agent address to zero address so someone else can claim

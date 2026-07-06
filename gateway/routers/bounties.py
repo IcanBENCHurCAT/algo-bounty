@@ -119,11 +119,12 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
             approval_teal = compile_escrow_contract("approval")
             clear_teal = compile_escrow_contract("clear")
             
-            compile_resp_app = client.compile(approval_teal, format="teal")
-            approval_compiled = compile_resp_app.get("result", "").encode()
+            import base64
+            compile_resp_app = client.compile(approval_teal)
+            approval_compiled = base64.b64decode(compile_resp_app.get("result", ""))
 
-            compile_resp_clr = client.compile(clear_teal, format="teal")
-            clear_compiled = compile_resp_clr.get("result", "").encode()
+            compile_resp_clr = client.compile(clear_teal)
+            clear_compiled = base64.b64decode(compile_resp_clr.get("result", ""))
 
             if approval_compiled and clear_compiled:
                 params = client.suggested_params()
@@ -148,11 +149,9 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
                 # Treasury is also the platform account (default)
                 treasury_address = platform_account.address
 
-                app_args = ABIType.from_string(
-                    "(bytes,uint64,uint64,uint64,uint64,address,address)"
-                ).encode(
-                    bounty_id_bytes, escrow_amount, is_hitm, asset_id, review_days, mediator_address, treasury_address
-                )
+                from algosdk.abi import Method
+                deploy_method = Method.from_signature("deploy()void")
+                deploy_selector = deploy_method.get_selector()
 
                 from algosdk.transaction import ApplicationCreateTxn, OnComplete, StateSchema
                 create_txn = ApplicationCreateTxn(
@@ -163,7 +162,8 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
                     clear_program=clear_compiled,
                     global_schema=StateSchema(0, 0),
                     local_schema=StateSchema(0, 0),
-                    app_args=[app_args],
+                    app_args=[deploy_selector],
+                    extra_pages=2,
                 )
 
                 signed_txn = create_txn.sign(platform_account.private_key)
@@ -175,6 +175,66 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
                 if pending_info:
                     app_id = pending_info.get("application-index")
                     onchain = app_id is not None and app_id > 0
+
+                    if onchain:
+                        from algosdk.logic import get_application_address
+                        app_address = get_application_address(app_id)
+
+                        # Step 2: Fund the contract address (escrow amount + 0.25 ALGO for box MBR)
+                        mbr_buffer = 250_000
+                        fund_amount = escrow_amount + mbr_buffer
+
+                        from algosdk.transaction import PaymentTxn
+                        fund_txn = PaymentTxn(
+                            sender=platform_account.address,
+                            sp=params,
+                            receiver=app_address,
+                            amt=fund_amount
+                        )
+                        signed_fund = fund_txn.sign(platform_account.private_key)
+                        fund_txid = client.send_transaction([signed_fund])
+                        wait_for_confirmation(client, fund_txid, 4)
+
+                        # Step 3: Call create_bounty NoOp to initialize contract state
+                        method = Method.from_signature("create_bounty(byte[],uint64,uint64,uint64,uint64,address,address)void")
+                        selector = method.get_selector()
+
+                        bounty_id_arg = ABIType.from_string("byte[]").encode(bounty_id_bytes)
+                        escrow_amount_arg = ABIType.from_string("uint64").encode(escrow_amount)
+                        is_hitm_arg = ABIType.from_string("uint64").encode(is_hitm)
+                        asset_id_arg = ABIType.from_string("uint64").encode(asset_id)
+                        review_days_arg = ABIType.from_string("uint64").encode(review_days)
+                        mediator_arg = encoding.decode_address(mediator_address)
+                        treasury_arg = encoding.decode_address(treasury_address)
+
+                        app_args = [
+                            selector,
+                            bounty_id_arg,
+                            escrow_amount_arg,
+                            is_hitm_arg,
+                            asset_id_arg,
+                            review_days_arg,
+                            mediator_arg,
+                            treasury_arg
+                        ]
+
+                        from algosdk.transaction import ApplicationNoOpTxn
+                        box_names = [
+                            b"state", b"mediator_address", b"treasury_address",
+                            b"escrow_amount", b"bounty_id", b"creator_address"
+                        ]
+                        boxes = [(app_id, name) for name in box_names]
+
+                        call_txn = ApplicationNoOpTxn(
+                            sender=platform_account.address,
+                            sp=params,
+                            index=app_id,
+                            app_args=app_args,
+                            boxes=boxes
+                        )
+                        signed_call = call_txn.sign(platform_account.private_key)
+                        call_txid = client.send_transaction([signed_call])
+                        wait_for_confirmation(client, call_txid, 4)
 
         except Exception as e:
             print(f"[WEB3] Escrow deploy failed: {e}")
