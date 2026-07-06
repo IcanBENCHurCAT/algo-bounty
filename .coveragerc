@@ -2,3 +2,4 @@
 omit = 
   */demo_integration_test.py 
   */deploy_escrow.py
+  */testnet_lifecycle_test.py
