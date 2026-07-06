@@ -7,9 +7,11 @@ AlgoBounty is a decentralized bounty platform built on Algorand to facilitate au
 ## Architecture
 
 - **Database:** Supabase PostgreSQL (primary), SQLite (local dev fallback)
-- **Chain:** Algorand testnet (escrow contracts)
-- **Auth:** Wallet signature + JWT
+- **Chain:** Algorand (testnet, mainnet, sandbox) via `py-algorand-sdk`
+- **Auth:** Wallet signature + JWT, GitHub App Integration (OIDC)
 - **Events:** Server-Sent Events (SSE) for real-time marketplace updates
+- **Background Worker:** Asyncio indexer polling task for synchronizing chain state
+- **Security:** Robust middleware stack (rate limiting, security headers, CORS, HMAC signatures)
 
 ---
 
@@ -25,21 +27,25 @@ pip install -r requirements.txt
 ```
 *(Dependencies: `fastapi`, `uvicorn`, `PyJWT`, `cryptography`, `sqlalchemy`, `httpx`, `py-algorand-sdk`, `pytest`)*
 
-### 2. Supabase Setup (Production Database)
+### 2. Environment & Database Setup
 
 AlgoBounty uses **Supabase PostgreSQL** as its primary database. Set up the schema:
 
 1. Create a [Supabase project](https://supabase.com/dashboard/new)
-2. Copy the `.env.template` to `.env` and fill in your Supabase credentials:
+2. Copy the `.env.template` to `.env` and configure your environment:
    ```bash
    cp gateway/.env.template gateway/.env
-   # Edit gateway/.env — set SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, etc.
+   # Edit gateway/.env
+   # Required variables include:
+   # - ALGORAND_NETWORK (sandbox, testnet, or mainnet)
+   # - SECRET_KEY (cryptographic secret for JWT)
+   # - SUPABASE_URL & DATABASE_URL (for PostgreSQL connection)
+   # - NEXT_PUBLIC_SUPABASE_URL (for Dashboard UI)
    ```
-3. Run the DDL in **Supabase SQL Editor** (or it runs automatically on first `init_db()`):
+3. Run the migrations to configure the tables (or it runs automatically on first `init_db()` with SQLite):
    ```bash
-   python gateway/supabase_migration.py
+   alembic -c gateway/alembic.ini upgrade head
    ```
-   This prints the full DDL. Paste it into the Supabase SQL Editor to create the tables.
 4. Apply Row-Level Security policies:
    ```bash
    # Run supabase/rls_policies.sql in the Supabase SQL Editor
@@ -51,7 +57,14 @@ The `supabase/rls_policies.sql` file contains RLS policies for all four tables:
 - **github_prs:** public SELECT/CREATE (append-only)
 - **notifications:** recipient-only SELECT, anyone CREATE
 
-### 3. Run the Gateway Web Server & Dashboard
+### 3. Algorand Sandbox (LocalNet)
+To test on-chain features locally, we recommend using the **AlgoKit CLI**:
+```bash
+algokit localnet start
+```
+Configure `ALGORAND_NETWORK=sandbox` in your `.env`.
+
+### 4. Run the Gateway Web Server & Dashboard
 Start the FastAPI server:
 ```bash
 $env:PYTHONPATH="."  # Windows Powershell
@@ -59,7 +72,7 @@ python gateway/main.py
 ```
 Open [http://localhost:8000/dashboard/](http://localhost:8000/dashboard/) in your browser to view the premium interactive dashboard.
 
-### 3. Run Automated Tests
+### 5. Run Automated Tests
 Execute the local integration and simulation test suite:
 ```bash
 $env:PYTHONPATH="."
@@ -68,31 +81,13 @@ pytest tests/ -v
 
 ---
 
-## Production Readiness Checklist & TODOs
+## Features & Deployment
 
-Before moving this project to a live production mainnet state, the following components must be completed:
+AlgoBounty is fully equipped for mainnet deployment and features robust security and integration capabilities:
 
-### 1. Cryptographic Security & Authentication
-- [ ] **Real Signature Verification**:
-  - Replace the mock bypass signature check (`-MOCK_SIG` suffix in `gateway/auth.py`) with strict `algosdk.util.verify_bytes` validation.
-- [ ] **Secret Key Protection**:
-  - Move `SECRET_KEY` inside `gateway/auth.py` and GitHub webhook keys to a secure environment variable vault (e.g., GCP Secret Manager).
-- [ ] **GitHub Webhook Verification**:
-  - Implement HMAC signature validation (`X-Hub-Signature-256` header) in `gateway/github.py` using the shared webhook secret to prevent arbitrary mock webhook requests.
-
-### 2. Algorand Sandbox & Mainnet Deployment
-- [ ] **Real Smart Contract Lifecycle**:
-  - Integrate PyAlgoSDK client deployment of `escrow.algo` using PyTEAL/Puya compilation. Replace mock `app_id` generation with real on-chain transaction deployment.
-- [ ] **Actual Wallet Connections**:
-  - Replace the dashboard profile selector with Pera Wallet, Defly, or WalletConnect standard SDK integrations on the frontend.
-- [ ] **On-Chain Indexer Poller**:
-  - Replace DB state manipulation with active event monitoring of the Algorand blockchain ledger, listening for deployed factory contracts and updating status based on block round updates.
-
-### 3. API & Database Hardening
-- [x] **Database Migration (PostgreSQL)**:
-  - Migrated the backend persistence layer from SQLite to Supabase PostgreSQL. Use Alembic for database schema migration control.
-  - Row-Level Security (RLS) policies are defined in `supabase/rls_policies.sql`.
-- [ ] **Rate Limiting & Rate Guards**:
-  - Integrate API request rate limits using `slowapi` or Cloud Armor to prevent DDoS and spam on endpoints.
-- [ ] **Durable Event Storage**:
-  - Implement Redis for SSE event state management and task timer durability.
+- **Cryptographic Security:** Strict Ed25519 signature verification via `algosdk.util.verify_bytes`, ensuring that API operations are securely authenticated by wallet owners. Mock signatures are securely isolated to the `sandbox` network.
+- **GitHub OIDC & Webhook Integration:** Implements HMAC signature validation (`X-Hub-Signature-256`) for GitHub webhooks and OIDC JWT verification for secure bot interactions and pull request linking.
+- **On-Chain State Synchronization:** An asynchronous background polling task (`gateway/worker.py`) constantly monitors Algorand indexer events to synchronize the database with the blockchain state.
+- **Production-Ready Smart Contracts:** The `escrow.algo` contract is fully integrated via PyAlgoSDK, managing complete lifecycles using Algorand Inner Transactions (itxn) and state isolation via Global Boxes.
+- **API Hardening:** Integrated with Alembic for managed schema migrations. Includes a comprehensive middleware stack providing rate-limiting, request size constraints, strict CORS policies, and required security headers.
+- **Containerized Deployment:** Optimized for Google Cloud Run (and similar environments) via `Dockerfile`. See `.github/workflows/deploy.yml` for automated CI/CD configurations leveraging GCP Secret Manager for sensitive environment variable protection.
