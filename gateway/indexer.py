@@ -5,6 +5,7 @@ Polls the indexer for on-chain state changes related to bounty escrow
 contracts and syncs them back to the local database.
 """
 from .algod_client import get_indexer_client, get_algod_client
+from .config import settings
 
 try:
     from .database import Bounty
@@ -32,7 +33,11 @@ def poll_bounty_events(last_polled_round: int = 0):
     events = []
     try:
         # Use indexer to get application data in bulk, avoiding N+1 algod calls
-        apps_response = client.search_applications(limit=100)
+        search_kwargs = {"limit": 100}
+        template_app_id = settings.ESCROW_TEMPLATE_APP_ID
+        if template_app_id > 0:
+            search_kwargs["application_id"] = template_app_id
+        apps_response = client.search_applications(**search_kwargs)
         apps_list = apps_response.get("applications") or apps_response.get("apps") or []
         current_round = apps_response.get("current-round", 0)
 
