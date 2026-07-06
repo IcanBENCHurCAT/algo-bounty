@@ -48,7 +48,7 @@ jobs:
 
         # Build and push image
         cp gateway/Dockerfile Dockerfile
-        gcloud builds submit . --tag "${IMAGE_TAG}" --timeout=600
+        gcloud builds submit . --tag "${IMAGE_TAG}" --timeout=600 --suppress-logs
 
         # Deploy to Cloud Run
         gcloud run deploy ${GATEWAY_SERVICE} \
@@ -127,7 +127,7 @@ jobs:
         IMAGE_TAG="gcr.io/${PROJECT_ID}/${FRONTEND_SERVICE}:$(git rev-parse --short HEAD)-$(date +%s)"
 
         # Build and push image from dashboard directory
-        gcloud builds submit dashboard/ --tag "${IMAGE_TAG}"
+        gcloud builds submit dashboard/ --tag "${IMAGE_TAG}" --suppress-logs
 
         # Deploy to Cloud Run
         gcloud run deploy ${FRONTEND_SERVICE} \
