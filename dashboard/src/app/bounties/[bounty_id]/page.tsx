@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { getBounty, approveWork, rejectWork, submitWork, claimBounty, getStoredToken, type Bounty } from '@/lib/api';
+import { getBounty, approveWork, rejectWork, submitWork, claimBounty, getClaimTxn, getApproveTxn, getStoredToken, type Bounty } from '@/lib/api';
 import { useWallet } from '@/hooks/useWallet';
 import { useToast } from '@/components/Toast';
 import { useEvents } from '@/hooks/useEvents';
@@ -11,7 +11,7 @@ export default function BountyDetailPage() {
   const params = useParams();
   const router = useRouter();
   const toast = useToast();
-  const { connected, address, jwt } = useWallet();
+  const { connected, address, jwt, signTransaction } = useWallet();
 
   const [bounty, setBounty] = useState<Bounty | null>(null);
   const [loading, setLoading] = useState(true);
@@ -29,8 +29,8 @@ export default function BountyDetailPage() {
     try {
       const data = await getBounty(bountyId);
       setBounty(data);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to load bounty');
+    } catch {
+      setError('Bounty not found');
     } finally {
       setLoading(false);
     }
@@ -43,9 +43,7 @@ export default function BountyDetailPage() {
 
   // Real-time updates for this specific bounty
   useEvents(useCallback((event) => {
-    if (event.event_type.startsWith('bounty.') && event.data.bounty_id === bountyId) {
-      console.log('Bounty updated:', event);
-      loadBounty();
+    if (event.bounty_id === bountyId) {
       if (event.event_type === 'bounty.claimed') toast.info('Bounty has been claimed');
       if (event.event_type === 'bounty.submitted') toast.info('New work submitted');
       if (event.event_type === 'bounty.approved') toast.success('Bounty approved!');
@@ -66,8 +64,16 @@ export default function BountyDetailPage() {
     }
     setActionLoading('claim');
     try {
-      // In production: Pera signs an escrow transaction here
-      toast.warning('Sign the escrow transaction in your wallet to claim this bounty.');
+      toast.warning('Generating claim transaction...');
+      const { unsigned_txn } = await getClaimTxn(bountyId, jwt);
+      
+      toast.info('Sign the escrow transaction in your wallet...');
+      const signed_txn = await signTransaction(unsigned_txn);
+      
+      toast.warning('Submitting claim to network...');
+      await claimBounty(bountyId, { signed_txn }, jwt);
+      toast.success('Bounty claimed successfully!');
+      await loadBounty();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Claim failed');
     } finally {
@@ -86,6 +92,7 @@ export default function BountyDetailPage() {
     }
     setPrLoading(true);
     try {
+      await submitWork(bountyId, { pr_url: prUrl }, jwt);
       toast.success('Work submitted successfully!');
       setPrUrl('');
       await loadBounty();
@@ -103,7 +110,14 @@ export default function BountyDetailPage() {
     }
     setApproveLoading(true);
     try {
-      await approveWork(bountyId, { signed_txn: '' }, jwt);
+      toast.warning('Generating approval transaction...');
+      const { unsigned_txn } = await getApproveTxn(bountyId, jwt);
+      
+      toast.info('Sign the payout transaction in your wallet...');
+      const signed_txn = await signTransaction(unsigned_txn);
+      
+      toast.warning('Releasing funds on-chain...');
+      await approveWork(bountyId, { signed_txn }, jwt);
       toast.success('Bounty approved! Funds released.');
       await loadBounty();
     } catch (err: unknown) {
