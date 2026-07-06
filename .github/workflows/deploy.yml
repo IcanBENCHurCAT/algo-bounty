@@ -8,7 +8,7 @@ permissions:
   contents: read
 
 env:
-  PROJECT_ID: soul-seeker-500816
+  PROJECT_ID: 546240368861
   REGION: us-central1
   GATEWAY_SERVICE: algo-bounty-gateway
   FRONTEND_SERVICE: algo-bounty-frontend
