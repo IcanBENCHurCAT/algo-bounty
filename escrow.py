@@ -518,3 +518,17 @@ class EscrowContract(ARC4Contract):
         log(self.creator_address.value.bytes)
         log(self.agent_address.value.bytes)
         log(op.itob(self.rejection_count.value))
+
+    @arc4.abimethod(allow_actions=["DeleteApplication"])
+    def delete_bounty(self) -> None:
+        assert Txn.sender == self.creator_address.value, "Only creator can delete application"
+        
+        # Sweep all remaining ALGO and close out the contract account
+        app_balance, exists = op.AcctParamsGet.acct_balance(Global.current_application_address)
+        if exists and app_balance > 0:
+            itxn.Payment(
+                receiver=self.creator_address.value,
+                amount=UInt64(0),
+                fee=0,
+                close_remainder_to=self.creator_address.value
+            ).submit()
