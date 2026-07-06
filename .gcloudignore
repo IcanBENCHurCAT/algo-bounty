@@ -43,3 +43,12 @@ supabase/
 
 # Script outputs
 *.algo
+
+# Virtual environments
+venv/
+.pytest_cache/
+
+# Databases and logs
+*.db
+*.sqlite
+*.log
