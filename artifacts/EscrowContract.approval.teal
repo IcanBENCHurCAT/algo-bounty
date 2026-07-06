@@ -7,29 +7,47 @@ main:
     bytecblock "state" "payout_type" 0x0000000000000000000000000000000000000000000000000000000000000000 "creator_address" "escrow_amount" "asset_id" "rejection_count" "agent_address" "proof_url" "proof_data" "bounty_id" "is_hitm" "github_status" "treasury_address" "review_days" "review_deadline" 0x5041594f5554 "dispute_timestamp" 0x524546554e44 0x70656e64696e67 "mediator_address" "claim_deadline" "dispute_reason" "oidc_token"
     // escrow.py:40
     // class EscrowContract(ARC4Contract):
+    pushbytes 0x1ff0d7d2 // method "delete_bounty()void"
+    txna ApplicationArgs 0
+    match main_delete_bounty_route@4
+
+main_switch_case_next@5:
+    // escrow.py:40
+    // class EscrowContract(ARC4Contract):
     txn OnCompletion
     !
     assert
     txn ApplicationID
-    bz main_create_NoOp@21
+    bz main_create_NoOp@23
     pushbytess 0x282f1770 0x4bc867a6 0x2509937c 0x40c3067f 0x779ec63e 0xe05bc935 0xb7402152 0xfe6ce102 0x955fcc81 0xaae04b2c 0x84f0ae27 0x8b76b26c 0xda791704 0x117ef4d9 0x7f589cc2 // method "create_bounty(byte[],uint64,uint64,uint64,uint64,address,address)void", method "claim_bounty()void", method "submit_work(byte[],byte[])void", method "approve_work()void", method "reject_work(byte[])void", method "submit_dispute(byte[])void", method "resolve_dispute(byte[],byte[])void", method "auto_resolve_creator_win()void", method "timeout_dispute()void", method "auto_release()void", method "claim_abandoned()void", method "expire_claim()void", method "github_verify(byte[],byte[],byte[])void", method "set_github_status(byte[])void", method "get_bounty_info()void"
     txna ApplicationArgs 0
     match create_bounty claim_bounty submit_work approve_work reject_work submit_dispute resolve_dispute auto_resolve_creator_win timeout_dispute auto_release claim_abandoned expire_claim github_verify set_github_status get_bounty_info
     err
 
-main_create_NoOp@21:
+main_create_NoOp@23:
     // escrow.py:40
     // class EscrowContract(ARC4Contract):
     pushbytes 0x739b0889 // method "deploy()void"
     txna ApplicationArgs 0
-    match main_deploy_route@22
+    match main_deploy_route@24
     err
 
-main_deploy_route@22:
+main_deploy_route@24:
     // escrow.py:126
     // @arc4.abimethod(create="require")
     intc_1 // 1
     return
+
+main_delete_bounty_route@4:
+    // escrow.py:522
+    // @arc4.abimethod(allow_actions=["DeleteApplication"])
+    txn OnCompletion
+    pushint 5 // DeleteApplication
+    ==
+    txn ApplicationID
+    &&
+    assert
+    b delete_bounty
 
 
 // escrow.EscrowContract.create_bounty[routing]() -> void:
@@ -2005,6 +2023,70 @@ get_bounty_info:
     log
     // escrow.py:509
     // @arc4.abimethod
+    intc_1 // 1
+    return
+
+
+// escrow.EscrowContract.delete_bounty[routing]() -> void:
+delete_bounty:
+    // escrow.py:524
+    // assert Txn.sender == self.creator_address.value, "Only creator can delete application"
+    txn Sender
+    bytec_3 // "creator_address"
+    box_get
+    assert // check self.creator_address exists
+    ==
+    assert // Only creator can delete application
+    // escrow.py:526-527
+    // # Sweep all remaining ALGO and close out the contract account
+    // app_balance, exists = op.AcctParamsGet.acct_balance(Global.current_application_address)
+    global CurrentApplicationAddress
+    acct_params_get AcctBalance
+    // escrow.py:528
+    // if exists and app_balance > 0:
+    bz delete_bounty_after_if_else@5
+    dup
+    bz delete_bounty_after_if_else@5
+    // escrow.py:529-534
+    // itxn.Payment(
+    //     receiver=self.creator_address.value,
+    //     amount=UInt64(0),
+    //     fee=0,
+    //     close_remainder_to=self.creator_address.value
+    // ).submit()
+    itxn_begin
+    // escrow.py:530
+    // receiver=self.creator_address.value,
+    bytec_3 // "creator_address"
+    box_get
+    assert // check self.creator_address exists
+    dup
+    itxn_field CloseRemainderTo
+    // escrow.py:531
+    // amount=UInt64(0),
+    intc_0 // 0
+    itxn_field Amount
+    itxn_field Receiver
+    // escrow.py:529
+    // itxn.Payment(
+    intc_1 // pay
+    itxn_field TypeEnum
+    // escrow.py:532
+    // fee=0,
+    intc_0 // 0
+    itxn_field Fee
+    // escrow.py:529-534
+    // itxn.Payment(
+    //     receiver=self.creator_address.value,
+    //     amount=UInt64(0),
+    //     fee=0,
+    //     close_remainder_to=self.creator_address.value
+    // ).submit()
+    itxn_submit
+
+delete_bounty_after_if_else@5:
+    // escrow.py:522
+    // @arc4.abimethod(allow_actions=["DeleteApplication"])
     intc_1 // 1
     return
 

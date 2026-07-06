@@ -180,8 +180,8 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
                         from algosdk.logic import get_application_address
                         app_address = get_application_address(app_id)
 
-                        # Step 2: Fund the contract address (escrow amount + 0.25 ALGO for box MBR)
-                        mbr_buffer = 250_000
+                        # Step 2: Fund the contract address (escrow amount + 0.35 ALGO for box MBR)
+                        mbr_buffer = 350_000
                         fund_amount = escrow_amount + mbr_buffer
 
                         from algosdk.transaction import PaymentTxn
