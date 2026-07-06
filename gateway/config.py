@@ -63,6 +63,15 @@ class Config:
         return self.get_secret("ALGORAND_NETWORK", "testnet")
 
     @property
+    def TREASURY_ADDRESS(self) -> str:
+        addr = self.get_secret("TREASURY_ADDRESS")
+        if addr:
+            return addr
+        from gateway.algod_client import get_default_account
+        acct = get_default_account()
+        return acct.address if acct else ""
+
+    @property
     def SUPABASE_URL(self) -> str:
         return self.get_secret("SUPABASE_URL")
 

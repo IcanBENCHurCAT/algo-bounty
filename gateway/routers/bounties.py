@@ -23,6 +23,10 @@ from ..algod_client import (
 router = APIRouter(prefix="/api/v1/bounties", tags=["bounties"])
 sandbox_active = is_sandbox()
 
+from pydantic import BaseModel
+class TxnGenResponse(BaseModel):
+    unsigned_txn: str
+
 @router.get("", summary="List all bounties", description="Retrieve a list of bounties with optional filtering by status, repository, amount, karma requirement, and HITM mode.")
 def list_bounties(
     status: Optional[str] = None,
@@ -146,8 +150,8 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
 
                 # Mediator is the platform account (default)
                 mediator_address = platform_account.address
-                # Treasury is also the platform account (default)
-                treasury_address = platform_account.address
+                # Treasury is configured in config.py
+                treasury_address = settings.TREASURY_ADDRESS or platform_account.address
 
                 from algosdk.abi import Method
                 deploy_method = Method.from_signature("deploy()void")
@@ -275,6 +279,55 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
         "tx_id": tx_id,
         "onchain": onchain,
     }
+
+@router.post("/{bounty_id}/claim/txn", response_model=TxnGenResponse, summary="Generate unsigned claim transaction")
+async def get_claim_txn(
+    bounty_id: str,
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user)
+):
+    b = db.query(Bounty).filter(Bounty.bounty_id == bounty_id).first()
+    if not b:
+        raise HTTPException(status_code=404, detail="Bounty not found")
+    if b.status != "open":
+        raise HTTPException(status_code=400, detail="Bounty not claimable")
+    if b.creator == current_user:
+        raise HTTPException(status_code=400, detail="Cannot claim your own bounty")
+
+    # Check worker karma requirement
+    worker = db.query(Agent).filter(Agent.address == current_user).first()
+    if not worker or worker.karma < b.karma_requirement:
+        raise HTTPException(status_code=403, detail=f"Insufficient karma. Required: {b.karma_requirement}")
+
+    client = get_algod_client()
+    params = client.suggested_params()
+    params.fee = 1000
+    params.flat_fee = True
+
+    from algosdk.abi import Method
+    claim_method = Method.from_signature("claim_bounty()void")
+    claim_selector = claim_method.get_selector()
+
+    from algosdk.transaction import ApplicationNoOpTxn
+    claim_boxes = [
+        (b.app_id, b"state"), (b.app_id, b"agent_address"), (b.app_id, b"asset_id"),
+        (b.app_id, b"creator_address"), (b.app_id, b"claim_deadline"), (b.app_id, b"claim_timestamp")
+    ]
+
+    claim_txn = ApplicationNoOpTxn(
+        sender=current_user,
+        sp=params,
+        index=b.app_id,
+        app_args=[claim_selector],
+        boxes=claim_boxes
+    )
+    
+    import base64
+    import algosdk.encoding as encoding
+    txn_bytes = encoding.msgpack_encode(claim_txn)
+    txn_b64 = base64.b64encode(txn_bytes).decode("utf-8")
+    
+    return {"unsigned_txn": txn_b64}
 
 @router.post("/{bounty_id}/claim", summary="Claim a bounty", description="Allows a worker to claim an open bounty. Validates karma requirements and processes on-chain claim if a signed transaction is provided.")
 async def claim_bounty(
@@ -415,6 +468,56 @@ async def submit_work(
         )
 
     return {"bounty_id": bounty_id, "status": "submitted", "tx_id": tx_id}
+
+@router.post("/{bounty_id}/approve/txn", response_model=TxnGenResponse, summary="Generate unsigned approve transaction")
+async def get_approve_txn(
+    bounty_id: str,
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user)
+):
+    b = db.query(Bounty).filter(Bounty.bounty_id == bounty_id).first()
+    if not b:
+        raise HTTPException(status_code=404, detail="Bounty not found")
+    if b.creator != current_user:
+        raise HTTPException(status_code=403, detail="Only creator can approve work")
+    if b.status != "submitted":
+        raise HTTPException(status_code=400, detail="Bounty has no work submitted to approve")
+
+    client = get_algod_client()
+    params = client.suggested_params()
+    params.fee = 3000  # 2 inner payment transfers + 1 outer call = 3 fees
+    params.flat_fee = True
+
+    from algosdk.abi import Method
+    approve_method = Method.from_signature("approve_work()void")
+    approve_selector = approve_method.get_selector()
+
+    from algosdk.transaction import ApplicationNoOpTxn
+    approve_boxes = [
+        (b.app_id, b"state"),
+        (b.app_id, b"escrow_amount"),
+        (b.app_id, b"asset_id"),
+        (b.app_id, b"payout_type"),
+        (b.app_id, b"treasury_address"),
+        (b.app_id, b"agent_address"),
+        (b.app_id, b"creator_address")
+    ]
+
+    approve_txn = ApplicationNoOpTxn(
+        sender=current_user,
+        sp=params,
+        index=b.app_id,
+        app_args=[approve_selector],
+        boxes=approve_boxes,
+        accounts=[b.worker]
+    )
+    
+    import base64
+    import algosdk.encoding as encoding
+    txn_bytes = encoding.msgpack_encode(approve_txn)
+    txn_b64 = base64.b64encode(txn_bytes).decode("utf-8")
+    
+    return {"unsigned_txn": txn_b64}
 
 @router.post("/{bounty_id}/approve", summary="Approve submitted work", description="Allows the creator to approve the submitted work, closing the bounty and releasing funds. Awards +10 karma to worker and +5 to creator.")
 async def approve_work(
