@@ -28,7 +28,9 @@ init_db()
 
 # CORS origins allowlist – matches deployed frontend + local dev + vantage-labs domain
 ALLOWED_ORIGINS: list[str] = [
+    "https://algo-bounty-frontend-*.us-central1.run.app",
     "https://algo-bounty-frontend-*.uc.a.run.app",
+    "https://algo-bounty-frontend-*.a.run.app",
     "https://vantage-labs.com",
     "https://*.vantage-labs.com",
     "http://localhost:3000",
@@ -43,9 +45,13 @@ async def lifespan(app: FastAPI):
     await broker.start_cleanup()
     print(f"[SSE] Started cleanup task (interval={broker.CLEANUP_INTERVAL_SECONDS}s, stale_timeout={broker.STALE_TIMEOUT_SECONDS}s)")
 
-    # Start indexer polling background task
-    asyncio.create_task(indexer_worker())
-    print("[INDEXER] Started background indexer polling task")
+    # Start indexer polling background task only if explicitly requested or in sandbox mode (local dev)
+    run_indexer = os.environ.get("RUN_INDEXER", "true" if NODE_ENV == "sandbox" else "false")
+    if run_indexer.lower() == "true":
+        asyncio.create_task(indexer_worker())
+        print("[INDEXER] Started background indexer polling task")
+    else:
+        print("[INDEXER] Standalone indexer polling task disabled (running as separate worker)")
 
     yield
 
