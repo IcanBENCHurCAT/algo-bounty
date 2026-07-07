@@ -76,7 +76,7 @@ jobs:
         flags: |
           --command=python
           --args=gateway/worker.py
-          --memory=256Mi
+          --memory=512Mi
           --cpu=1
           --min-instances=1
           --max-instances=1
