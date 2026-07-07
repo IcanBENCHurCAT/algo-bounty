@@ -77,11 +77,11 @@ jobs:
           --command=python
           --args=gateway/worker.py
           --memory=256Mi
-          --cpu=0.25
+          --cpu=1
           --min-instances=1
           --max-instances=1
           --no-cpu-throttling
-          --set-env-vars=ALGORAND_NETWORK=testnet,SUPABASE_URL=${{ secrets.SUPABASE_URL }}
+          --set-env-vars=ALGORAND_NETWORK=testnet,SUPABASE_URL=${{ secrets.SUPABASE_URL }},PYTHONPATH=/app
           --set-secrets=DATABASE_URL=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-db-url:latest,SECRET_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-jwt-secret:latest,PLATFORM_PRIVATE_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty_platform_private_key:latest,GITHUB_WEBHOOK_SECRET=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-github-webhook-secret:latest,SUPABASE_SERVICE_ROLE_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty_supabase_service_role_key:latest,GITHUB_PRIVATE_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-github-private-key:latest
 
     - name: Set Gateway URL Output
