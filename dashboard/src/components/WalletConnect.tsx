@@ -32,7 +32,7 @@ export default function WalletConnect({
         <path d="M12 2L2 12l10 10 10-10L12 2zm0 4l6 6-6 6-6-6 6-6z" />
       </svg>
     ),
-    edge: (
+    exodus: (
       <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
         <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5-10-5-10 5z" />
       </svg>
@@ -108,7 +108,7 @@ export default function WalletConnect({
         <>
           <div className="fixed inset-0 z-50" onClick={() => setShowOptions(false)} />
           <div className="absolute right-0 mt-2 w-48 rounded-xl bg-gray-900 border border-gray-800 shadow-2xl z-[60] overflow-hidden p-1">
-            {(['pera', 'defly', 'edge'] as const).map((type) => (
+            {(['pera', 'defly', 'exodus'] as const).map((type) => (
               <button
                 key={type}
                 onClick={() => handleConnect(type)}

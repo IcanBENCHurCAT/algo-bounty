@@ -13,7 +13,6 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (connected && address) {
-      setLoadingBounties(true);
       getBounties()
         .then((res) => {
           // Filter bounties where user is creator or worker

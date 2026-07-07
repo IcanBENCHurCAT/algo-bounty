@@ -20,18 +20,79 @@ def generate_challenge(address: str) -> str:
     timestamp = int(time.time())
     return f"AlgoBounty auth: {address} at {timestamp}"
 
+import base64
+from algosdk import util, encoding, transaction
+
 def verify_signature(address: str, signature: str, challenge: str) -> bool:
-    """Verify that the signature matches the Algorand address and challenge."""
+    """Verify that the signature matches the Algorand address and challenge.
+    Supports both raw bytes signatures (ARC-60 / Lute) and transaction-based signatures.
+    """
     try:
-        # standard SDK verify_bytes expects (bytes_message, signature_b64, address)
-        # Note: In PyAlgoSDK, verify_bytes takes bytes for both message and signature.
+        # First, try to decode as a standard data signature
         message_bytes = challenge.encode('utf-8')
-        # Some clients return signature as base64 or bytes. If it's a string, we decode it
-        # but algosdk.util.verify_bytes requires signature in base64 string or bytes?
-        # Let's write a robust verification that checks verify_bytes.
-        return util.verify_bytes(message_bytes, signature, address)
+        try:
+            if util.verify_bytes(message_bytes, signature, address):
+                return True
+        except Exception:
+            pass
+
+        # If that fails, try to decode as an unsendable transaction
+        try:
+            signed_txn_bytes = base64.b64decode(signature)
+            stxn = encoding.msgpack_decode(signed_txn_bytes)
+            if not isinstance(stxn, transaction.SignedTransaction):
+                return False
+
+            txn = stxn.transaction
+            # Verify the note field matches the challenge
+            expected_note = f"auth:{challenge}".encode('utf-8')
+            if txn.note != expected_note:
+                return False
+
+            # Verify sender matches
+            if txn.sender != address:
+                return False
+
+            # Verify it's a 0 ALGO payment to self
+            if not isinstance(txn, transaction.PaymentTxn):
+                return False
+            if txn.receiver != address or txn.amt != 0:
+                return False
+
+            # Verify the signature itself
+            return verify_txn_signature(stxn, address)
+        except Exception as e:
+            print(f"Txn verification failed: {e}")
+            pass
+
     except Exception as e:
         print(f"Signature verification failed: {e}")
+
+    return False
+
+def verify_txn_signature(stxn: transaction.SignedTransaction, address: str) -> bool:
+    try:
+        public_key = encoding.decode_address(address)
+        # If it has a multisig or logicsig, reject for this simple auth
+        if stxn.msig or stxn.lsig:
+            return False
+
+        import nacl.signing
+        verify_key = nacl.signing.VerifyKey(public_key)
+
+        # The correct way to get the message to verify for a transaction in py-algorand-sdk
+        # is prefixing 'TX' to the msgpack encoded raw transaction
+        msg_bytes = b"TX" + encoding.msgpack_encode(stxn.transaction)
+
+        # Actually msgpack_encode returns base64 string, so we need to decode it first
+        import base64
+        raw_txn_bytes = base64.b64decode(encoding.msgpack_encode(stxn.transaction))
+        signable_bytes = b"TX" + raw_txn_bytes
+
+        verify_key.verify(signable_bytes, base64.b64decode(stxn.signature))
+        return True
+    except Exception as e:
+        print(f"verify_txn_signature error: {e}")
         return False
 
 def create_jwt_token(address: str) -> str:
