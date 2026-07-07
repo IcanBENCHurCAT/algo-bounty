@@ -75,6 +75,7 @@ export function useWallet() {
       }
 
       const address = account.address;
+      wallet.setActive();
 
       // Get challenge
       const challengeData: AuthChallenge = await requestChallenge(address);
