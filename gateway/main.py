@@ -28,7 +28,9 @@ init_db()
 
 # CORS origins allowlist – matches deployed frontend + local dev + vantage-labs domain
 ALLOWED_ORIGINS: list[str] = [
+    "https://algo-bounty-frontend-*.us-central1.run.app",
     "https://algo-bounty-frontend-*.uc.a.run.app",
+    "https://algo-bounty-frontend-*.a.run.app",
     "https://vantage-labs.com",
     "https://*.vantage-labs.com",
     "http://localhost:3000",
