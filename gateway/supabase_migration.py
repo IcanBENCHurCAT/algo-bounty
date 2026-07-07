@@ -72,8 +72,10 @@ def build_engine():
     DATABASE_URL is not set or is explicitly an SQLite URL.
     """
 
-    # Prefer SUPABASE_URL for Supabase projects; fall back to DATABASE_URL
-    url = SUPABASE_URL or DATABASE_URL
+    # Use DATABASE_URL for database connection; do not use HTTP SUPABASE_URL
+    url = DATABASE_URL
+    if not url and SUPABASE_URL and not SUPABASE_URL.startswith("http"):
+        url = SUPABASE_URL
 
     if url:
         url = _normalize_db_url(url)
