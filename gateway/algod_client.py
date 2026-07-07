@@ -23,19 +23,19 @@ SANDBOX_INDEXER_TOKEN = settings.get_secret("INDEXER_TOKEN", SANDBOX_TOKEN)
 
 # --- Tier 2: Algorand Testnet (production fallback) ---
 TESTNET_ALGOD = settings.get_secret(
-    "TESTNET_ALGOD_URL", "https://testnet-api.algonode.cloud"
+    "TESTNET_ALGOD_URL", "https://testnet-api.4160.nodely.dev"
 )
 TESTNET_INDEXER = settings.get_secret(
-    "TESTNET_INDEXER_URL", "https://testnet-indexer.algonode.cloud"
+    "TESTNET_INDEXER_URL", "https://testnet-idx.4160.nodely.dev"
 )
 TESTNET_TOKEN = settings.get_secret("TESTNET_ALGOD_TOKEN", "")  # public, no auth
 
 # --- Tier 3: Mainnet (future) ---
 MAINNET_ALGOD = settings.get_secret(
-    "MAINNET_ALGOD_URL", "https://mainnet-api.algonode.cloud"
+    "MAINNET_ALGOD_URL", "https://mainnet-api.4160.nodely.dev"
 )
 MAINNET_INDEXER = settings.get_secret(
-    "MAINNET_INDEXER_URL", "https://mainnet-indexer.algonode.cloud"
+    "MAINNET_INDEXER_URL", "https://mainnet-idx.4160.nodely.dev"
 )
 MAINNET_TOKEN = settings.get_secret("MAINNET_ALGOD_TOKEN", "")  # public, no auth
 
