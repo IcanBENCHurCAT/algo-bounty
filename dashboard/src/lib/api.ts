@@ -275,8 +275,12 @@ export async function getMyProfile(token: string): Promise<AgentProfile> {
 
 // --- Auth endpoints ---
 
-export async function requestChallenge(): Promise<AuthChallenge> {
-  const res = await fetch(`${API_BASE}/api/v1/auth/request`, { method: 'POST' });
+export async function requestChallenge(address: string): Promise<AuthChallenge> {
+  const res = await fetch(`${API_BASE}/api/v1/auth/request`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ address }),
+  });
   if (!res.ok) throw new Error('Failed to get auth challenge');
   return res.json();
 }
