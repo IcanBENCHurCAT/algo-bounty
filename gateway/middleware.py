@@ -73,7 +73,9 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
 
 # Default allowed origins – update when deploying to production
 _DEFAULT_ALLOWED_ORIGINS: list[str] = [
+    "https://algo-bounty-frontend-*.us-central1.run.app",
     "https://algo-bounty-frontend-*.uc.a.run.app",
+    "https://algo-bounty-frontend-*.a.run.app",
     "http://localhost:3000",
     "http://localhost:3001",
 ]
@@ -99,7 +101,10 @@ class CORSAllowlistMiddleware(BaseHTTPMiddleware):
 
         # Simple CORS: check if the origin is in our allowlist
         if origin and self._origin_matches(origin):
-            response = await call_next(request)
+            if request.method == "OPTIONS":
+                response = Response(status_code=204)
+            else:
+                response = await call_next(request)
             response.headers["Access-Control-Allow-Origin"] = origin
             response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
             response.headers["Access-Control-Allow-Headers"] = (
