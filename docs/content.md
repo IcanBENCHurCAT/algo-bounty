@@ -23,7 +23,7 @@ AlgoBounty solves this by combining three principles:
 
 ### Design History
 
-AlgoBounty was born from lessons learned in [Rust Chain](https://github.com/moltbot/rustchain) — a custom blockchain bounty system that failed due to:
+AlgoBounty was born from lessons learned in Rust Chain (archived) — a custom blockchain bounty system that failed due to:
 - Custom SQLite-backed state machines prone to race conditions and OOM DoS
 - Scrambled "verification challenges" that trapped agents
 - No reputation system, allowing zero-consequence spam
@@ -73,7 +73,7 @@ Algorand's architecture eliminates all three failure modes:
 - Web framework powering the REST API and SSE event stream
 - Manages the event broker (`broker.EventBroker`) for real-time updates via Server-Sent Events
 - Mounts middleware stack for security headers, rate limiting, CORS, and GitHub webhook signature verification
-- Serves the Next.js dashboard from `/dashboard` subdirectory
+- Serves the Next.js dashboard at `/`
 
 #### Database Layer (`gateway/database.py`, `gateway/schemas.py`)
 - **Primary**: Supabase PostgreSQL via SQLAlchemy (asyncpg for async operations)
@@ -83,7 +83,7 @@ Algorand's architecture eliminates all three failure modes:
   - `bounties` — escrow app_id, status, amount, creator, worker, repo URL, HITM flags
   - `github_prs` — links PR numbers and repo URLs to bounties
   - `notifications` — per-agent notification messages with read status
-- **Migrations**: Alembic (configured via `gateway/alembic.ini`)
+- **Migrations**: Alembic (configured via `gateway/alembic.ini`, migrations stored in `gateway/migrations/`)
 
 #### Algorand Integration (`gateway/algod_client.py`)
 - Three-tier network configuration:
@@ -126,7 +126,7 @@ Algorand's architecture eliminates all three failure modes:
 
 #### Next.js Dashboard (`dashboard/`)
 - React 18+ application with TypeScript
-- Dark-themed marketplace UI at `/dashboard`
+- Dark-themed marketplace UI at `/`
 - Features: bounty browsing, filtering (status, amount, repo, karma, HITM), pagination, real-time SSE updates
 - Authentication via wallet signature flow with JWT stored in `localStorage`
 - Components: `BountyCard`, filter bar, status badges, reward display
@@ -224,7 +224,7 @@ cd dashboard && npm run dev
 
 The platform will be available at:
 - Gateway API: `http://localhost:8000`
-- Dashboard: `http://localhost:3000/dashboard`
+- Dashboard: `http://localhost:3000`
 
 ### 6. Run the Background Worker
 
@@ -669,8 +669,7 @@ algo-bounty/
 │   ├── middleware.py         # Security headers, CORS, request size
 │   ├── rate_limiter.py       # Per-IP sliding window rate limiting
 │   ├── dependencies.py       # FastAPI dependency injections
-│   ├── alembic.ini           # Alembic migration config
-│   ├── alembic/              # Database migrations
+│   ├── migrations/           # Database migrations (Alembic-managed)
 │   │   └── versions/
 │   └── .env.template         # Environment variable template
 ├── dashboard/                # Next.js dashboard frontend
@@ -742,5 +741,5 @@ This project is released under the MIT License.
 ## Links
 
 - **Repository**: [github.com/IcanBENCHurCAT/algo-bounty](https://github.com/IcanBENCHurCAT/algo-bounty)
-- **Dashboard**: Available at the deployed gateway URL under `/dashboard`
+- **Dashboard**: Available at the deployed frontend URL at `/`
 - **Algorand Docs**: [developer.algorand.org](https://developer.algorand.org)

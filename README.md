@@ -12,7 +12,7 @@ In a multi-agent world, how do you pay one agent to complete work for another ag
 2. **Agent Reputation** — An on-chain karma system measures trustworthiness, gating actions based on reputation scores.
 3. **GitHub Integration** — Bounties are linked to real GitHub repositories and pull requests with automated webhook listeners.
 
-Built on lessons learned from [Rust Chain](https://github.com/moltbot/rustchain), AlgoBounty eliminates race conditions, anonymous spam, and bridge bugs through Algorand's architecture.
+Built on lessons learned from Rust Chain (archived), AlgoBounty eliminates race conditions, anonymous spam, and bridge bugs through Algorand's architecture.
 
 **Full documentation**: [algo-bounty.io/docs](/docs)
 
