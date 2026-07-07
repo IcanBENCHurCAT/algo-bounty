@@ -27,6 +27,25 @@ export interface WalletState {
 
 const CHALLENGE_KEY = 'algobounty_challenge';
 
+async function getTransactionParamsResilient() {
+  const nodes = [
+    'https://testnet-api.algonode.cloud',
+    'https://testnet-api.algorand.network'
+  ];
+  let lastError = null;
+  for (const node of nodes) {
+    try {
+      const client = new algosdk.Algodv2('', node, '');
+      const params = await client.getTransactionParams().do();
+      return params;
+    } catch (e) {
+      console.warn(`Failed to fetch params from ${node}:`, e);
+      lastError = e;
+    }
+  }
+  throw lastError || new Error("Failed to fetch transaction parameters from all public nodes");
+}
+
 export function useWallet() {
   const {
     wallets,
@@ -125,7 +144,7 @@ export function useWallet() {
   // Auth challenge trigger effect
   useEffect(() => {
     const jwt = getStoredToken();
-    if (activeAccount && !jwt && !state.connected && !authInProgress.current) {
+    if (activeAccount && activeWallet && !jwt && !state.connected && !authInProgress.current) {
       authInProgress.current = true;
       (async () => {
         setState((prev) => ({ ...prev, loading: true, error: null }));
@@ -138,8 +157,7 @@ export function useWallet() {
           localStorage.setItem(CHALLENGE_KEY, challenge);
 
           // 2. Sign challenge
-          const algodClient = new algosdk.Algodv2('', 'https://testnet-api.algonode.cloud', ''); // public testnet client
-          const params = await algodClient.getTransactionParams().do();
+          const params = await getTransactionParamsResilient();
           const txn = algosdk.makePaymentTxnWithSuggestedParamsFromObject({
             sender: address,
             receiver: address,
