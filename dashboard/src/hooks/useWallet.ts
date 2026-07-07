@@ -67,80 +67,9 @@ export function useWallet() {
         throw new Error(`Wallet ${type} is not available.`);
       }
 
-      const accounts = await wallet.connect();
-      const account = Array.isArray(accounts) ? accounts[0] : accounts;
-
-      if (!account || !account.address) {
-        throw new Error(`No account returned from ${type} wallet`);
-      }
-
-      const address = account.address;
+      await wallet.connect();
       wallet.setActive();
-
-      // Get challenge
-      const challengeData: AuthChallenge = await requestChallenge(address);
-      const challenge = challengeData.challenge;
-      localStorage.setItem(CHALLENGE_KEY, challenge);
-
-      // Sign challenge
-      let signatureBase64: string;
-
-      try {
-        if (wallet.id === 'lute') { // actually check if lute or canSignData if exposed
-          // const metadata = { scope: 'auth', encoding: 'base64' };
-          // For now, since we only use pera, defly, exodus, we can just use the fallback.
-        }
-
-        // Fallback for all other wallets: zero-amount self-payment
-        const algodClient = new algosdk.Algodv2('', 'https://testnet-api.algonode.cloud', ''); // public testnet client
-        const params = await algodClient.getTransactionParams().do();
-        const txn = algosdk.makePaymentTxnWithSuggestedParamsFromObject({
-          sender: address,
-          receiver: address,
-          amount: 0,
-          note: new TextEncoder().encode(`auth:${challenge}`),
-          suggestedParams: { ...params, fee: 0, flatFee: true },
-        });
-
-        const encodedTxn = algosdk.encodeUnsignedTransaction(txn);
-        // Use signTransactions to sign the authentication challenge
-        let signedTxns;
-        if (typeof (wallet as unknown as Record<string, unknown>).signTransactions === 'function') {
-           signedTxns = await ((wallet as unknown as Record<string, unknown>).signTransactions as (...args: unknown[]) => Promise<Uint8Array[]>)([encodedTxn]);
-        } else {
-           // use the hook's method
-           signedTxns = await signTransactions([encodedTxn]);
-        }
-
-        if (!signedTxns || signedTxns.length === 0) {
-            throw new Error("Failed to sign challenge");
-        }
-        const signedBytes = signedTxns[0] || new Uint8Array();
-        signatureBase64 = Buffer.from(signedBytes).toString('base64');
-      } catch (signErr) {
-        console.error(`${type} sign error:`, signErr);
-        throw new Error(`Failed to sign challenge with ${type} Wallet`);
-      }
-
-      // Verify with backend
-      const response = await verifyAuth(address, signatureBase64, challenge);
-
-      storeToken(response.jwt);
-      localStorage.setItem('algobounty_wallet_type', type);
-
-      setState({
-        address,
-        connected: true,
-        walletType: type,
-        jwt: response.jwt,
-        karma: response.karma,
-        profile: null,
-        loading: false,
-        error: null,
-      });
-
-      // Fetch profile in background
-      fetchProfile(address, response.jwt);
+      // Connecting wraps up here. The activeAccount useEffect will handle challenge signing.
     } catch (err: unknown) {
       const msg =
         err instanceof Error ? err.message : 'Unknown error connecting wallet';
@@ -150,7 +79,7 @@ export function useWallet() {
         error: msg,
       }));
     }
-  }, [fetchProfile, wallets, signTransactions]);
+  }, [wallets]);
 
   const disconnect = useCallback(() => {
     clearToken();
@@ -190,6 +119,66 @@ export function useWallet() {
 
     return btoa(String.fromCharCode.apply(null, Array.from(signedTxns[0] || new Uint8Array())));
   }, [state.walletType, state.address, state.connected, activeWallet, signTransactions]);
+
+  // Auth challenge trigger effect
+  useEffect(() => {
+    const jwt = getStoredToken();
+    if (activeAccount && !jwt && !state.connected && !state.loading) {
+      (async () => {
+        setState((prev) => ({ ...prev, loading: true, error: null }));
+        try {
+          const address = activeAccount.address;
+
+          // 1. Get challenge
+          const challengeData: AuthChallenge = await requestChallenge(address);
+          const challenge = challengeData.challenge;
+          localStorage.setItem(CHALLENGE_KEY, challenge);
+
+          // 2. Sign challenge
+          const algodClient = new algosdk.Algodv2('', 'https://testnet-api.algonode.cloud', ''); // public testnet client
+          const params = await algodClient.getTransactionParams().do();
+          const txn = algosdk.makePaymentTxnWithSuggestedParamsFromObject({
+            sender: address,
+            receiver: address,
+            amount: 0,
+            note: new TextEncoder().encode(`auth:${challenge}`),
+            suggestedParams: { ...params, fee: 0, flatFee: true },
+          });
+
+          const encodedTxn = algosdk.encodeUnsignedTransaction(txn);
+          const signedTxns = await signTransactions([encodedTxn]);
+          if (!signedTxns || signedTxns.length === 0) {
+            throw new Error("Failed to sign challenge");
+          }
+          const signedBytes = signedTxns[0] || new Uint8Array();
+          const signatureBase64 = Buffer.from(signedBytes).toString('base64');
+
+          // 3. Verify with backend
+          const response = await verifyAuth(address, signatureBase64, challenge);
+
+          storeToken(response.jwt);
+          localStorage.setItem('algobounty_wallet_type', activeWallet?.id || '');
+
+          setState({
+            address,
+            connected: true,
+            walletType: (activeWallet?.id as WalletType) || null,
+            jwt: response.jwt,
+            karma: response.karma,
+            profile: null,
+            loading: false,
+            error: null,
+          });
+
+          // Fetch profile in background
+          fetchProfile(address, response.jwt);
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : 'Failed to sign and authenticate wallet';
+          setState((prev) => ({ ...prev, loading: false, error: msg }));
+        }
+      })();
+    }
+  }, [activeAccount, activeWallet, signTransactions, fetchProfile, state.connected, state.loading]);
 
   // Hydrate from localStorage on mount
   useEffect(() => {
