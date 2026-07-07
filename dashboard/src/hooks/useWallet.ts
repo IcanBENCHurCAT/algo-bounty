@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
+import { useWallet as useTxnWallet } from '@txnlab/use-wallet-react';
 import {
   getStoredToken,
   storeToken,
@@ -9,8 +10,9 @@ import {
   type AuthChallenge,
   type AgentProfile,
 } from '@/lib/api';
+import algosdk from 'algosdk';
 
-export type WalletType = 'pera' | 'defly' | 'edge';
+export type WalletType = 'pera' | 'defly' | 'exodus';
 
 export interface WalletState {
   address: string | null;
@@ -23,20 +25,18 @@ export interface WalletState {
   error: string | null;
 }
 
-interface WalletWindow extends Window {
-  algoransdk?: {
-    signTxn: (txn: string, sk: string) => Promise<string>;
-  };
-  PeraWalletConnect?: new () => { connect: () => Promise<void>; account: string | null; signMessage: (data: { message: string }) => Promise<Uint8Array | Uint8Array[]>; disconnect?: () => void };
-  DeflyWalletConnect?: new () => { connect: () => Promise<void>; account: string | null; signMessage: (data: { message: string }) => Promise<Uint8Array | Uint8Array[]>; disconnect?: () => void };
-  EdgeWalletConnect?: new () => { connect: () => Promise<void>; account: string | null; signMessage: (data: { message: string }) => Promise<Uint8Array | Uint8Array[]>; disconnect?: () => void };
-}
-
-declare const window: WalletWindow;
-
 const CHALLENGE_KEY = 'algobounty_challenge';
 
 export function useWallet() {
+  const {
+    wallets,
+    activeWallet,
+    activeAccount,
+    isReady,
+    signTransactions,
+    transactionSigner,
+  } = useTxnWallet();
+
   const [state, setState] = useState<WalletState>({
     address: null,
     connected: false,
@@ -61,50 +61,68 @@ export function useWallet() {
     setState((prev) => ({ ...prev, loading: true, error: null }));
 
     try {
-      let wallet: { connect: () => Promise<void>; account: string | null; signMessage: (data: { message: string }) => Promise<Uint8Array | Uint8Array[]> };
-      let address: string | null = null;
-
-      if (type === 'pera') {
-        const Pera = window.PeraWalletConnect;
-        if (!Pera) throw new Error('Pera Wallet is not installed');
-        wallet = new Pera();
-        await wallet.connect();
-        address = wallet.account;
-      } else if (type === 'defly') {
-        const Defly = window.DeflyWalletConnect;
-        if (!Defly) throw new Error('Defly Wallet is not installed');
-        wallet = new Defly();
-        await wallet.connect();
-        address = wallet.account;
-      } else {
-        const Edge = window.EdgeWalletConnect;
-        if (!Edge) throw new Error('Edge Wallet is not installed');
-        wallet = new Edge();
-        await wallet.connect();
-        address = wallet.account;
+      // Find the specific wallet
+      const wallet = wallets.find((w) => w.id === type);
+      if (!wallet) {
+        throw new Error(`Wallet ${type} is not available.`);
       }
 
-      if (!address) throw new Error(`No account returned from ${type} wallet`);
+      const accounts = await wallet.connect();
+      const account = Array.isArray(accounts) ? accounts[0] : accounts;
+
+      if (!account || !account.address) {
+        throw new Error(`No account returned from ${type} wallet`);
+      }
+
+      const address = account.address;
 
       // Get challenge
-      const challengeData: AuthChallenge = await requestChallenge();
+      const challengeData: AuthChallenge = await requestChallenge(address);
       const challenge = challengeData.challenge;
       localStorage.setItem(CHALLENGE_KEY, challenge);
 
       // Sign challenge
-      let signature: string;
+      let signatureBase64: string;
+
       try {
-        const signed = await wallet.signMessage({ message: challenge });
-        signature = Array.isArray(signed)
-          ? Buffer.from(signed[0]).toString('base64')
-          : Buffer.from(signed as Uint8Array).toString('base64');
+        if (wallet.id === 'lute') { // actually check if lute or canSignData if exposed
+          // const metadata = { scope: 'auth', encoding: 'base64' };
+          // For now, since we only use pera, defly, exodus, we can just use the fallback.
+        }
+
+        // Fallback for all other wallets: zero-amount self-payment
+        const algodClient = new algosdk.Algodv2('', 'https://testnet-api.algonode.cloud', ''); // public testnet client
+        const params = await algodClient.getTransactionParams().do();
+        const txn = algosdk.makePaymentTxnWithSuggestedParamsFromObject({
+          sender: address,
+          receiver: address,
+          amount: 0,
+          note: new TextEncoder().encode(`auth:${challenge}`),
+          suggestedParams: { ...params, fee: 0, flatFee: true },
+        });
+
+        const encodedTxn = algosdk.encodeUnsignedTransaction(txn);
+        // Use signTransactions to sign the authentication challenge
+        let signedTxns;
+        if (typeof (wallet as unknown as Record<string, unknown>).signTransactions === 'function') {
+           signedTxns = await ((wallet as unknown as Record<string, unknown>).signTransactions as (...args: unknown[]) => Promise<Uint8Array[]>)([encodedTxn]);
+        } else {
+           // use the hook's method
+           signedTxns = await signTransactions([encodedTxn]);
+        }
+
+        if (!signedTxns || signedTxns.length === 0) {
+            throw new Error("Failed to sign challenge");
+        }
+        const signedBytes = signedTxns[0] || new Uint8Array();
+        signatureBase64 = Buffer.from(signedBytes).toString('base64');
       } catch (signErr) {
         console.error(`${type} sign error:`, signErr);
         throw new Error(`Failed to sign challenge with ${type} Wallet`);
       }
 
       // Verify with backend
-      const response = await verifyAuth(address, signature, challenge);
+      const response = await verifyAuth(address, signatureBase64, challenge);
 
       storeToken(response.jwt);
       localStorage.setItem('algobounty_wallet_type', type);
@@ -131,24 +149,17 @@ export function useWallet() {
         error: msg,
       }));
     }
-  }, [fetchProfile]);
+  }, [fetchProfile, wallets, signTransactions]);
 
   const disconnect = useCallback(() => {
     clearToken();
     const type = localStorage.getItem('algobounty_wallet_type');
     localStorage.removeItem('algobounty_wallet_type');
 
-    try {
-      if (type === 'pera' && window.PeraWalletConnect) {
-        new window.PeraWalletConnect().disconnect?.();
-      } else if (type === 'defly' && window.DeflyWalletConnect) {
-        new window.DeflyWalletConnect().disconnect?.();
-      } else if (type === 'edge' && window.EdgeWalletConnect) {
-        new window.EdgeWalletConnect().disconnect?.();
-      }
-    } catch {
-      // Ignore disconnect errors
+    if (activeWallet) {
+       activeWallet.disconnect();
     }
+
     setState({
       address: null,
       connected: false,
@@ -159,11 +170,11 @@ export function useWallet() {
       loading: false,
       error: null,
     });
-  }, []);
+  }, [activeWallet]);
 
   const signTransaction = useCallback(async (unsignedTxnBase64: string): Promise<string> => {
     const type = localStorage.getItem('algobounty_wallet_type') || state.walletType;
-    if (!state.connected || !state.address) {
+    if (!state.connected || !state.address || !activeWallet) {
       return '';
     }
     if (!type) throw new Error('Wallet not connected');
@@ -171,41 +182,20 @@ export function useWallet() {
     // Decode base64 to Uint8Array bytes
     const rawBytes = Uint8Array.from(atob(unsignedTxnBase64), c => c.charCodeAt(0));
 
-    let signedBase64 = '';
-    if (type === 'pera') {
-      const Pera = window.PeraWalletConnect;
-      if (!Pera) throw new Error('Pera Wallet is not installed');
-      const wallet = new Pera();
-      await wallet.connect();
-      const txnsToSign = [{ txn: rawBytes, signers: [state.address] }];
-      const signedTxns = await (wallet as any).signTransaction([txnsToSign]);
-      signedBase64 = btoa(String.fromCharCode.apply(null, Array.from(signedTxns[0])));
-    } else if (type === 'defly') {
-      const Defly = window.DeflyWalletConnect;
-      if (!Defly) throw new Error('Defly Wallet is not installed');
-      const wallet = new Defly();
-      await wallet.connect();
-      const txnsToSign = [{ txn: rawBytes, signers: [state.address] }];
-      const signedTxns = await (wallet as any).signTransaction([txnsToSign]);
-      signedBase64 = btoa(String.fromCharCode.apply(null, Array.from(signedTxns[0])));
-    } else {
-      const Edge = window.EdgeWalletConnect;
-      if (!Edge) throw new Error('Edge Wallet is not installed');
-      const wallet = new Edge();
-      await wallet.connect();
-      const txnsToSign = [{ txn: rawBytes, signers: [state.address] }];
-      const signedTxns = await (wallet as any).signTransaction([txnsToSign]);
-      signedBase64 = btoa(String.fromCharCode.apply(null, Array.from(signedTxns[0])));
+    const signedTxns = await signTransactions([rawBytes]);
+    if (!signedTxns || signedTxns.length === 0) {
+       throw new Error("Transaction signing failed");
     }
-    return signedBase64;
-  }, [state.walletType, state.address, state.connected]);
+
+    return btoa(String.fromCharCode.apply(null, Array.from(signedTxns[0] || new Uint8Array())));
+  }, [state.walletType, state.address, state.connected, activeWallet, signTransactions]);
 
   // Hydrate from localStorage on mount
   useEffect(() => {
     const jwt = getStoredToken();
     const type = localStorage.getItem('algobounty_wallet_type') as WalletType | null;
 
-    if (jwt) {
+    if (jwt && activeAccount) {
       // Validate by fetching profile
       (async () => {
         setState((prev) => ({ ...prev, loading: true }));
@@ -224,11 +214,14 @@ export function useWallet() {
         } catch {
           clearToken();
           localStorage.removeItem('algobounty_wallet_type');
+          if (activeWallet) activeWallet.disconnect();
           setState((prev) => ({ ...prev, jwt: null, walletType: null, connected: false, loading: false }));
         }
       })();
+    } else if (!jwt) {
+        if (activeWallet) activeWallet.disconnect();
     }
-  }, []);
+  }, [activeAccount, activeWallet]);
 
   return {
     ...state,
