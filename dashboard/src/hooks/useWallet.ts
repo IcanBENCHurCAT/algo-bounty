@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useWallet as useTxnWallet } from '@txnlab/use-wallet-react';
 import {
   getStoredToken,
@@ -36,6 +36,8 @@ export function useWallet() {
     signTransactions,
     transactionSigner,
   } = useTxnWallet();
+
+  const authInProgress = useRef(false);
 
   const [state, setState] = useState<WalletState>({
     address: null,
@@ -123,7 +125,8 @@ export function useWallet() {
   // Auth challenge trigger effect
   useEffect(() => {
     const jwt = getStoredToken();
-    if (activeAccount && !jwt && !state.connected && !state.loading) {
+    if (activeAccount && !jwt && !state.connected && !authInProgress.current) {
+      authInProgress.current = true;
       (async () => {
         setState((prev) => ({ ...prev, loading: true, error: null }));
         try {
@@ -173,12 +176,15 @@ export function useWallet() {
           // Fetch profile in background
           fetchProfile(address, response.jwt);
         } catch (err: unknown) {
+          console.error("Auth flow error:", err);
           const msg = err instanceof Error ? err.message : 'Failed to sign and authenticate wallet';
           setState((prev) => ({ ...prev, loading: false, error: msg }));
+        } finally {
+          authInProgress.current = false;
         }
       })();
     }
-  }, [activeAccount, activeWallet, signTransactions, fetchProfile, state.connected, state.loading]);
+  }, [activeAccount, activeWallet, signTransactions, fetchProfile, state.connected]);
 
   // Hydrate from localStorage on mount
   useEffect(() => {
