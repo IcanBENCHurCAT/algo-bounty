@@ -77,7 +77,7 @@ export function useWallet() {
       const address = account.address;
 
       // Get challenge
-      const challengeData: AuthChallenge = await requestChallenge();
+      const challengeData: AuthChallenge = await requestChallenge(address);
       const challenge = challengeData.challenge;
       localStorage.setItem(CHALLENGE_KEY, challenge);
 
