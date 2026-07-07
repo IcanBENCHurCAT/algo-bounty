@@ -74,7 +74,7 @@ def verify_txn_signature(stxn: transaction.SignedTransaction, address: str) -> b
     try:
         public_key = encoding.decode_address(address)
         # If it has a multisig or logicsig, reject for this simple auth
-        if stxn.msig or stxn.lsig:
+        if getattr(stxn, "msig", None) or getattr(stxn, "lsig", None):
             return False
 
         import nacl.signing
