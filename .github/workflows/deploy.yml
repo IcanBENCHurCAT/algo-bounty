@@ -88,7 +88,11 @@ jobs:
 
     - name: Build and Push Frontend Image
       run: |
-        gcloud builds submit dashboard/ --tag "${{ env.FRONTEND_IMAGE_TAG }}"
+        gcloud builds submit dashboard/ \
+          --tag "${{ env.FRONTEND_IMAGE_TAG }}" \
+          --build-arg="NEXT_PUBLIC_API_URL=${{ steps.deploy_gateway.outputs.url }}" \
+          --build-arg="NEXT_PUBLIC_SUPABASE_URL=${{ secrets.SUPABASE_URL }}" \
+          --build-arg="NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${{ secrets.SUPABASE_PUBLISHABLE_KEY }}"
 
     - name: Deploy Frontend to Cloud Run
       id: deploy_frontend
