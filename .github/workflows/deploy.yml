@@ -49,54 +49,45 @@ jobs:
         gcloud builds submit . --tag "${{ env.IMAGE_TAG }}" --timeout=600
 
     - name: Deploy Gateway to Cloud Run
-      run: |
-        gcloud run deploy ${{ env.GATEWAY_SERVICE }} \
-          --project="${{ env.PROJECT_ID }}" \
-          --region="${{ env.REGION }}" \
-          --image="${{ env.IMAGE_TAG }}" \
-          --allow-unauthenticated \
-          --port=8080 \
-          --memory=512Mi \
-          --cpu=1 \
-          --concurrency=250 \
-          --max-instances=10 \
-          --timeout=300 \
-          --min-instances=0 \
-          --set-env-vars="ALGORAND_NETWORK=testnet" \
-          --set-env-vars="SUPABASE_URL=${{ secrets.SUPABASE_URL }}" \
-          --set-secrets="DATABASE_URL=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-db-url:latest" \
-          --set-secrets="SECRET_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-jwt-secret:latest" \
-          --set-secrets="PLATFORM_PRIVATE_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty_platform_private_key:latest" \
-          --set-secrets="GITHUB_WEBHOOK_SECRET=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-github-webhook-secret:latest" \
-          --set-secrets="SUPABASE_SERVICE_ROLE_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty_supabase_service_role_key:latest" \
-          --set-secrets="GITHUB_PRIVATE_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-github-private-key:latest"
+      id: deploy
+      uses: google-github-actions/deploy-cloudrun@v2
+      with:
+        service: ${{ env.GATEWAY_SERVICE }}
+        image: ${{ env.IMAGE_TAG }}
+        region: ${{ env.REGION }}
+        flags: |
+          --allow-unauthenticated
+          --port=8080
+          --memory=512Mi
+          --cpu=1
+          --concurrency=250
+          --max-instances=10
+          --timeout=300
+          --min-instances=0
+          --set-env-vars=ALGORAND_NETWORK=testnet,SUPABASE_URL=${{ secrets.SUPABASE_URL }}
+          --set-secrets=DATABASE_URL=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-db-url:latest,SECRET_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-jwt-secret:latest,PLATFORM_PRIVATE_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty_platform_private_key:latest,GITHUB_WEBHOOK_SECRET=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-github-webhook-secret:latest,SUPABASE_SERVICE_ROLE_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty_supabase_service_role_key:latest,GITHUB_PRIVATE_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-github-private-key:latest
 
     - name: Deploy Indexer to Cloud Run
-      run: |
-        gcloud run deploy algo-bounty-indexer \
-          --project="${{ env.PROJECT_ID }}" \
-          --region="${{ env.REGION }}" \
-          --image="${{ env.IMAGE_TAG }}" \
-          --command="python" \
-          --args="gateway/worker.py" \
-          --memory=256Mi \
-          --cpu=0.25 \
-          --min-instances=1 \
-          --max-instances=1 \
-          --no-cpu-throttling \
-          --set-env-vars="ALGORAND_NETWORK=testnet" \
-          --set-env-vars="SUPABASE_URL=${{ secrets.SUPABASE_URL }}" \
-          --set-secrets="DATABASE_URL=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-db-url:latest" \
-          --set-secrets="SECRET_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-jwt-secret:latest" \
-          --set-secrets="PLATFORM_PRIVATE_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty_platform_private_key:latest" \
-          --set-secrets="GITHUB_WEBHOOK_SECRET=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-github-webhook-secret:latest" \
-          --set-secrets="SUPABASE_SERVICE_ROLE_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty_supabase_service_role_key:latest" \
-          --set-secrets="GITHUB_PRIVATE_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-github-private-key:latest"
+      uses: google-github-actions/deploy-cloudrun@v2
+      with:
+        service: algo-bounty-indexer
+        image: ${{ env.IMAGE_TAG }}
+        region: ${{ env.REGION }}
+        flags: |
+          --command=python
+          --args=gateway/worker.py
+          --memory=256Mi
+          --cpu=0.25
+          --min-instances=1
+          --max-instances=1
+          --no-cpu-throttling
+          --set-env-vars=ALGORAND_NETWORK=testnet,SUPABASE_URL=${{ secrets.SUPABASE_URL }}
+          --set-secrets=DATABASE_URL=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-db-url:latest,SECRET_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-jwt-secret:latest,PLATFORM_PRIVATE_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty_platform_private_key:latest,GITHUB_WEBHOOK_SECRET=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-github-webhook-secret:latest,SUPABASE_SERVICE_ROLE_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty_supabase_service_role_key:latest,GITHUB_PRIVATE_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-github-private-key:latest
 
     - name: Set Gateway URL Output
-      id: deploy
+      id: set_gateway_output
       run: |
-        echo "gateway-url=$(gcloud run services describe ${{ env.GATEWAY_SERVICE }} --project="${{ env.PROJECT_ID }}" --region="${{ env.REGION }}" --format='value(status.url)')" >> $GITHUB_OUTPUT
+        echo "gateway-url=${{ steps.deploy.outputs.url }}" >> $GITHUB_OUTPUT
 
   deploy-testnet-frontend:
     name: Deploy Testnet Frontend
@@ -130,27 +121,26 @@ jobs:
         gcloud builds submit dashboard/ --tag "${{ env.IMAGE_TAG }}"
 
     - name: Deploy Frontend to Cloud Run
-      run: |
-        gcloud run deploy ${{ env.FRONTEND_SERVICE }} \
-          --project="${{ env.PROJECT_ID }}" \
-          --region="${{ env.REGION }}" \
-          --image="${{ env.IMAGE_TAG }}" \
-          --platform=managed \
-          --allow-unauthenticated \
-          --port=8080 \
-          --memory=256Mi \
-          --cpu=1 \
-          --concurrency=250 \
-          --timeout=60 \
-          --min-instances=0 \
-          --set-env-vars="NEXT_PUBLIC_SUPABASE_URL=${{ secrets.SUPABASE_URL }}" \
-          --set-env-vars="NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${{ secrets.SUPABASE_PUBLISHABLE_KEY }}" \
-          --set-env-vars="NEXT_PUBLIC_API_URL=${{ needs.deploy-testnet-gateway.outputs.gateway-url }}"
+      id: deploy
+      uses: google-github-actions/deploy-cloudrun@v2
+      with:
+        service: ${{ env.FRONTEND_SERVICE }}
+        image: ${{ env.IMAGE_TAG }}
+        region: ${{ env.REGION }}
+        flags: |
+          --allow-unauthenticated
+          --port=8080
+          --memory=256Mi
+          --cpu=1
+          --concurrency=250
+          --timeout=60
+          --min-instances=0
+          --set-env-vars=NEXT_PUBLIC_SUPABASE_URL=${{ secrets.SUPABASE_URL }},NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${{ secrets.SUPABASE_PUBLISHABLE_KEY }},NEXT_PUBLIC_API_URL=${{ needs.deploy-testnet-gateway.outputs.gateway-url }}
 
     - name: Set Frontend URL Output
-      id: deploy
+      id: set_frontend_output
       run: |
-        echo "frontend-url=$(gcloud run services describe ${{ env.FRONTEND_SERVICE }} --project="${{ env.PROJECT_ID }}" --region="${{ env.REGION }}" --format='value(status.url)')" >> $GITHUB_OUTPUT
+        echo "frontend-url=${{ steps.deploy.outputs.url }}" >> $GITHUB_OUTPUT
 
     - name: Post deployment summary
       if: success()
