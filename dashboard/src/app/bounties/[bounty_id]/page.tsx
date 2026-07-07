@@ -43,7 +43,8 @@ export default function BountyDetailPage() {
 
   // Real-time updates for this specific bounty
   useEvents(useCallback((event) => {
-    if (event.bounty_id === bountyId) {
+    if (event.data?.bounty_id === bountyId) {
+      loadBounty();
       if (event.event_type === 'bounty.claimed') toast.info('Bounty has been claimed');
       if (event.event_type === 'bounty.submitted') toast.info('New work submitted');
       if (event.event_type === 'bounty.approved') toast.success('Bounty approved!');
