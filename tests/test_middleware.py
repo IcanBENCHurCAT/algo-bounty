@@ -66,6 +66,14 @@ def test_cors_allowlist_middleware():
     })
     assert res_opts.status_code == 405
 
+    # Preflight options request (allowed)
+    res_opts_allowed = client.options("/", headers={
+        "origin": "https://allowed.com",
+        "access-control-request-method": "GET"
+    })
+    assert res_opts_allowed.status_code == 204
+    assert res_opts_allowed.headers.get("access-control-allow-origin") == "https://allowed.com"
+
 def test_webhook_api_key_auth_middleware():
     from gateway.middleware import WebhookApiKeyAuthMiddleware
     
