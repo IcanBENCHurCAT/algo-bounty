@@ -105,12 +105,12 @@ export function useWallet() {
         const encodedTxn = algosdk.encodeUnsignedTransaction(txn);
         // Use signTransactions to sign the authentication challenge
         let signedTxns;
-        if (type === 'pera' && wallet.client) {
+        if (type === 'pera' && (wallet as any).client) {
            const txnsToSign = [{ txn: encodedTxn, signers: [address] }];
-           signedTxns = await (wallet.client as any).signTransaction([txnsToSign]);
-        } else if (type === 'defly' && wallet.client) {
+           signedTxns = await ((wallet as any).client).signTransaction([txnsToSign]);
+        } else if (type === 'defly' && (wallet as any).client) {
            const txnsToSign = [{ txn: encodedTxn, signers: [address] }];
-           signedTxns = await (wallet.client as any).signTransaction([txnsToSign]);
+           signedTxns = await ((wallet as any).client).signTransaction([txnsToSign]);
         } else if (typeof (wallet as unknown as Record<string, unknown>).signTransactions === 'function') {
            signedTxns = await ((wallet as unknown as Record<string, unknown>).signTransactions as (...args: unknown[]) => Promise<Uint8Array[]>)([encodedTxn]);
         } else {
