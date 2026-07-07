@@ -270,40 +270,36 @@ def init_db():
         )
         try:
             _run_alembic_with_timeout(alembic_cfg)
-        except (SystemExit, subprocess.TimeoutExpired, Exception) as exc:
-            # Non-fatal: log and continue — gateway can still serve requests
-            print(f"[supabase_migration] DB init skipped (will retry on first query): {exc}")
+        except (SystemExit, Exception) as exc:
+            print(f"[supabase_migration] Alembic migration failed: {exc}. Falling back to Base.metadata.create_all.")
+            try:
+                Base.metadata.create_all(sync_engine)
+            except Exception as create_exc:
+                print(f"[supabase_migration] create_all fallback failed: {create_exc}")
             _seed_platform_account()
 
 
 def _run_alembic_with_timeout(alembic_cfg, timeout=10):
     """Run Alembic upgrade with a hard timeout to prevent hangs."""
-    import subprocess
+    import alembic.config
+    import alembic.command
 
     if hasattr(signal, "SIGALRM"):
         def handler(signum, frame):
-            raise subprocess.TimeoutExpired("alembic upgrade", timeout)
+            raise TimeoutError("alembic upgrade timed out")
 
         old_handler = signal.signal(signal.SIGALRM, handler)
         signal.alarm(timeout)
         try:
-            import alembic.config
-            alembic.config.main(
-                argv=["--config", alembic_cfg, "upgrade", "head"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
+            cfg = alembic.config.Config(alembic_cfg)
+            alembic.command.upgrade(cfg, "head")
         finally:
             signal.alarm(0)  # Cancel the alarm
             signal.signal(signal.SIGALRM, old_handler)  # Restore handler
     else:
         # Fallback for Windows where SIGALRM is not supported
-        import alembic.config
-        alembic.config.main(
-            argv=["--config", alembic_cfg, "upgrade", "head"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+        cfg = alembic.config.Config(alembic_cfg)
+        alembic.command.upgrade(cfg, "head")
 
 
 def _seed_platform_account():

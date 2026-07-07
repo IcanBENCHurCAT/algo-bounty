@@ -22,6 +22,8 @@ class Config:
         #    return secret_manager.get(key)
 
         val = os.environ.get(key, default)
+        if isinstance(val, str):
+            val = val.strip()
         if not val and not default:
             logger.warning(f"Secret {key} is not set in environment.")
         return val
