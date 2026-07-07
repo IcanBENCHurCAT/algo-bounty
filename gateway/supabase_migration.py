@@ -90,16 +90,22 @@ def build_engine():
 def _build_postgres_engine(url: str, is_asyncpg: bool = True):
     """Build async + sync PostgreSQL engines from a Supabase / PG URL."""
     if is_asyncpg:
+        # Ensure the async URL uses the postgresql+asyncpg:// scheme
+        if url.startswith("postgresql://"):
+            _async_url = url.replace("postgresql://", "postgresql+asyncpg://")
+        else:
+            _async_url = url
+
         # Strip +asyncpg suffix for sync engine so SQLAlchemy picks the
         # synchronous driver automatically.
-        _sync_url = url.replace("postgresql+asyncpg://", "postgresql://")
+        _sync_url = _async_url.replace("postgresql+asyncpg://", "postgresql://")
 
         pool_size = int(os.getenv("DB_POOL_SIZE", "5"))
         max_overflow = int(os.getenv("DB_MAX_OVERFLOW", "10"))
         connect_timeout = int(os.getenv("DB_CONNECT_TIMEOUT", "5"))
 
         async_engine = create_async_engine(
-            url,
+            _async_url,
             pool_size=pool_size,
             max_overflow=max_overflow,
             pool_timeout=int(os.getenv("DB_POOL_TIMEOUT", "30")),
