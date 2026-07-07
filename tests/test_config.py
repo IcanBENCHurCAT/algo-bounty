@@ -21,3 +21,11 @@ def test_config_properties():
         assert settings.ALGORAND_NETWORK == "mainnet"
         assert settings.SUPABASE_URL == "surl"
         assert settings.DATABASE_URL == "dburl"
+
+def test_config_whitespace_strip():
+    with patch.dict(os.environ, {
+        "SECRET_KEY": "  secret_with_spaces  \n",
+        "DATABASE_URL": "postgresql://user:pass@host:5432/postgres\r\n"
+    }):
+        assert settings.SECRET_KEY == "secret_with_spaces"
+        assert settings.DATABASE_URL == "postgresql://user:pass@host:5432/postgres"
