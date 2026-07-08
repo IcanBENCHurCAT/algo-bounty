@@ -11,7 +11,6 @@ import {
   type AgentProfile,
 } from '@/lib/api';
 import algosdk from 'algosdk';
-import { manager } from '@/components/AppWalletProvider';
 
 export type WalletType = 'pera' | 'defly' | 'exodus';
 
@@ -116,17 +115,13 @@ export function useWallet() {
     // Decode base64 to Uint8Array bytes
     const rawBytes = Uint8Array.from(atob(unsignedTxnBase64), c => c.charCodeAt(0));
 
-    const activeWalletInstance = manager.activeWallet;
-    if (!activeWalletInstance) {
-      throw new Error("No active wallet in manager");
-    }
-    const signedTxns = await activeWalletInstance.signTransactions([rawBytes]);
+    const signedTxns = await signTransactions([rawBytes]);
     if (!signedTxns || signedTxns.length === 0) {
        throw new Error("Transaction signing failed");
     }
 
     return btoa(String.fromCharCode.apply(null, Array.from(signedTxns[0] || new Uint8Array())));
-  }, [state.walletType, state.address, state.connected, activeWallet]);
+  }, [state.walletType, state.address, state.connected, activeWallet, signTransactions]);
 
   // Auth challenge trigger effect
   useEffect(() => {
@@ -140,11 +135,6 @@ export function useWallet() {
 
           // 1. Wait for connection stability to prevent WebSocket handshake race conditions
           await new Promise((resolve) => setTimeout(resolve, 1500));
-
-          const activeWalletInstance = manager.activeWallet;
-          if (!activeWalletInstance) {
-            throw new Error("No active wallet in manager");
-          }
 
           // 2. Get challenge
           const challengeData: AuthChallenge = await requestChallenge(address);
@@ -162,7 +152,7 @@ export function useWallet() {
           });
 
           const encodedTxn = algosdk.encodeUnsignedTransaction(txn);
-          const signedTxns = await activeWalletInstance.signTransactions([encodedTxn]);
+          const signedTxns = await signTransactions([encodedTxn]);
           if (!signedTxns || signedTxns.length === 0) {
             throw new Error("Failed to sign challenge");
           }
@@ -197,7 +187,7 @@ export function useWallet() {
         }
       })();
     }
-  }, [activeAccount, activeWallet, fetchProfile, state.connected, algodClient]);
+  }, [activeAccount, activeWallet, fetchProfile, state.connected, algodClient, signTransactions]);
 
   // Hydrate from localStorage on mount
   useEffect(() => {
