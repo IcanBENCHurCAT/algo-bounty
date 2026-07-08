@@ -86,3 +86,18 @@ def test_auth_verify_router_endpoints(client, db_session):
         assert res.json()["address"] == "NEW_ADDR_IMPLICIT"
         assert res.json()["karma"] == 25
 
+def test_verify_signature_transaction():
+    from algosdk import account, transaction, encoding
+    import base64
+    from gateway.auth import verify_signature
+
+    private_key, address = account.generate_account()
+    challenge = "test_challenge_123"
+    sp = transaction.SuggestedParams(1000, 10, 100, "", flat_fee=True)
+    txn = transaction.PaymentTxn(address, sp, address, 0, note=f"auth:{challenge}".encode('utf-8'))
+    signed_txn = txn.sign(private_key)
+
+    encoded_stxn = encoding.msgpack_encode(signed_txn)
+
+    assert verify_signature(address, encoded_stxn, challenge) is True
+
