@@ -126,7 +126,7 @@ export function useWallet() {
   // Auth challenge trigger effect
   useEffect(() => {
     const jwt = getStoredToken();
-    if (activeAccount && activeWallet && !jwt && !state.connected && !authInProgress.current) {
+    if (isReady && activeAccount && activeWallet && !jwt && !state.connected && !authInProgress.current) {
       authInProgress.current = true;
       (async () => {
         setState((prev) => ({ ...prev, loading: true, error: null }));
@@ -187,7 +187,7 @@ export function useWallet() {
         }
       })();
     }
-  }, [activeAccount, activeWallet, fetchProfile, state.connected, algodClient, signTransactions]);
+  }, [isReady, activeAccount, activeWallet, fetchProfile, state.connected, algodClient, signTransactions]);
 
   // Hydrate from localStorage on mount
   useEffect(() => {
