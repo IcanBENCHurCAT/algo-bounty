@@ -172,7 +172,7 @@ export function useWallet() {
             throw new Error("Failed to sign challenge");
           }
           const signedBytes = signedTxns[0] || new Uint8Array();
-          const signatureBase64 = Buffer.from(signedBytes).toString('base64');
+          const signatureBase64 = btoa(String.fromCharCode(...signedBytes));
 
           // 3. Verify with backend
           const response = await verifyAuth(address, signatureBase64, challenge);
