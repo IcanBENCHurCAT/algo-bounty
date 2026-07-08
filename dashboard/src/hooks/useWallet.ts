@@ -28,25 +28,6 @@ export interface WalletState {
 
 const CHALLENGE_KEY = 'algobounty_challenge';
 
-async function getTransactionParamsResilient() {
-  const nodes = [
-    'https://testnet-api.algonode.cloud',
-    'https://testnet-api.algorand.network'
-  ];
-  let lastError = null;
-  for (const node of nodes) {
-    try {
-      const client = new algosdk.Algodv2('', node, '');
-      const params = await client.getTransactionParams().do();
-      return params;
-    } catch (e) {
-      console.warn(`Failed to fetch params from ${node}:`, e);
-      lastError = e;
-    }
-  }
-  throw lastError || new Error("Failed to fetch transaction parameters from all public nodes");
-}
-
 export function useWallet() {
   const {
     wallets,
@@ -55,6 +36,7 @@ export function useWallet() {
     isReady,
     signTransactions,
     transactionSigner,
+    algodClient,
   } = useTxnWallet();
 
   const authInProgress = useRef(false);
@@ -170,7 +152,7 @@ export function useWallet() {
           localStorage.setItem(CHALLENGE_KEY, challenge);
 
           // 3. Sign challenge (using suggested params directly to avoid 0 fee validation errors in Pera Wallet)
-          const params = await getTransactionParamsResilient();
+          const params = await algodClient.getTransactionParams().do();
           const txn = algosdk.makePaymentTxnWithSuggestedParamsFromObject({
             sender: address,
             receiver: address,
@@ -215,7 +197,7 @@ export function useWallet() {
         }
       })();
     }
-  }, [activeAccount, activeWallet, fetchProfile, state.connected]);
+  }, [activeAccount, activeWallet, fetchProfile, state.connected, algodClient]);
 
   // Hydrate from localStorage on mount
   useEffect(() => {
