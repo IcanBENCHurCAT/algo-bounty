@@ -159,8 +159,8 @@ export function useWallet() {
           // 2. Sign challenge
           const params = await getTransactionParamsResilient();
           const txn = algosdk.makePaymentTxnWithSuggestedParamsFromObject({
-            sender: address,
-            receiver: address,
+            from: address,
+            to: address,
             amount: 0,
             note: new TextEncoder().encode(`auth:${challenge}`),
             suggestedParams: { ...params, fee: 0, flatFee: true },
