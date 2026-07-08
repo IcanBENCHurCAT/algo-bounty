@@ -139,12 +139,12 @@ function useWalletValue() {
           // 3. Sign challenge (using suggested params directly to avoid 0 fee validation errors in Pera Wallet)
           const params = await algodClient.getTransactionParams().do();
           const txn = algosdk.makePaymentTxnWithSuggestedParamsFromObject({
-            sender: address,
-            receiver: address,
+            from: address,
+            to: address,
             amount: 0,
             note: new TextEncoder().encode(`auth:${challenge}`),
             suggestedParams: params,
-          });
+          } as any);
 
           const encodedTxn = algosdk.encodeUnsignedTransaction(txn);
           const signedTxns = await signTransactions([encodedTxn]);
