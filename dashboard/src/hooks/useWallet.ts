@@ -11,6 +11,7 @@ import {
   type AgentProfile,
 } from '@/lib/api';
 import algosdk from 'algosdk';
+import { manager } from '@/components/AppWalletProvider';
 
 export type WalletType = 'pera' | 'defly' | 'exodus';
 
@@ -133,13 +134,17 @@ export function useWallet() {
     // Decode base64 to Uint8Array bytes
     const rawBytes = Uint8Array.from(atob(unsignedTxnBase64), c => c.charCodeAt(0));
 
-    const signedTxns = await signTransactions([rawBytes]);
+    const activeWalletInstance = manager.activeWallet;
+    if (!activeWalletInstance) {
+      throw new Error("No active wallet in manager");
+    }
+    const signedTxns = await activeWalletInstance.signTransactions([rawBytes]);
     if (!signedTxns || signedTxns.length === 0) {
        throw new Error("Transaction signing failed");
     }
 
     return btoa(String.fromCharCode.apply(null, Array.from(signedTxns[0] || new Uint8Array())));
-  }, [state.walletType, state.address, state.connected, activeWallet, signTransactions]);
+  }, [state.walletType, state.address, state.connected, activeWallet]);
 
   // Auth challenge trigger effect
   useEffect(() => {
@@ -151,30 +156,38 @@ export function useWallet() {
         try {
           const address = activeAccount.address;
 
-          // 1. Get challenge
+          // 1. Wait for connection stability to prevent WebSocket handshake race conditions
+          await new Promise((resolve) => setTimeout(resolve, 1500));
+
+          const activeWalletInstance = manager.activeWallet;
+          if (!activeWalletInstance) {
+            throw new Error("No active wallet in manager");
+          }
+
+          // 2. Get challenge
           const challengeData: AuthChallenge = await requestChallenge(address);
           const challenge = challengeData.challenge;
           localStorage.setItem(CHALLENGE_KEY, challenge);
 
-          // 2. Sign challenge
+          // 3. Sign challenge (using suggested params directly to avoid 0 fee validation errors in Pera Wallet)
           const params = await getTransactionParamsResilient();
           const txn = algosdk.makePaymentTxnWithSuggestedParamsFromObject({
             sender: address,
             receiver: address,
             amount: 0,
             note: new TextEncoder().encode(`auth:${challenge}`),
-            suggestedParams: { ...params, fee: 0, flatFee: true },
+            suggestedParams: params,
           });
 
           const encodedTxn = algosdk.encodeUnsignedTransaction(txn);
-          const signedTxns = await signTransactions([encodedTxn]);
+          const signedTxns = await activeWalletInstance.signTransactions([encodedTxn]);
           if (!signedTxns || signedTxns.length === 0) {
             throw new Error("Failed to sign challenge");
           }
           const signedBytes = signedTxns[0] || new Uint8Array();
           const signatureBase64 = btoa(String.fromCharCode(...signedBytes));
 
-          // 3. Verify with backend
+          // 4. Verify with backend
           const response = await verifyAuth(address, signatureBase64, challenge);
 
           storeToken(response.jwt);
@@ -202,7 +215,7 @@ export function useWallet() {
         }
       })();
     }
-  }, [activeAccount, activeWallet, signTransactions, fetchProfile, state.connected]);
+  }, [activeAccount, activeWallet, fetchProfile, state.connected]);
 
   // Hydrate from localStorage on mount
   useEffect(() => {
