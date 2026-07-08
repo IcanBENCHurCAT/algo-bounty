@@ -110,23 +110,7 @@ function useWalletValue() {
 
     const rawBytes = Uint8Array.from(atob(unsignedTxnBase64), c => c.charCodeAt(0));
 
-    let signedTxns = null;
-    let retries = 5;
-    while (retries > 0) {
-      try {
-        signedTxns = await signTransactions([rawBytes]);
-        break;
-      } catch (err: any) {
-        const errMsg = err?.message || String(err);
-        if (retries > 1 && (errMsg.includes('null') || errMsg.includes('sendCustomRequest') || errMsg.includes('connector') || errMsg.includes('bridge'))) {
-          console.warn(`Transaction signing failed (client waking up), retrying in 1s... (retries left: ${retries - 1})`);
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-          retries--;
-        } else {
-          throw err;
-        }
-      }
-    }
+    const signedTxns = await signTransactions([rawBytes]);
     if (!signedTxns || signedTxns.length === 0) {
        throw new Error("Transaction signing failed");
     }
@@ -163,23 +147,7 @@ function useWalletValue() {
           });
 
           const encodedTxn = algosdk.encodeUnsignedTransaction(txn);
-          let signedTxns = null;
-          let retries = 5;
-          while (retries > 0) {
-            try {
-              signedTxns = await signTransactions([encodedTxn]);
-              break;
-            } catch (err: any) {
-              const errMsg = err?.message || String(err);
-              if (retries > 1 && (errMsg.includes('null') || errMsg.includes('sendCustomRequest') || errMsg.includes('connector') || errMsg.includes('bridge'))) {
-                console.warn(`Pera signing failed (client initializing), retrying in 1s... (retries left: ${retries - 1})`);
-                await new Promise((resolve) => setTimeout(resolve, 1000));
-                retries--;
-              } else {
-                throw err;
-              }
-            }
-          }
+          const signedTxns = await signTransactions([encodedTxn]);
           if (!signedTxns || signedTxns.length === 0) {
             throw new Error("Failed to sign challenge");
           }
