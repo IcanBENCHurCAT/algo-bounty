@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, createContext, useContext, ReactNode } from 'react';
 import { useWallet as useTxnWallet } from '@txnlab/use-wallet-react';
 import {
   getStoredToken,
@@ -27,14 +27,13 @@ export interface WalletState {
 
 const CHALLENGE_KEY = 'algobounty_challenge';
 
-export function useWallet() {
+function useWalletValue() {
   const {
     wallets,
     activeWallet,
     activeAccount,
     isReady,
     signTransactions,
-    transactionSigner,
     algodClient,
   } = useTxnWallet();
 
@@ -64,7 +63,6 @@ export function useWallet() {
     setState((prev) => ({ ...prev, loading: true, error: null }));
 
     try {
-      // Find the specific wallet
       const wallet = wallets.find((w) => w.id === type);
       if (!wallet) {
         throw new Error(`Wallet ${type} is not available.`);
@@ -72,7 +70,6 @@ export function useWallet() {
 
       await wallet.connect();
       wallet.setActive();
-      // Connecting wraps up here. The activeAccount useEffect will handle challenge signing.
     } catch (err: unknown) {
       const msg =
         err instanceof Error ? err.message : 'Unknown error connecting wallet';
@@ -86,7 +83,6 @@ export function useWallet() {
 
   const disconnect = useCallback(() => {
     clearToken();
-    const type = localStorage.getItem('algobounty_wallet_type');
     localStorage.removeItem('algobounty_wallet_type');
 
     if (activeWallet) {
@@ -112,7 +108,6 @@ export function useWallet() {
     }
     if (!type) throw new Error('Wallet not connected');
 
-    // Decode base64 to Uint8Array bytes
     const rawBytes = Uint8Array.from(atob(unsignedTxnBase64), c => c.charCodeAt(0));
 
     const signedTxns = await signTransactions([rawBytes]);
@@ -230,4 +225,19 @@ export function useWallet() {
     setProfile: (p: AgentProfile) =>
       setState((prev) => ({ ...prev, profile: p, karma: p.karma })),
   };
+}
+
+export const WalletAuthContext = createContext<ReturnType<typeof useWalletValue> | null>(null);
+
+export function WalletAuthProvider({ children }: { children: ReactNode }) {
+  const value = useWalletValue();
+  return <WalletAuthContext.Provider value={value}>{children}</WalletAuthContext.Provider>;
+}
+
+export function useWallet() {
+  const context = useContext(WalletAuthContext);
+  if (!context) {
+    throw new Error('useWallet must be used within a WalletAuthProvider');
+  }
+  return context;
 }
