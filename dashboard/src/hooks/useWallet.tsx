@@ -126,7 +126,10 @@ function useWalletValue() {
       (async () => {
         setState((prev) => ({ ...prev, loading: true, error: null }));
         try {
-          const address = activeAccount.address;
+          const address = activeAccount?.address;
+          if (!address) {
+            throw new Error("Active account address is undefined or null");
+          }
 
           // 1. Wait for connection stability to prevent WebSocket handshake race conditions
           await new Promise((resolve) => setTimeout(resolve, 1500));
