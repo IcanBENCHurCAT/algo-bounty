@@ -12,7 +12,7 @@
     "@agoralabs-sh/avm-web-provider": "^1.7.0",
     "@blockshake/defly-connect": "^1.2.1",
     "@magic-ext/algorand": "^24.4.2",
-    "@perawallet/connect": "^1.5.2",
+    "@perawallet/connect": "^1.4.1",
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.110.0",
     "@txnlab/use-wallet": "^4.6.0",
