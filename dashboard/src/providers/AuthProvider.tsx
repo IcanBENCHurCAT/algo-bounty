@@ -62,6 +62,54 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const authInProgress = useRef(false)
 
+const performAuth = useCallback(async (address: string, walletId: string) => {
+    authInProgress.current = true
+    setState((s) => ({ ...s, loading: true, error: null }))
+
+    try {
+      // 1. Get challenge from backend
+      const { challenge } = await requestChallenge(address)
+
+      // 2. Build auth transaction with challenge in note field
+      const algodClient = getAlgodClient()
+      const authTxn = await buildAuthTransaction(address, challenge, algodClient)
+      const encodedTxn = encodeTransactionForSigning(authTxn)
+
+      // 3. Ask wallet to sign
+      const signedTxns = await signTransactions([encodedTxn])
+      const signedBytes = signedTxns[0]
+      if (!signedBytes) throw new Error('Wallet rejected signing')
+
+      // 4. Send full signed transaction (as base64) to backend
+      const signatureBase64 = bytesToBase64(signedBytes)
+      const { jwt, karma } = await verifyAuth(address, signatureBase64, challenge)
+
+      // 5. Store JWT and fetch profile
+      storeToken(jwt)
+      let profile: AgentProfile | null = null
+      try {
+        profile = await getMyProfile(jwt)
+      } catch {
+        // profile fetch failure is non-fatal
+      }
+
+      setState({
+        address,
+        connected: true,
+        walletType: walletId,
+        jwt,
+        karma: profile?.karma ?? karma,
+        profile,
+        loading: false,
+        error: null,
+      })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Authentication failed'
+      setState((s) => ({ ...s, loading: false, error: msg }))
+      authInProgress.current = false
+    }
+  }, [signTransactions])
+
   // ─── Connect ───────────────────────────────────────────────────────────────
 
   const connect = useCallback(
@@ -72,12 +120,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!wallet) throw new Error(`Wallet ${walletId} not available`)
         await wallet.connect()
         await wallet.setActive()
+
+        // After connecting, wallet.activeAccount might not be immediately available
+        // Wait for it, or get it from the wallet object
+
+        // The wallet object has an activeAccount property once connected
+        const accounts = wallet.accounts
+        if (!accounts || accounts.length === 0) {
+           throw new Error("No accounts found in wallet")
+        }
+        const activeAddress = accounts[0].address
+
+        await performAuth(activeAddress, walletId)
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Connection failed'
         setState((s) => ({ ...s, loading: false, error: msg }))
       }
     },
-    [wallets],
+    [wallets, performAuth],
   )
 
   // ─── Disconnect ────────────────────────────────────────────────────────────
@@ -128,68 +188,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [state.jwt])
 
-  // ─── Auth flow: fires when wallet becomes active and we have no JWT ─────────
-
-  useEffect(() => {
-    if (!isReady || !activeAccount || state.jwt || authInProgress.current) return
-
-    const address = activeAccount.address
-    authInProgress.current = true
-
-    const runAuth = async () => {
-      setState((s) => ({ ...s, loading: true, error: null }))
-
-      // Small delay to let wallet WebSocket stabilize
-      await new Promise((r) => setTimeout(r, 800))
-
-      try {
-        // 1. Get challenge from backend
-        const { challenge } = await requestChallenge(address)
-
-        // 2. Build auth transaction with challenge in note field
-        const algodClient = getAlgodClient()
-        const authTxn = await buildAuthTransaction(address, challenge, algodClient)
-        const encodedTxn = encodeTransactionForSigning(authTxn)
-
-        // 3. Ask wallet to sign
-        const signedTxns = await signTransactions([encodedTxn])
-        const signedBytes = signedTxns[0]
-        if (!signedBytes) throw new Error('Wallet rejected signing')
-
-        // 4. Send full signed transaction (as base64) to backend
-        const signatureBase64 = bytesToBase64(signedBytes)
-        const { jwt, karma } = await verifyAuth(address, signatureBase64, challenge)
-
-        // 5. Store JWT and fetch profile
-        storeToken(jwt)
-        let profile: AgentProfile | null = null
-        try {
-          profile = await getMyProfile(jwt)
-        } catch {
-          // profile fetch failure is non-fatal
-        }
-
-        setState({
-          address,
-          connected: true,
-          walletType: activeWallet?.id ?? null,
-          jwt,
-          karma: profile?.karma ?? karma,
-          profile,
-          loading: false,
-          error: null,
-        })
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Authentication failed'
-        setState((s) => ({ ...s, loading: false, error: msg }))
-        authInProgress.current = false
-      }
-    }
-
-    void runAuth()
-  }, [isReady, activeAccount, state.jwt, activeWallet?.id, signTransactions])
-
-  // ─── Session hydration: restore JWT on mount ───────────────────────────────
+    // ─── Session hydration: restore JWT on mount ───────────────────────────────
 
   useEffect(() => {
     if (!isReady || !activeAccount) return

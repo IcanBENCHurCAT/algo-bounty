@@ -266,7 +266,7 @@ export default function ProfilePage() {
           <StatCard label="Karma" value={`★ ${profile.karma}`} accent="#818cf8" />
           <StatCard
             label="Reputation Score"
-            value={profile.reputation_score.toFixed(1)}
+            value={(profile.reputation_score || 0).toFixed(1)}
             accent="#22d3ee"
           />
           <StatCard
