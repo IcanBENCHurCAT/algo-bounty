@@ -40,7 +40,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 # Produce a standalone Next.js build (minimal output)
-RUN npm run build
+RUN npm run build -- --webpack
 
 # ── Stage 3: Runner ───────────────────────────────────────────────────────────
 FROM node:${NODE_VERSION}-alpine${ALPINE_VERSION} AS runner

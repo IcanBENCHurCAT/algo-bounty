@@ -114,4 +114,4 @@ jobs:
         NEXT_PUBLIC_API_URL: ""
         NEXT_PUBLIC_ALGORAND_NETWORK: "testnet"
         NEXT_TELEMETRY_DISABLED: "1"
-      run: npm run build
+      run: npm run build -- --webpack
