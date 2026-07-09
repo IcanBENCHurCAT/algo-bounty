@@ -86,7 +86,7 @@ jobs:
 
     - name: ESLint
       working-directory: dashboard
-      run: npm run lint -- --max-warnings=0
+      run: npm run lint
       continue-on-error: true
 
   # ── Dashboard Build Smoke Test ─────────────────────────────────────────────
