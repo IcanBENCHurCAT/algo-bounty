@@ -18,8 +18,8 @@ RUN apk add --no-cache libc6-compat
 
 COPY package.json package-lock.json* ./
 
-# Use ci for reproducible installs
-RUN npm ci --prefer-offline
+# Use install since package-lock.json is not present
+RUN npm install
 
 # ── Stage 2: Build ────────────────────────────────────────────────────────────
 FROM node:${NODE_VERSION}-alpine${ALPINE_VERSION} AS builder
