@@ -8,12 +8,24 @@ const nextConfig = {
   turbopack: {},
 
   webpack: (config, { isServer }) => {
+    // Treat optional/peer dependencies of use-wallet as external so webpack does not fail on missing imports
+    config.externals = [...(config.externals || []), {
+      '@agoralabs-sh/avm-web-provider': 'commonjs @agoralabs-sh/avm-web-provider',
+      '@walletconnect/modal': 'commonjs @walletconnect/modal',
+      '@walletconnect/sign-client': 'commonjs @walletconnect/sign-client',
+      'lute-connect': 'commonjs lute-connect'
+    }]
+
     if (!isServer) {
       try {
         const { webpackFallback } = require('@txnlab/use-wallet-react')
         config.resolve.fallback = {
           ...config.resolve.fallback,
           ...webpackFallback,
+          '@agoralabs-sh/avm-web-provider': false,
+          '@walletconnect/modal': false,
+          '@walletconnect/sign-client': false,
+          'lute-connect': false,
         }
       } catch {
         // use-wallet not yet installed, skip
