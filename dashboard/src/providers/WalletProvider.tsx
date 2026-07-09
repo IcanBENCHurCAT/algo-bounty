@@ -7,42 +7,33 @@ import {
   NetworkId,
   WalletId,
 } from '@txnlab/use-wallet-react'
-import algosdk from 'algosdk'
 
-// ─── Algod configs ────────────────────────────────────────────────────────────
+// ─── Network configs ──────────────────────────────────────────────────────────
+// NetworkConfig.algod expects AlgodConfig { token, baseServer, port? }
+// NOT an instantiated Algodv2 client.
 
-type AlgodConfig = { token: string; server: string; port: number }
-
-const ALGOD_CONFIGS: Partial<Record<NetworkId, AlgodConfig>> = {
+const NETWORKS: Partial<Record<NetworkId, { algod: { token: string; baseServer: string; port?: number } }>> = {
   [NetworkId.TESTNET]: {
-    token: '',
-    server: 'https://testnet-api.algonode.cloud',
-    port: 443,
+    algod: {
+      token: '',
+      baseServer: 'https://testnet-api.algonode.cloud',
+      port: 443,
+    },
   },
   [NetworkId.MAINNET]: {
-    token: '',
-    server: 'https://mainnet-api.algonode.cloud',
-    port: 443,
+    algod: {
+      token: '',
+      baseServer: 'https://mainnet-api.algonode.cloud',
+      port: 443,
+    },
   },
   [NetworkId.LOCALNET]: {
-    token: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-    server: 'http://localhost',
-    port: 4001,
+    algod: {
+      token: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      baseServer: 'http://localhost',
+      port: 4001,
+    },
   },
-  [NetworkId.BETANET]: {
-    token: '',
-    server: 'https://betanet-api.algonode.cloud',
-    port: 443,
-  },
-}
-
-function makeNetworkConfig(id: NetworkId) {
-  const cfg = ALGOD_CONFIGS[id]
-  if (!cfg) throw new Error(`No algod config for network: ${id}`)
-  // use-wallet-react v4 NetworkConfig requires `algod` (the Algodv2 instance)
-  return {
-    algod: new algosdk.Algodv2(cfg.token, cfg.server, cfg.port),
-  }
 }
 
 const defaultNetwork: NetworkId =
@@ -52,11 +43,7 @@ const defaultNetwork: NetworkId =
 // Stable singleton — created once at module level to prevent re-init on renders
 const manager = new WalletManager({
   wallets: [WalletId.PERA, WalletId.DEFLY, WalletId.EXODUS],
-  networks: {
-    [NetworkId.TESTNET]: makeNetworkConfig(NetworkId.TESTNET),
-    [NetworkId.MAINNET]: makeNetworkConfig(NetworkId.MAINNET),
-    [NetworkId.LOCALNET]: makeNetworkConfig(NetworkId.LOCALNET),
-  },
+  networks: NETWORKS,
   defaultNetwork,
 })
 
