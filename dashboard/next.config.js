@@ -4,6 +4,9 @@ const nextConfig = {
   // in .next/standalone that only needs `node server.js` to run.
   output: 'standalone',
 
+  // Silence Turbopack warning when custom webpack config is present in Next.js 16+
+  turbopack: {},
+
   webpack: (config, { isServer }) => {
     if (!isServer) {
       try {
