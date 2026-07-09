@@ -203,7 +203,7 @@ export function NotificationsDrawer({ open, onClose }: NotificationsDrawerProps)
                 <div style={{ fontSize: '0.875rem', color: '#cbd5e1', marginBottom: '0.25rem', fontWeight: n.read ? 400 : 600 }}>
                   {n.event_type.replace('.', ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
                 </div>
-                {n.data.bounty_id && (
+                {n.data.bounty_id != null && (
                   <div style={{ fontSize: '0.75rem', color: '#475569', fontFamily: 'monospace' }}>
                     {String(n.data.bounty_id)}
                   </div>

@@ -1,11 +1,19 @@
-﻿'use client'
+'use client'
 
-import React, { useMemo } from 'react'
-import { WalletProvider as UseWalletProvider, WalletManager, NetworkId, WalletId } from '@txnlab/use-wallet-react'
+import React from 'react'
+import {
+  WalletProvider as UseWalletProvider,
+  WalletManager,
+  NetworkId,
+  WalletId,
+} from '@txnlab/use-wallet-react'
 import algosdk from 'algosdk'
 
-// Custom algod configuration pointing to Algonode public endpoints
-const ALGOD_CONFIG: Record<NetworkId, { token: string; server: string; port: number }> = {
+// ─── Algod configs ────────────────────────────────────────────────────────────
+
+type AlgodConfig = { token: string; server: string; port: number }
+
+const ALGOD_CONFIGS: Partial<Record<NetworkId, AlgodConfig>> = {
   [NetworkId.TESTNET]: {
     token: '',
     server: 'https://testnet-api.algonode.cloud',
@@ -26,36 +34,24 @@ const ALGOD_CONFIG: Record<NetworkId, { token: string; server: string; port: num
     server: 'https://betanet-api.algonode.cloud',
     port: 443,
   },
-  [NetworkId.FNET]: {
-    token: '',
-    server: 'https://fnet-api.algonode.cloud',
-    port: 443,
-  },
-  [NetworkId.VOIMAIN]: {
-    token: '',
-    server: 'https://mainnet-api.voi.nodely.dev',
-    port: 443,
-  },
 }
 
 function makeNetworkConfig(id: NetworkId) {
-  const cfg = ALGOD_CONFIG[id]
+  const cfg = ALGOD_CONFIGS[id]
+  if (!cfg) throw new Error(`No algod config for network: ${id}`)
+  // use-wallet-react v4 NetworkConfig requires `algod` (the Algodv2 instance)
   return {
-    algodClient: new algosdk.Algodv2(cfg.token, cfg.server, cfg.port),
+    algod: new algosdk.Algodv2(cfg.token, cfg.server, cfg.port),
   }
 }
 
 const defaultNetwork: NetworkId =
-  (process.env.NEXT_PUBLIC_ALGORAND_NETWORK as NetworkId) ?? NetworkId.TESTNET
+  (process.env.NEXT_PUBLIC_ALGORAND_NETWORK as NetworkId | undefined) ??
+  NetworkId.TESTNET
 
-// Stable WalletManager singleton — created once outside the component
-// to prevent re-initialization on re-renders.
+// Stable singleton — created once at module level to prevent re-init on renders
 const manager = new WalletManager({
-  wallets: [
-    WalletId.PERA,
-    WalletId.DEFLY,
-    WalletId.EXODUS,
-  ],
+  wallets: [WalletId.PERA, WalletId.DEFLY, WalletId.EXODUS],
   networks: {
     [NetworkId.TESTNET]: makeNetworkConfig(NetworkId.TESTNET),
     [NetworkId.MAINNET]: makeNetworkConfig(NetworkId.MAINNET),
@@ -64,11 +60,9 @@ const manager = new WalletManager({
   defaultNetwork,
 })
 
-interface WalletProviderProps {
-  children: React.ReactNode
-}
+// ─── Provider ─────────────────────────────────────────────────────────────────
 
-export function WalletProvider({ children }: WalletProviderProps) {
+export function WalletProvider({ children }: { children: React.ReactNode }) {
   return (
     <UseWalletProvider manager={manager}>
       {children}
