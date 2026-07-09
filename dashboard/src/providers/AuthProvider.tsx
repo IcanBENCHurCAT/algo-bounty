@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import React, {
   createContext,
@@ -108,7 +108,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     async (unsignedTxnBase64: string): Promise<string> => {
       const rawBytes = base64ToBytes(unsignedTxnBase64)
       const signed = await signTransactions([rawBytes])
-      return bytesToBase64(signed[0])
+      const signedBytes = signed[0]
+      if (!signedBytes) throw new Error('Wallet rejected signing')
+      return bytesToBase64(signedBytes)
     },
     [signTransactions],
   )
@@ -152,6 +154,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // 3. Ask wallet to sign
         const signedTxns = await signTransactions([encodedTxn])
         const signedBytes = signedTxns[0]
+        if (!signedBytes) throw new Error('Wallet rejected signing')
 
         // 4. Extract signature and verify with backend
         const signatureBase64 = extractSignatureBase64(signedBytes)

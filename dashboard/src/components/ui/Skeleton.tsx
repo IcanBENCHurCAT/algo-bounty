@@ -29,6 +29,22 @@ export function Skeleton({
   )
 }
 
+/** Thin single-line skeleton — alias for pages that import SkeletonLine */
+export function SkeletonLine({ width = '100%', height = '1rem' }: { width?: string; height?: string }) {
+  return <Skeleton width={width} height={height} />
+}
+
+/** Block skeleton — alias for pages that import SkeletonCard */
+export function SkeletonCard({ height = '6rem' }: { height?: string }) {
+  return (
+    <Skeleton
+      width="100%"
+      height={height}
+      borderRadius="0.875rem"
+    />
+  )
+}
+
 export function BountyCardSkeleton() {
   return (
     <div
