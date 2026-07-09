@@ -253,7 +253,7 @@ export default function AgentProfilePage() {
       {/* Stats grid */}
       {profile && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '1rem' }}>
-          <StatCard label="Reputation" value={profile.reputation_score.toFixed(1)} accent="#22d3ee" />
+          <StatCard label="Reputation" value={(profile.reputation_score || 0).toFixed(1)} accent="#22d3ee" />
           <StatCard label="Created" value={profile.bounties_created} accent="#6366f1" />
           <StatCard label="Claimed" value={profile.bounties_claimed} accent="#a78bfa" />
           <StatCard label="Completed" value={profile.bounties_completed} accent="#10b981" />
