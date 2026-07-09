@@ -1,288 +1,223 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
+import type {
+  Bounty,
+  BountyListResponse,
+  BountyFilters,
+  AgentProfile,
+  AuthChallenge,
+  AuthResponse,
+  NotificationItem,
+  EscrowState,
+  EscrowTransaction,
+  CreateBountyPayload,
+  CreateBountyResponse,
+  ApiError,
+} from '@/types'
+import { AlgoBountyError } from '@/types'
 
-function authHeaders(token: string | null): Record<string, string> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  return headers;
-}
+// ─── Config ───────────────────────────────────────────────────────────────────
 
-export interface Bounty {
-  bounty_id: string;
-  app_id: number | null;
-  status: string;
-  creator: string;
-  amount: number;
-  asset_id: number;
-  asset_name: string;
-  hitm: boolean;
-  deadline_round: number | null;
-  deadline_rounds_remaining: number | null;
-  description: string;
-  repo_url: string | null;
-  repo_labels: string[];
-  karma_requirement: number;
-  created_at: string;
-  tags: string[];
-  worker?: string | null;
-  github_issue?: number | null;
-}
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? ''
+const JWT_KEY = 'algobounty_jwt'
 
-export interface BountyListResponse {
-  bounties: Bounty[];
-  total: number;
-  page: number;
-  limit: number;
-  has_more: boolean;
-}
-
-export interface AgentProfile {
-  address: string;
-  karma: number;
-  reputation_score: number;
-  bounties_created: number;
-  bounties_claimed: number;
-  bounties_completed: number;
-  bounties_disputed: number;
-  bounties_rejected: number;
-  novice_tier: boolean;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface NotificationItem {
-  notification_id: number;
-  event_type: string;
-  read: boolean;
-  data: Record<string, unknown> | null;
-  created_at: string;
-}
-
-export interface AuthChallenge {
-  challenge: string;
-  expires_at: string;
-}
-
-export interface AuthResponse {
-  jwt: string;
-  address: string;
-  expires_at: string;
-  karma: number;
-}
-
-// --- Token helpers ---
+// ─── Token helpers ────────────────────────────────────────────────────────────
 
 export function getStoredToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem('algobounty_jwt');
+  if (typeof window === 'undefined') return null
+  return localStorage.getItem(JWT_KEY)
 }
 
-export function storeToken(jwt: string): void {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem('algobounty_jwt', jwt);
+export function storeToken(token: string): void {
+  localStorage.setItem(JWT_KEY, token)
 }
 
 export function clearToken(): void {
-  if (typeof window === 'undefined') return;
-  localStorage.removeItem('algobounty_jwt');
+  localStorage.removeItem(JWT_KEY)
 }
 
-// --- Bounty endpoints ---
+// ─── Fetch wrapper ────────────────────────────────────────────────────────────
+
+async function apiFetch<T>(
+  path: string,
+  options: RequestInit = {},
+  token?: string | null,
+): Promise<T> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(options.headers as Record<string, string>),
+  }
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+
+  const res = await fetch(`${API_BASE}${path}`, { ...options, headers })
+
+  if (!res.ok) {
+    let errorBody: { error?: ApiError } = {}
+    try {
+      errorBody = await res.json()
+    } catch {
+      // ignore parse errors
+    }
+    const err = errorBody.error
+    throw new AlgoBountyError(
+      err?.code ?? 'UnknownError',
+      err?.message ?? `HTTP ${res.status}`,
+      err?.details,
+    )
+  }
+
+  // Handle 204 No Content
+  if (res.status === 204) return undefined as T
+
+  return res.json() as Promise<T>
+}
+
+// ─── Bounty endpoints ─────────────────────────────────────────────────────────
 
 export async function getBounties(
-  params: {
-    status?: string;
-    repo?: string;
-    min_amount?: number;
-    max_amount?: number;
-    min_karma?: number;
-    hitm?: string;
-    sort?: string;
-    page?: number;
-    limit?: number;
-  } = {},
+  filters: BountyFilters = {},
 ): Promise<BountyListResponse> {
-  const qs = new URLSearchParams();
-  for (const [k, v] of Object.entries(params)) {
-    if (v !== undefined && v !== null) qs.set(k, String(v));
-  }
-  const res = await fetch(`${API_BASE}/api/v1/bounties?${qs}`);
-  if (!res.ok) throw new Error(`Failed to list bounties: ${res.status}`);
-  return res.json();
+  const params = new URLSearchParams()
+  if (filters.status) params.set('status', filters.status)
+  if (filters.hitm && filters.hitm !== 'any') params.set('hitm', filters.hitm)
+  if (filters.minAmount != null)
+    params.set('min_amount', String(Math.round(filters.minAmount * 1_000_000)))
+  if (filters.maxAmount != null)
+    params.set('max_amount', String(Math.round(filters.maxAmount * 1_000_000)))
+  if (filters.repo) params.set('repo', filters.repo)
+  if (filters.minKarma != null) params.set('min_karma', String(filters.minKarma))
+  if (filters.sortBy) params.set('sort', filters.sortBy)
+  if (filters.page) params.set('page', String(filters.page))
+  if (filters.limit) params.set('limit', String(filters.limit))
+
+  const qs = params.toString()
+  return apiFetch<BountyListResponse>(`/api/v1/bounties${qs ? `?${qs}` : ''}`)
 }
 
 export async function getBounty(bountyId: string): Promise<Bounty> {
-  const res = await fetch(`${API_BASE}/api/v1/bounties/${bountyId}`);
-  if (!res.ok) throw new Error(`Failed to fetch bounty: ${res.status}`);
-  return res.json();
+  return apiFetch<Bounty>(`/api/v1/bounties/${bountyId}`)
 }
 
 export async function createBounty(
-  body: {
-    description: string;
-    amount: number;
-    hitm?: boolean;
-    deadline_rounds?: number;
-    repo_url?: string;
-    repo_labels?: string[];
-    karma_requirement?: number;
-    tags?: string[];
-    asset_id?: number;
-  },
+  payload: CreateBountyPayload,
   token: string,
-): Promise<unknown> {
-  const res = await fetch(`${API_BASE}/api/v1/bounties`, {
+): Promise<CreateBountyResponse> {
+  return apiFetch<CreateBountyResponse>('/api/v1/bounties', {
     method: 'POST',
-    headers: authHeaders(token),
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => null);
-    throw new Error(err?.error?.message || `Failed to create bounty: ${res.status}`);
-  }
-  return res.json();
+    body: JSON.stringify(payload),
+  }, token)
 }
 
 export async function getClaimTxn(
   bountyId: string,
   token: string,
 ): Promise<{ unsigned_txn: string }> {
-  const res = await fetch(`${API_BASE}/api/v1/bounties/${bountyId}/claim/txn`, {
-    method: 'POST',
-    headers: authHeaders(token),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => null);
-    throw new Error(err?.error?.message || `Failed to generate claim transaction: ${res.status}`);
-  }
-  return res.json();
+  return apiFetch<{ unsigned_txn: string }>(
+    `/api/v1/bounties/${bountyId}/claim/txn`,
+    { method: 'POST' },
+    token,
+  )
 }
 
 export async function claimBounty(
   bountyId: string,
-  body: { signed_txn: string },
+  signedTxn: string,
   token: string,
-): Promise<unknown> {
-  const res = await fetch(`${API_BASE}/api/v1/bounties/${bountyId}/claim`, {
-    method: 'POST',
-    headers: authHeaders(token),
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => null);
-    throw new Error(err?.error?.message || `Failed to claim bounty: ${res.status}`);
-  }
-  return res.json();
+): Promise<{ bounty_id: string; status: string; worker_address: string }> {
+  return apiFetch(
+    `/api/v1/bounties/${bountyId}/claim`,
+    { method: 'POST', body: JSON.stringify({ signed_txn: signedTxn }) },
+    token,
+  )
 }
 
 export async function submitWork(
   bountyId: string,
-  body: { pr_url: string; proof_data?: Record<string, unknown> },
+  payload: { pr_url: string; proof_data?: Record<string, unknown> },
   token: string,
-): Promise<unknown> {
-  const res = await fetch(`${API_BASE}/api/v1/bounties/${bountyId}/submit`, {
-    method: 'POST',
-    headers: authHeaders(token),
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => null);
-    throw new Error(err?.error?.message || `Failed to submit work: ${res.status}`);
-  }
-  return res.json();
+): Promise<{ bounty_id: string; status: string; review_deadline: string }> {
+  return apiFetch(
+    `/api/v1/bounties/${bountyId}/submit`,
+    { method: 'POST', body: JSON.stringify(payload) },
+    token,
+  )
 }
 
 export async function getApproveTxn(
   bountyId: string,
   token: string,
 ): Promise<{ unsigned_txn: string }> {
-  const res = await fetch(`${API_BASE}/api/v1/bounties/${bountyId}/approve/txn`, {
-    method: 'POST',
-    headers: authHeaders(token),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => null);
-    throw new Error(err?.error?.message || `Failed to generate approve transaction: ${res.status}`);
-  }
-  return res.json();
+  return apiFetch<{ unsigned_txn: string }>(
+    `/api/v1/bounties/${bountyId}/approve/txn`,
+    { method: 'POST' },
+    token,
+  )
 }
 
 export async function approveWork(
   bountyId: string,
-  body: { signed_txn?: string },
+  signedTxn: string,
   token: string,
-): Promise<unknown> {
-  const res = await fetch(`${API_BASE}/api/v1/bounties/${bountyId}/approve`, {
-    method: 'POST',
-    headers: authHeaders(token),
-    body: JSON.stringify(body || {}),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => null);
-    throw new Error(err?.error?.message || `Failed to approve: ${res.status}`);
-  }
-  return res.json();
+): Promise<{ bounty_id: string; status: string; payout_amount: number }> {
+  return apiFetch(
+    `/api/v1/bounties/${bountyId}/approve`,
+    { method: 'POST', body: JSON.stringify({ signed_txn: signedTxn }) },
+    token,
+  )
 }
 
 export async function rejectWork(
   bountyId: string,
   token: string,
-  body?: { signed_txn?: string },
-): Promise<unknown> {
-  const res = await fetch(`${API_BASE}/api/v1/bounties/${bountyId}/reject`, {
-    method: 'POST',
-    headers: authHeaders(token),
-    body: JSON.stringify(body || {}),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => null);
-    throw new Error(err?.error?.message || `Failed to reject: ${res.status}`);
-  }
-  return res.json();
+  reason?: string,
+): Promise<{ bounty_id: string; status: string }> {
+  return apiFetch(
+    `/api/v1/bounties/${bountyId}/reject`,
+    { method: 'POST', body: JSON.stringify({ reason }) },
+    token,
+  )
 }
 
 export async function disputeWork(
   bountyId: string,
   token: string,
-  body?: Record<string, unknown>,
-): Promise<unknown> {
-  const res = await fetch(`${API_BASE}/api/v1/bounties/${bountyId}/dispute`, {
-    method: 'POST',
-    headers: authHeaders(token),
-    body: JSON.stringify(body || {}),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => null);
-    throw new Error(err?.error?.message || `Failed to dispute: ${res.status}`);
-  }
-  return res.json();
+  reason?: string,
+): Promise<{ bounty_id: string; status: string }> {
+  return apiFetch(
+    `/api/v1/bounties/${bountyId}/dispute`,
+    { method: 'POST', body: JSON.stringify({ reason }) },
+    token,
+  )
 }
 
-// --- Agent / Profile endpoints ---
+export async function abandonBounty(
+  bountyId: string,
+  token: string,
+): Promise<{ bounty_id: string; status: string }> {
+  return apiFetch(
+    `/api/v1/bounties/${bountyId}`,
+    { method: 'DELETE' },
+    token,
+  )
+}
+
+// ─── Agent endpoints ──────────────────────────────────────────────────────────
 
 export async function getAgentProfile(address: string): Promise<AgentProfile> {
-  const res = await fetch(`${API_BASE}/api/v1/agents/${address}`);
-  if (!res.ok) throw new Error(`Failed to fetch profile: ${res.status}`);
-  return res.json();
+  return apiFetch<AgentProfile>(`/api/v1/agents/${address}`)
 }
 
 export async function getMyProfile(token: string): Promise<AgentProfile> {
-  const res = await fetch(`${API_BASE}/api/v1/agents/me`, {
-    headers: authHeaders(token),
-  });
-  if (!res.ok) throw new Error(`Failed to fetch profile: ${res.status}`);
-  return res.json();
+  return apiFetch<AgentProfile>('/api/v1/agents/me', {}, token)
 }
 
-// --- Auth endpoints ---
+// ─── Auth endpoints ───────────────────────────────────────────────────────────
 
 export async function requestChallenge(address: string): Promise<AuthChallenge> {
-  const res = await fetch(`${API_BASE}/api/v1/auth/request`, {
+  return apiFetch<AuthChallenge>('/api/v1/auth/request', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ address }),
-  });
-  if (!res.ok) throw new Error('Failed to get auth challenge');
-  return res.json();
+  })
 }
 
 export async function verifyAuth(
@@ -290,41 +225,46 @@ export async function verifyAuth(
   signature: string,
   challenge: string,
 ): Promise<AuthResponse> {
-  const res = await fetch(`${API_BASE}/api/v1/auth/verify`, {
+  return apiFetch<AuthResponse>('/api/v1/auth/verify', {
     method: 'POST',
-    headers: authHeaders(null),
     body: JSON.stringify({ address, signature, challenge }),
-  });
-  if (!res.ok) throw new Error('Failed to verify auth');
-  return res.json();
+  })
 }
 
-// --- Notification endpoints ---
+// ─── Notification endpoints ───────────────────────────────────────────────────
 
-export async function getNotifications(token: string): Promise<NotificationItem[]> {
-  const res = await fetch(`${API_BASE}/api/v1/notifications`, {
-    headers: authHeaders(token),
-  });
-  if (!res.ok) throw new Error(`Failed to fetch notifications: ${res.status}`);
-  const body = await res.json();
-  return Array.isArray(body) ? body : (body.notifications ?? []);
+export async function getNotifications(
+  token: string,
+): Promise<NotificationItem[]> {
+  return apiFetch<NotificationItem[]>('/api/v1/notifications', {}, token)
 }
 
 export async function markNotificationRead(
-  notificationId: number,
+  id: number,
   token: string,
 ): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/v1/notifications/${notificationId}/read`, {
-    method: 'POST',
-    headers: authHeaders(token),
-  });
-  if (!res.ok) throw new Error(`Failed to mark read: ${res.status}`);
+  return apiFetch<void>(
+    `/api/v1/notifications/${id}/read`,
+    { method: 'POST' },
+    token,
+  )
 }
 
-// --- Escrow endpoints ---
+export async function markAllNotificationsRead(token: string): Promise<void> {
+  // Mark each unread notification as read
+  const notifications = await getNotifications(token)
+  const unread = notifications.filter((n) => !n.read)
+  await Promise.all(unread.map((n) => markNotificationRead(n.notification_id, token)))
+}
 
-export async function getEscrow(appId: number): Promise<unknown> {
-  const res = await fetch(`${API_BASE}/api/v1/escrows/${appId}`);
-  if (!res.ok) throw new Error(`Failed to fetch escrow: ${res.status}`);
-  return res.json();
+// ─── Escrow endpoints ─────────────────────────────────────────────────────────
+
+export async function getEscrow(appId: number): Promise<EscrowState> {
+  return apiFetch<EscrowState>(`/api/v1/escrows/${appId}`)
+}
+
+export async function getEscrowTransactions(
+  appId: number,
+): Promise<EscrowTransaction[]> {
+  return apiFetch<EscrowTransaction[]>(`/api/v1/escrows/${appId}/transactions`)
 }

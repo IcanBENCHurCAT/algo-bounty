@@ -1,29 +1,21 @@
 {
-  "name": "dashboard",
-  "version": "0.1.0",
+  "name": "algobounty-dashboard",
+  "version": "1.0.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@agoralabs-sh/avm-web-provider": "^1.7.0",
+    "@algorandfoundation/algokit-utils": "^7.0.0",
     "@blockshake/defly-connect": "^1.2.1",
-    "@magic-ext/algorand": "^24.4.2",
     "@perawallet/connect": "^1.4.1",
-    "@supabase/ssr": "^0.12.0",
-    "@supabase/supabase-js": "^2.110.0",
     "@txnlab/use-wallet": "^4.6.0",
     "@txnlab/use-wallet-react": "^4.6.0",
-    "@walletconnect/modal": "^2.7.0",
-    "@walletconnect/sign-client": "^2.23.10",
-    "@web3auth/base": "^9.7.0",
-    "@web3auth/base-provider": "^9.7.0",
-    "@web3auth/modal": "^9.7.0",
-    "lute-connect": "^1.7.0",
-    "magic-sdk": "^29.4.2",
+    "algosdk": "^3.0.0",
     "next": "16.2.9",
     "react": "19.2.4",
     "react-dom": "19.2.4"
