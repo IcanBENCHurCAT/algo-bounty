@@ -31,5 +31,6 @@ substitutions:
 options:
   logging: CLOUD_LOGGING_ONLY
   machineType: 'E2_HIGHCPU_8'
-  # Build timeout — Next.js standalone builds can be slow on first run
-  timeout: '900s'
+
+# Global build timeout — Next.js standalone builds can be slow on first run
+timeout: '900s'

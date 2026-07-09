@@ -72,12 +72,10 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: '22'
-        cache: 'npm'
-        cache-dependency-path: dashboard/package-lock.json
 
     - name: Install dependencies
       working-directory: dashboard
-      run: npm ci
+      run: npm install
 
     - name: TypeScript type check
       working-directory: dashboard
@@ -105,12 +103,10 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: '22'
-        cache: 'npm'
-        cache-dependency-path: dashboard/package-lock.json
 
     - name: Install dependencies
       working-directory: dashboard
-      run: npm ci
+      run: npm install
 
     - name: Build Next.js (standalone)
       working-directory: dashboard
