@@ -1,8 +1,9 @@
 /**
  * algorand.ts — AlgoKit-aligned Algorand utilities
  *
- * Uses @algorandfoundation/algokit-utils for high-level operations
- * and algosdk for low-level transaction construction.
+ * Uses algosdk directly for transaction construction and signing.
+ * Note: @algorandfoundation/algokit-utils is excluded from the frontend
+ * because it requires algosdk <3.0, which conflicts with use-wallet-react v4.
  */
 import algosdk from 'algosdk'
 
