@@ -156,8 +156,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const signedBytes = signedTxns[0]
         if (!signedBytes) throw new Error('Wallet rejected signing')
 
-        // 4. Extract signature and verify with backend
-        const signatureBase64 = extractSignatureBase64(signedBytes)
+        // 4. Send full signed transaction (as base64) to backend
+        const signatureBase64 = bytesToBase64(signedBytes)
         const { jwt, karma } = await verifyAuth(address, signatureBase64, challenge)
 
         // 5. Store JWT and fetch profile

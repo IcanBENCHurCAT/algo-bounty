@@ -13,7 +13,8 @@ const nextConfig = {
       '@agoralabs-sh/avm-web-provider': 'commonjs @agoralabs-sh/avm-web-provider',
       '@walletconnect/modal': 'commonjs @walletconnect/modal',
       '@walletconnect/sign-client': 'commonjs @walletconnect/sign-client',
-      'lute-connect': 'commonjs lute-connect'
+      'lute-connect': 'commonjs lute-connect',
+      '@walletconnect/types': 'commonjs @walletconnect/types'
     }]
 
     if (!isServer) {
@@ -26,6 +27,7 @@ const nextConfig = {
           '@walletconnect/modal': false,
           '@walletconnect/sign-client': false,
           'lute-connect': false,
+          '@walletconnect/types': false,
         }
       } catch {
         // use-wallet not yet installed, skip
