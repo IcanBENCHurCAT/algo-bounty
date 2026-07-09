@@ -1,56 +1,75 @@
-import { useEffect, useRef } from 'react';
+﻿'use client'
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
+import { useCallback, useEffect, useRef } from 'react'
+import type { SseEvent, SseEventType } from '@/types'
 
-export type MarketplaceEvent = {
-  event_type: string;
-  data: Record<string, unknown>;
-};
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? ''
 
-export function useEvents(onEvent: (event: MarketplaceEvent) => void) {
-  const onEventRef = useRef(onEvent);
+const SSE_EVENTS: SseEventType[] = [
+  'bounty.created',
+  'bounty.claimed',
+  'bounty.submitted',
+  'bounty.approved',
+  'bounty.rejected',
+  'bounty.disputed',
+  'karma.updated',
+]
 
+interface UseEventsOptions {
+  onEvent?: (event: SseEvent) => void
+  enabled?: boolean
+}
+
+/**
+ * Subscribes to the AlgoBounty SSE event stream.
+ * Reconnects with exponential backoff on connection loss.
+ */
+export function useEvents({ onEvent, enabled = true }: UseEventsOptions = {}) {
+  const callbackRef = useRef(onEvent)
+  const esRef = useRef<EventSource | null>(null)
+  const retryRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const retryDelay = useRef(1000)
+
+  // Keep callback ref fresh without causing reconnects
   useEffect(() => {
-    onEventRef.current = onEvent;
-  }, [onEvent]);
+    callbackRef.current = onEvent
+  }, [onEvent])
 
-  useEffect(() => {
-    const eventSource = new EventSource(`${API_BASE}/api/v1/events`);
+  const connect = useCallback(() => {
+    if (!enabled) return
+    if (typeof window === 'undefined') return
 
-    // Generic events we care about
-    const eventTypes = [
-      'bounty.created',
-      'bounty.claimed',
-      'bounty.submitted',
-      'bounty.approved',
-      'bounty.rejected',
-      'bounty.disputed',
-      'karma.updated'
-    ];
+    const es = new EventSource(`${API_BASE}/api/v1/events`)
+    esRef.current = es
 
-    const listeners = eventTypes.map(type => {
-      const listener = (e: MessageEvent) => {
+    for (const eventType of SSE_EVENTS) {
+      es.addEventListener(eventType, (e: MessageEvent) => {
         try {
-          const data = JSON.parse(e.data);
-          onEventRef.current({ event_type: type, data });
-        } catch (err) {
-          console.error(`Failed to parse SSE data for ${type}:`, err);
+          const data = JSON.parse(e.data as string)
+          callbackRef.current?.({ type: eventType, data })
+          retryDelay.current = 1000 // reset backoff on success
+        } catch {
+          // ignore malformed events
         }
-      };
-      eventSource.addEventListener(type, listener);
-      return { type, listener };
-    });
+      })
+    }
 
-    eventSource.onerror = (err) => {
-      console.error('SSE Error:', err);
-      eventSource.close();
-    };
+    es.onerror = () => {
+      es.close()
+      esRef.current = null
+      // Exponential backoff: 1s → 2s → 4s → 8s → max 30s
+      const delay = Math.min(retryDelay.current, 30_000)
+      retryDelay.current = delay * 2
+      retryRef.current = setTimeout(connect, delay)
+    }
+  }, [enabled])
 
+  useEffect(() => {
+    connect()
     return () => {
-      listeners.forEach(({ type, listener }) => {
-        eventSource.removeEventListener(type, listener);
-      });
-      eventSource.close();
-    };
-  }, []);
+      esRef.current?.close()
+      esRef.current = null
+      if (retryRef.current) clearTimeout(retryRef.current)
+    }
+  }, [connect])
 }
