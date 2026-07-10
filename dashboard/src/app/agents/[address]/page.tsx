@@ -18,7 +18,7 @@ function formatAlgo(micro: number) {
 }
 
 function truncateAddress(addr: string) {
-  return `${addr.slice(0, 14)}…${addr.slice(-6)}`
+  return `${addr?.slice(0, 14)}…${addr?.slice(-6)}`
 }
 
 // ─── Stat Card ────────────────────────────────────────────────────────────────
@@ -89,7 +89,7 @@ function BountyRow({ bounty }: { bounty: Bounty }) {
       >
         <StatusBadge status={bounty.status} />
         <span style={{ flex: 1, color: '#cbd5e1', fontSize: '0.9375rem', minWidth: '200px' }}>
-          {bounty.description.length > 80
+          {bounty.description && bounty.description.length > 80
             ? bounty.description.slice(0, 80) + '…'
             : bounty.description}
         </span>
@@ -221,7 +221,7 @@ export default function AgentProfilePage() {
               flexShrink: 0,
             }}
           >
-            {address.slice(0, 2).toUpperCase()}
+            {address?.slice(0, 2).toUpperCase()}
           </div>
 
           <div style={{ flex: 1 }}>

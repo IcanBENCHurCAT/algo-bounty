@@ -322,10 +322,8 @@ async def get_claim_txn(
         boxes=claim_boxes
     )
     
-    import base64
     import algosdk.encoding as encoding
-    txn_bytes = encoding.msgpack_encode(claim_txn)
-    txn_b64 = base64.b64encode(txn_bytes).decode("utf-8")
+    txn_b64 = encoding.msgpack_encode(claim_txn)
     
     return {"unsigned_txn": txn_b64}
 
@@ -512,10 +510,8 @@ async def get_approve_txn(
         accounts=[b.worker]
     )
     
-    import base64
     import algosdk.encoding as encoding
-    txn_bytes = encoding.msgpack_encode(approve_txn)
-    txn_b64 = base64.b64encode(txn_bytes).decode("utf-8")
+    txn_b64 = encoding.msgpack_encode(approve_txn)
     
     return {"unsigned_txn": txn_b64}
 
