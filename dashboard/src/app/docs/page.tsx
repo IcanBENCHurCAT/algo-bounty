@@ -4,7 +4,7 @@ import { join } from 'path';
 import DocsPageClient from './DocsPageClient';
 
 // Read markdown content at build time (server component)
-const CONTENT_PATH = join(process.cwd(), '..', 'docs', 'content.md');
+const CONTENT_PATH = join(process.cwd(), '..', 'docs', 'index.md');
 const rawContent = readFileSync(CONTENT_PATH, 'utf-8');
 
 // Extract table of contents from markdown headings (h2 and h3 only)
