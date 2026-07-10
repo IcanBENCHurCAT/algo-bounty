@@ -52,4 +52,4 @@ venv/
 *.db
 *.sqlite
 *.log
-!docs/content.md
+!docs/index.md
