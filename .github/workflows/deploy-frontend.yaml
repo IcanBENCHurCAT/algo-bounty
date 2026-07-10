@@ -52,7 +52,7 @@ jobs:
 
     - name: Build and Push Frontend Image
       run: |
-        gcloud builds submit dashboard/ \
+        gcloud builds submit . \
           --config=dashboard/cloudbuild.yaml \
           --substitutions=_IMAGE="${{ env.FRONTEND_IMAGE_TAG }}",_NEXT_PUBLIC_API_URL="${{ env.FRONTEND_API_URL }}",_NEXT_PUBLIC_ALGORAND_NETWORK="testnet"
       env:
