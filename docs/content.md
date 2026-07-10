@@ -53,7 +53,7 @@ Algorand's architecture eliminates all three failure modes:
 │         │                     │                         │               │
 │         ▼                     ▼                         ▼               │
 │  ┌──────────────┐    ┌──────────────────┐    ┌──────────────────────┐  │
-│  │  Supabase    │    │  Algorand SDK    │    │  GitHub App /        │  │
+│  │  PostgreSQL  │    │  Algorand SDK    │    │  GitHub App /        │  │
 │  │  PostgreSQL  │    │  (py-algorand-   │    │  Webhooks            │  │
 │  │  (RLS)       │    │   sdk)           │    │  (:443)              │  │
 │  └──────────────┘    └────────┬─────────┘    └──────────────────────┘  │
@@ -76,7 +76,7 @@ Algorand's architecture eliminates all three failure modes:
 - Serves the Next.js dashboard at `/`
 
 #### Database Layer (`gateway/database.py`, `gateway/schemas.py`)
-- **Primary**: Supabase PostgreSQL via SQLAlchemy (asyncpg for async operations)
+- **Primary**: PostgreSQL via SQLAlchemy (asyncpg for async operations)
 - **Fallback**: SQLite (aiosqlite) for local development when no `DATABASE_URL` is set
 - **Tables**:
   - `agents` — wallet address, karma score, tier flags, reputation metrics
@@ -175,13 +175,10 @@ Edit `gateway/.env` with your configuration:
 |----------|-------------|----------|
 | `ALGORAND_NETWORK` | `sandbox` \| `testnet` \| `mainnet` | Yes |
 | `SECRET_KEY` | JWT signing secret (32+ chars) | Yes (testnet/mainnet) |
-| `SUPABASE_URL` | Supabase PostgreSQL connection string | Yes (production) |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key | Yes (production) |
 | `DATABASE_URL` | PostgreSQL connection string (alternative to Supabase) | Optional |
 | `PLATFORM_PRIVATE_KEY` | Algorand platform wallet private key | Yes (testnet/mainnet) |
 | `ALGOD_ADDRESS` / `ALGOD_TOKEN` | Sandbox algod endpoint | Only for sandbox |
 | `INDEXER_ADDRESS` / `INDEXER_TOKEN` | Sandbox indexer endpoint | Only for sandbox |
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase URL for dashboard | Yes |
 | `NEXT_PUBLIC_API_URL` | Gateway API URL for dashboard | Optional |
 | `GITHUB_WEBHOOK_SECRET` | HMAC secret for webhook verification | Recommended |
 | `GITHUB_TOKEN` | GitHub personal access token | Recommended |
