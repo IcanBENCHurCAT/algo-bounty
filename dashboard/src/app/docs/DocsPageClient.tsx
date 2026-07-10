@@ -30,7 +30,7 @@ export default function DocsPageClient({ rawContent, tocItems }: DocsPageClientP
   }, []);
 
   return (
-    <div className="flex flex-1 max-w-[1400px] w-full mx-auto">
+    <div className="flex flex-1 max-w-[1400px] w-full mx-auto gap-8">
       {/* Sidebar Overlay (mobile) */}
       {sidebarOpen && (
         <div
@@ -41,7 +41,7 @@ export default function DocsPageClient({ rawContent, tocItems }: DocsPageClientP
 
       {/* Sidebar */}
       <aside
-        className={`fixed top-16 left-0 bottom-0 z-30 w-64 bg-[#0a0a0a] border-r border-gray-800/60 overflow-y-auto transition-transform duration-200 sm:translate-x-0 ${
+        className={`fixed top-16 left-0 bottom-0 z-30 w-64 bg-[#0a0a0a] border-r border-gray-800/60 overflow-y-auto transition-transform duration-200 sm:sticky sm:top-[80px] sm:h-[calc(100vh-80px)] sm:bg-transparent sm:flex-shrink-0 sm:translate-x-0 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
@@ -49,7 +49,7 @@ export default function DocsPageClient({ rawContent, tocItems }: DocsPageClientP
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 min-w-0 sm:ml-64">
+      <main className="flex-1 min-w-0">
         <div className="py-6 px-4 sm:px-8">
           <div className="max-w-4xl">
             {/* Title */}
