@@ -71,7 +71,7 @@ function AddressDisplay({ address }: { address: string }) {
           letterSpacing: '0.02em',
         }}
       >
-        {address.slice(0, 20)}…{address.slice(-8)}
+        {address?.slice(0, 20)}…{address?.slice(-8)}
       </span>
       <button
         onClick={handleCopy}

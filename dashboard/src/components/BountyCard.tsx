@@ -48,7 +48,7 @@ interface BountyCardProps {
 export function BountyCard({ bounty }: BountyCardProps) {
   const accentColor = STATUS_COLORS[bounty.status] ?? '#64748b'
   const hostname = getRepoHostname(bounty.repo_url)
-  const displayTags = bounty.tags.slice(0, 3)
+  const displayTags = bounty.tags?.slice(0, 3) || []
   const remainingDays =
     bounty.deadline_rounds_remaining != null
       ? Math.ceil(bounty.deadline_rounds_remaining / 30 / 24 / 60 * 4.5) // ~4.5s per block

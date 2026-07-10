@@ -12,7 +12,7 @@ const WALLET_LABELS: Record<string, { label: string; color: string }> = {
 }
 
 function truncate(addr: string): string {
-  return `${addr.slice(0, 6)}…${addr.slice(-4)}`
+  return `${addr?.slice(0, 6)}…${addr?.slice(-4)}`
 }
 
 interface WalletConnectProps {
