@@ -217,7 +217,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
             <span style={{ color: '#334155' }}>Karma:</span>
             <span style={{ color: '#818cf8', fontWeight: 700 }}>{karma}</span>
             <span style={{ color: '#1e293b' }}>|</span>
-            {address.slice(0, 8)}…{address.slice(-4)}
+            {address?.slice(0, 8)}…{address?.slice(-4)}
           </span>
         )}
       </footer>

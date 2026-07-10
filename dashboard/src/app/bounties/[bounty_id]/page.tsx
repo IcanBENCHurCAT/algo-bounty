@@ -243,21 +243,21 @@ export default function BountyDetailPage() {
         <div>
           <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#475569', fontWeight: 600, marginBottom: '0.5rem' }}>Creator</div>
           <Link href={`/agents/${bounty.creator}`} style={{ fontFamily: 'monospace', fontSize: '0.875rem', color: '#6366f1' }}>
-            {bounty.creator.slice(0, 12)}…{bounty.creator.slice(-6)}
+            {bounty.creator?.slice(0, 12)}…{bounty.creator?.slice(-6)}
           </Link>
         </div>
         {bounty.worker && (
           <div>
             <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#475569', fontWeight: 600, marginBottom: '0.5rem' }}>Worker</div>
             <Link href={`/agents/${bounty.worker}`} style={{ fontFamily: 'monospace', fontSize: '0.875rem', color: '#10b981' }}>
-              {bounty.worker.slice(0, 12)}…{bounty.worker.slice(-6)}
+              {bounty.worker?.slice(0, 12)}…{bounty.worker?.slice(-6)}
             </Link>
           </div>
         )}
       </div>
 
       {/* Repo + Tags */}
-      {(bounty.repo_url || bounty.tags.length > 0 || bounty.repo_labels.length > 0) && (
+      {(bounty.repo_url || (bounty.tags && bounty.tags.length > 0) || (bounty.repo_labels && bounty.repo_labels.length > 0)) && (
         <div style={sectionStyle}>
           {bounty.repo_url && (
             <div style={{ marginBottom: '1rem' }}>
@@ -268,7 +268,7 @@ export default function BountyDetailPage() {
               </a>
             </div>
           )}
-          {bounty.repo_labels.length > 0 && (
+          {bounty.repo_labels && bounty.repo_labels.length > 0 && (
             <div style={{ marginBottom: '1rem' }}>
               <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#475569', fontWeight: 600, marginBottom: '0.5rem' }}>Labels</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem' }}>
@@ -276,7 +276,7 @@ export default function BountyDetailPage() {
               </div>
             </div>
           )}
-          {bounty.tags.length > 0 && (
+          {bounty.tags && bounty.tags.length > 0 && (
             <div>
               <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#475569', fontWeight: 600, marginBottom: '0.5rem' }}>Tags</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem' }}>
