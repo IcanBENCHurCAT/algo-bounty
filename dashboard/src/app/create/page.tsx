@@ -1,320 +1,463 @@
-'use client';
+'use client'
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { useWallet } from '@/hooks/useWallet';
-import { useToast } from '@/components/Toast';
-import { createBounty } from '@/lib/api';
+import React, { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { useAuth } from '@/hooks/useAuth'
+import { useToast } from '@/providers'
+import { createBounty } from '@/lib/api'
+import { Button } from '@/components/ui/Button'
+import { Card, CardHeader, CardTitle } from '@/components/ui/Card'
 
-type Step = 'details' | 'requirements' | 'payment' | 'deploying';
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const ASSET_OPTIONS = [
+  { id: 0, name: 'ALGO' },
+  { id: 10458941, name: 'USDC (Testnet)' },
+]
+
+const DEFAULT_DEADLINE_ROUNDS = 100_000 // ~5 days on Algorand
+
+// ─── Form state ───────────────────────────────────────────────────────────────
+
+interface FormState {
+  description: string
+  amountAlgo: string
+  assetId: number
+  hitm: boolean
+  deadlineRounds: string
+  repoUrl: string
+  repoLabels: string
+  karmaRequired: string
+  tags: string
+  githubIssue: string
+  hitmReviewDays: string
+}
+
+const INITIAL: FormState = {
+  description: '',
+  amountAlgo: '',
+  assetId: 0,
+  hitm: false,
+  deadlineRounds: String(DEFAULT_DEADLINE_ROUNDS),
+  repoUrl: '',
+  repoLabels: '',
+  karmaRequired: '0',
+  tags: '',
+  githubIssue: '',
+  hitmReviewDays: '3',
+}
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
+const fieldStyle: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '0.375rem',
+}
+
+const labelStyle: React.CSSProperties = {
+  fontSize: '0.8rem',
+  fontWeight: 600,
+  textTransform: 'uppercase',
+  letterSpacing: '0.07em',
+  color: '#64748b',
+}
+
+const inputStyle: React.CSSProperties = {
+  padding: '0.625rem 0.875rem',
+  borderRadius: '0.625rem',
+  background: 'rgba(255,255,255,0.04)',
+  border: '1px solid rgba(255,255,255,0.1)',
+  color: '#e2e8f0',
+  fontSize: '0.9375rem',
+  outline: 'none',
+  width: '100%',
+  transition: 'border-color 0.15s',
+}
+
+const sectionStyle: React.CSSProperties = {
+  background: 'rgba(10,10,22,0.7)',
+  backdropFilter: 'blur(20px)',
+  border: '1px solid rgba(255,255,255,0.07)',
+  borderRadius: '1rem',
+  padding: '1.5rem',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '1.25rem',
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function CreateBountyPage() {
-  const router = useRouter();
-  const toast = useToast();
-  const { connected, jwt, profile } = useWallet();
+  const router = useRouter()
+  const { connected, jwt, karma } = useAuth()
+  const toast = useToast()
 
-  const [step, setStep] = useState<Step>('details');
-  const [loading, setLoading] = useState(false);
-  const [deployStep, setDeployStep] = useState(0);
+  const [form, setForm] = useState<FormState>(INITIAL)
+  const [loading, setLoading] = useState(false)
+  const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({})
 
-  // Form State
-  const [description, setDescription] = useState('');
-  const [repoUrl, setRepoUrl] = useState('');
-  const [amount, setAmount] = useState('');
-  const [minKarma, setMinKarma] = useState('0');
-  const [hitm, setHitm] = useState(false);
-  const [tags, setTags] = useState('');
+  const set = (field: keyof FormState, value: string | boolean | number) =>
+    setForm((prev) => ({ ...prev, [field]: value }))
 
-  // Validation
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  // ─── Validation ──────────────────────────────────────────────────────────
 
-  const validateDetails = () => {
-    const newErrors: Record<string, string> = {};
-    if (description.length < 10) newErrors.description = 'Description must be at least 10 characters';
+  const validate = (): boolean => {
+    const errs: Partial<Record<keyof FormState, string>> = {}
+    if (!form.description.trim()) errs.description = 'Description is required'
+    if (!form.amountAlgo || Number(form.amountAlgo) <= 0) errs.amountAlgo = 'Must be > 0'
+    if (!form.repoUrl.trim()) errs.repoUrl = 'Repository URL is required'
+    const rounds = Number(form.deadlineRounds)
+    if (!rounds || rounds < 100) errs.deadlineRounds = 'Minimum 100 rounds'
+    setErrors(errs)
+    return Object.keys(errs).length === 0
+  }
 
-    if (repoUrl) {
-      try {
-        const url = new URL(repoUrl);
-        if (url.hostname !== 'github.com' && url.hostname !== 'www.github.com') {
-          newErrors.repoUrl = 'Only GitHub repositories are supported currently';
-        }
-      } catch {
-        newErrors.repoUrl = 'Invalid URL format';
-      }
+  // ─── Submit ──────────────────────────────────────────────────────────────
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!jwt) {
+      toast.error('Please connect your wallet first')
+      return
     }
+    if (!validate()) return
 
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const validatePayment = () => {
-    const newErrors: Record<string, string> = {};
-    const val = parseFloat(amount);
-    if (isNaN(val) || val <= 0) newErrors.amount = 'Amount must be greater than 0';
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const handleNext = () => {
-    if (step === 'details' && validateDetails()) setStep('requirements');
-    else if (step === 'requirements') setStep('payment');
-  };
-
-  const handleBack = () => {
-    if (step === 'requirements') setStep('details');
-    else if (step === 'payment') setStep('requirements');
-  };
-
-  const handleSubmit = async () => {
-    if (!validatePayment()) return;
-    if (!connected || !jwt) {
-      toast.error('Connect your wallet first');
-      return;
-    }
-
-    setStep('deploying');
-    setLoading(true);
-
+    setLoading(true)
     try {
-      // Step 1: Initialize
-      setDeployStep(1);
-      await new Promise(r => setTimeout(r, 1000));
+      const payload = {
+        description: form.description.trim(),
+        amount: Math.round(Number(form.amountAlgo) * 1_000_000),
+        asset_id: form.assetId,
+        hitm: form.hitm,
+        deadline_rounds: Number(form.deadlineRounds),
+        repo_url: form.repoUrl.trim(),
+        repo_labels: form.repoLabels
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean),
+        karma_requirement: Number(form.karmaRequired) || 0,
+        tags: form.tags
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean),
+        ...(form.githubIssue ? { github_issue: Number(form.githubIssue) } : {}),
+        ...(form.hitm && form.hitmReviewDays
+          ? { hitm_review_days: Number(form.hitmReviewDays) }
+          : {}),
+      }
 
-      // Step 2: Sign
-      setDeployStep(2);
-      // In production, this would call createBounty which might return a transaction to sign
-      await createBounty({
-        description,
-        amount: parseFloat(amount) * 1_000_000,
-        repo_url: repoUrl || undefined,
-        karma_requirement: parseInt(minKarma),
-        hitm,
-        tags: tags.split(',').map(t => t.trim()).filter(Boolean),
-      }, jwt);
-
-      // Step 3: Deploy
-      setDeployStep(3);
-      await new Promise(r => setTimeout(r, 1500));
-
-      // Step 4: Indexing
-      setDeployStep(4);
-      await new Promise(r => setTimeout(r, 1000));
-
-      toast.success('Bounty created and deployed successfully!');
-      router.push('/');
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to create bounty';
-      toast.error(msg);
-      setStep('payment');
+      const result = await createBounty(payload, jwt)
+      toast.success(`Bounty created! ID: ${result.bounty_id}`)
+      router.push(`/bounties/${result.bounty_id}`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to create bounty')
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
+
+  // ─── Not connected ───────────────────────────────────────────────────────
 
   if (!connected) {
     return (
-      <div className="max-w-2xl mx-auto px-4 py-16 text-center">
-        <h1 className="text-2xl font-bold mb-4">Create a New Bounty</h1>
-        <p className="text-gray-400 mb-8">You need to connect your wallet to create a bounty on the Algorand blockchain.</p>
-        <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-6">
-            Please use the &quot;Connect Wallet&quot; button in the header.
+      <div
+        className="fade-in"
+        style={{
+          maxWidth: '600px',
+          margin: '4rem auto',
+          padding: '0 1.5rem',
+          textAlign: 'center',
+        }}
+      >
+        <div
+          style={{
+            padding: '3rem',
+            background: 'rgba(99,102,241,0.06)',
+            border: '1px solid rgba(99,102,241,0.15)',
+            borderRadius: '1.25rem',
+          }}
+        >
+          <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔐</div>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#f1f5f9', marginBottom: '0.75rem' }}>
+            Connect Your Wallet
+          </h1>
+          <p style={{ color: '#64748b', marginBottom: '1.5rem' }}>
+            You need a connected wallet to create a bounty.
+          </p>
+          <Link href="/">
+            <Button>← Back to Marketplace</Button>
+          </Link>
         </div>
       </div>
-    );
+    )
   }
 
-  const deploySteps = [
-    'Initializing bounty data...',
-    'Requesting wallet signature...',
-    'Deploying smart contract to Algorand...',
-    'Finalizing and indexing...',
-  ];
+  // ─── Render ──────────────────────────────────────────────────────────────
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-8">
-      {/* Progress */}
-      {step !== 'deploying' && (
-        <div className="flex items-center justify-between mb-8">
-          {(['details', 'requirements', 'payment'] as const).map((s, i) => (
-            <div key={s} className="flex items-center flex-1 last:flex-none">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
-                step === s ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' :
-                i < ['details', 'requirements', 'payment'].indexOf(step) ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
-                'bg-gray-800 text-gray-500 border border-gray-700'
-              }`}>
-                {i < ['details', 'requirements', 'payment'].indexOf(step) ? '✓' : i + 1}
+    <div
+      className="fade-in"
+      style={{
+        maxWidth: '720px',
+        margin: '0 auto',
+        padding: 'clamp(1.5rem, 4vw, 2.5rem) clamp(1rem, 4vw, 1.5rem)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '1.5rem',
+      }}
+    >
+      {/* Header */}
+      <div>
+        <nav style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', color: '#475569', marginBottom: '1.25rem' }}>
+          <Link href="/" style={{ color: '#6366f1' }}>Marketplace</Link>
+          <span>/</span>
+          <span>Create Bounty</span>
+        </nav>
+        <h1 style={{ margin: 0, fontSize: 'clamp(1.5rem, 4vw, 2rem)', fontWeight: 900, color: '#f1f5f9' }}>
+          Create Bounty
+        </h1>
+        <p style={{ margin: '0.5rem 0 0', color: '#64748b' }}>
+          Post a task and escrow the reward on Algorand.{' '}
+          <span style={{ color: '#818cf8' }}>★ Your karma: {karma}</span>
+        </p>
+      </div>
+
+      <form onSubmit={(e) => void handleSubmit(e)} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+        {/* Bounty Details */}
+        <div style={sectionStyle}>
+          <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#f1f5f9' }}>Bounty Details</h2>
+
+          <div style={fieldStyle}>
+            <label htmlFor="description" style={labelStyle}>Description *</label>
+            <textarea
+              id="description"
+              rows={4}
+              placeholder="Describe the task clearly — what needs to be built, fixed, or researched…"
+              value={form.description}
+              onChange={(e) => set('description', e.target.value)}
+              style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.6 }}
+            />
+            {errors.description && <span style={{ color: '#ef4444', fontSize: '0.8rem' }}>{errors.description}</span>}
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <div style={fieldStyle}>
+              <label htmlFor="amount" style={labelStyle}>Reward Amount *</label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  id="amount"
+                  type="number"
+                  min="0.001"
+                  step="0.001"
+                  placeholder="e.g. 100"
+                  value={form.amountAlgo}
+                  onChange={(e) => set('amountAlgo', e.target.value)}
+                  style={{ ...inputStyle, paddingRight: '4rem' }}
+                />
+                <span style={{ position: 'absolute', right: '0.875rem', top: '50%', transform: 'translateY(-50%)', color: '#475569', fontSize: '0.875rem', pointerEvents: 'none' }}>
+                  ALGO
+                </span>
               </div>
-              {i < 2 && (
-                <div className={`h-0.5 flex-1 mx-2 ${
-                  i < ['details', 'requirements', 'payment'].indexOf(step) ? 'bg-emerald-500/30' : 'bg-gray-800'
-                }`} />
-              )}
+              {errors.amountAlgo && <span style={{ color: '#ef4444', fontSize: '0.8rem' }}>{errors.amountAlgo}</span>}
             </div>
-          ))}
+
+            <div style={fieldStyle}>
+              <label htmlFor="asset" style={labelStyle}>Asset</label>
+              <select
+                id="asset"
+                value={form.assetId}
+                onChange={(e) => set('assetId', Number(e.target.value))}
+                style={{ ...inputStyle, cursor: 'pointer' }}
+              >
+                {ASSET_OPTIONS.map((a) => (
+                  <option key={a.id} value={a.id} style={{ background: '#0f0f1a' }}>
+                    {a.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <div style={fieldStyle}>
+              <label htmlFor="deadline" style={labelStyle}>Deadline (rounds)</label>
+              <input
+                id="deadline"
+                type="number"
+                min="100"
+                step="100"
+                value={form.deadlineRounds}
+                onChange={(e) => set('deadlineRounds', e.target.value)}
+                style={inputStyle}
+              />
+              {errors.deadlineRounds && <span style={{ color: '#ef4444', fontSize: '0.8rem' }}>{errors.deadlineRounds}</span>}
+              <span style={{ fontSize: '0.75rem', color: '#475569' }}>
+                ~{Math.round(Number(form.deadlineRounds || 0) / 20_000 * 100) / 100} days
+              </span>
+            </div>
+
+            <div style={fieldStyle}>
+              <label htmlFor="karma" style={labelStyle}>Min Karma Required</label>
+              <input
+                id="karma"
+                type="number"
+                min="0"
+                step="1"
+                value={form.karmaRequired}
+                onChange={(e) => set('karmaRequired', e.target.value)}
+                style={inputStyle}
+              />
+            </div>
+          </div>
         </div>
-      )}
 
-      <div className="bg-gray-900/60 border border-gray-800 rounded-2xl p-6 sm:p-8">
-        {step === 'details' && (
-          <div className="space-y-6">
+        {/* Repository */}
+        <div style={sectionStyle}>
+          <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#f1f5f9' }}>Repository</h2>
+
+          <div style={fieldStyle}>
+            <label htmlFor="repo-url" style={labelStyle}>GitHub Repository URL *</label>
+            <input
+              id="repo-url"
+              type="url"
+              placeholder="https://github.com/org/repo"
+              value={form.repoUrl}
+              onChange={(e) => set('repoUrl', e.target.value)}
+              style={inputStyle}
+            />
+            {errors.repoUrl && <span style={{ color: '#ef4444', fontSize: '0.8rem' }}>{errors.repoUrl}</span>}
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <div style={fieldStyle}>
+              <label htmlFor="repo-labels" style={labelStyle}>Labels (comma-separated)</label>
+              <input
+                id="repo-labels"
+                type="text"
+                placeholder="bug, enhancement"
+                value={form.repoLabels}
+                onChange={(e) => set('repoLabels', e.target.value)}
+                style={inputStyle}
+              />
+            </div>
+
+            <div style={fieldStyle}>
+              <label htmlFor="github-issue" style={labelStyle}>GitHub Issue # (optional)</label>
+              <input
+                id="github-issue"
+                type="number"
+                min="1"
+                placeholder="42"
+                value={form.githubIssue}
+                onChange={(e) => set('githubIssue', e.target.value)}
+                style={inputStyle}
+              />
+            </div>
+          </div>
+
+          <div style={fieldStyle}>
+            <label htmlFor="tags" style={labelStyle}>Tags (comma-separated)</label>
+            <input
+              id="tags"
+              type="text"
+              placeholder="solidity, defi, frontend"
+              value={form.tags}
+              onChange={(e) => set('tags', e.target.value)}
+              style={inputStyle}
+            />
+          </div>
+        </div>
+
+        {/* HITM */}
+        <div style={sectionStyle}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
             <div>
-              <h1 className="text-xl font-bold mb-1">Bounty Details</h1>
-              <p className="text-sm text-gray-500">Describe what needs to be done.</p>
+              <h2 style={{ margin: '0 0 0.25rem', fontSize: '1rem', fontWeight: 700, color: '#f1f5f9' }}>
+                Human-in-the-Middle (HITM) Mode
+              </h2>
+              <p style={{ margin: 0, fontSize: '0.875rem', color: '#475569' }}>
+                Require manual creator review before payout. Adds a review deadline.
+              </p>
             </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1.5">Description *</label>
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="E.g. Fix bug in authentication flow..."
-                  className={`w-full bg-gray-800/50 border ${errors.description ? 'border-red-500/50' : 'border-gray-700'} rounded-xl px-4 py-3 text-sm text-gray-200 placeholder-gray-600 focus:border-blue-500 focus:outline-none min-h-[120px]`}
-                />
-                {errors.description && <p className="text-xs text-red-400 mt-1">{errors.description}</p>}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1.5">GitHub Repository URL (optional)</label>
-                <input
-                  type="url"
-                  value={repoUrl}
-                  onChange={(e) => setRepoUrl(e.target.value)}
-                  placeholder="https://github.com/org/repo"
-                  className={`w-full bg-gray-800/50 border ${errors.repoUrl ? 'border-red-500/50' : 'border-gray-700'} rounded-xl px-4 py-3 text-sm text-gray-200 placeholder-gray-600 focus:border-blue-500 focus:outline-none`}
-                />
-                {errors.repoUrl && <p className="text-xs text-red-400 mt-1">{errors.repoUrl}</p>}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1.5">Tags (comma separated)</label>
-                <input
-                  type="text"
-                  value={tags}
-                  onChange={(e) => setTags(e.target.value)}
-                  placeholder="react, typescript, algorand"
-                  className="w-full bg-gray-800/50 border border-gray-700 rounded-xl px-4 py-3 text-sm text-gray-200 placeholder-gray-600 focus:border-blue-500 focus:outline-none"
-                />
-              </div>
-            </div>
-
-            <button onClick={handleNext} className="w-full bg-blue-600 hover:bg-blue-500 text-white rounded-xl py-3 font-medium transition-colors">
-              Continue to Requirements
+            <button
+              type="button"
+              id="hitm-toggle"
+              role="switch"
+              aria-checked={form.hitm}
+              onClick={() => set('hitm', !form.hitm)}
+              style={{
+                width: '3rem',
+                height: '1.625rem',
+                borderRadius: '999px',
+                background: form.hitm ? '#6366f1' : 'rgba(255,255,255,0.1)',
+                border: 'none',
+                cursor: 'pointer',
+                position: 'relative',
+                flexShrink: 0,
+                transition: 'background 0.2s',
+              }}
+            >
+              <span
+                style={{
+                  position: 'absolute',
+                  top: '3px',
+                  left: form.hitm ? 'calc(100% - 22px)' : '3px',
+                  width: '19px',
+                  height: '19px',
+                  borderRadius: '50%',
+                  background: '#fff',
+                  transition: 'left 0.2s',
+                }}
+              />
             </button>
           </div>
-        )}
 
-        {step === 'requirements' && (
-          <div className="space-y-6">
-            <div>
-              <h1 className="text-xl font-bold mb-1">Worker Requirements</h1>
-              <p className="text-sm text-gray-500">Filter who can claim this bounty.</p>
+          {form.hitm && (
+            <div style={fieldStyle}>
+              <label htmlFor="hitm-days" style={labelStyle}>Review Window (days)</label>
+              <input
+                id="hitm-days"
+                type="number"
+                min="1"
+                max="30"
+                value={form.hitmReviewDays}
+                onChange={(e) => set('hitmReviewDays', e.target.value)}
+                style={{ ...inputStyle, maxWidth: '160px' }}
+              />
             </div>
+          )}
+        </div>
 
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1.5">Minimum Karma Requirement</label>
-                <input
-                  type="number"
-                  value={minKarma}
-                  onChange={(e) => setMinKarma(e.target.value)}
-                  className="w-full bg-gray-800/50 border border-gray-700 rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500 focus:outline-none"
-                />
-                <p className="text-xs text-gray-600 mt-1.5">Your current karma: {profile?.karma || 0}</p>
-              </div>
+        {/* Preview */}
+        <div
+          style={{
+            padding: '1rem 1.25rem',
+            borderRadius: '0.75rem',
+            background: 'rgba(99,102,241,0.06)',
+            border: '1px solid rgba(99,102,241,0.15)',
+            fontSize: '0.875rem',
+            color: '#818cf8',
+          }}
+        >
+          <strong>Escrow amount:</strong>{' '}
+          {form.amountAlgo ? `${form.amountAlgo} ALGO` : '—'}{' '}
+          <span style={{ color: '#475569' }}>
+            + ~0.002 ALGO network fees · Locked on-chain until completion
+          </span>
+        </div>
 
-              <div className="flex items-center justify-between p-4 bg-gray-800/30 border border-gray-700 rounded-xl">
-                <div>
-                  <label className="block text-sm font-medium text-gray-200">Human-in-the-Middle (HITM)</label>
-                  <p className="text-xs text-gray-500">Manual review required before payout</p>
-                </div>
-                <button
-                  onClick={() => setHitm(!hitm)}
-                  className={`w-12 h-6 rounded-full transition-colors relative ${hitm ? 'bg-blue-600' : 'bg-gray-700'}`}
-                >
-                  <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${hitm ? 'left-7' : 'left-1'}`} />
-                </button>
-              </div>
-            </div>
-
-            <div className="flex gap-3">
-              <button onClick={handleBack} className="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl py-3 font-medium transition-colors">
-                Back
-              </button>
-              <button onClick={handleNext} className="flex-[2] bg-blue-600 hover:bg-blue-500 text-white rounded-xl py-3 font-medium transition-colors">
-                Continue to Payment
-              </button>
-            </div>
-          </div>
-        )}
-
-        {step === 'payment' && (
-          <div className="space-y-6">
-            <div>
-              <h1 className="text-xl font-bold mb-1">Payment & Payout</h1>
-              <p className="text-sm text-gray-500">Set the bounty amount and fund the escrow.</p>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1.5">Bounty Amount (ALGO) *</label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    placeholder="10.0"
-                    className={`w-full bg-gray-800/50 border ${errors.amount ? 'border-red-500/50' : 'border-gray-700'} rounded-xl px-4 py-3 text-lg font-bold text-gray-100 placeholder-gray-700 focus:border-blue-500 focus:outline-none`}
-                  />
-                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 font-bold">ALGO</span>
-                </div>
-                {errors.amount && <p className="text-xs text-red-400 mt-1">{errors.amount}</p>}
-              </div>
-
-              <div className="bg-blue-500/5 border border-blue-500/20 rounded-xl p-4 text-xs text-gray-400 leading-relaxed">
-                <p>Funds will be locked in an on-chain escrow contract. They can only be released upon work approval or refunded after the deadline if unclaimed.</p>
-              </div>
-            </div>
-
-            <div className="flex gap-3">
-              <button onClick={handleBack} className="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl py-3 font-medium transition-colors">
-                Back
-              </button>
-              <button onClick={handleSubmit} className="flex-[2] bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white rounded-xl py-3 font-bold shadow-lg shadow-blue-600/20 transition-all">
-                Deploy & Fund Bounty
-              </button>
-            </div>
-          </div>
-        )}
-
-        {step === 'deploying' && (
-          <div className="py-8 text-center space-y-8">
-            <div className="relative w-20 h-20 mx-auto">
-              <div className="absolute inset-0 border-4 border-blue-500/20 rounded-full" />
-              <div className="absolute inset-0 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <span className="text-blue-500 font-bold">{Math.min(100, deployStep * 25)}%</span>
-              </div>
-            </div>
-
-            <div>
-              <h2 className="text-xl font-bold mb-2">Deploying to Blockchain</h2>
-              <p className="text-gray-500 text-sm">Please do not close this window.</p>
-            </div>
-
-            <div className="space-y-3 max-w-xs mx-auto">
-              {deploySteps.map((s, i) => (
-                <div key={i} className={`flex items-center gap-3 text-left transition-opacity duration-500 ${deployStep > i ? 'opacity-100' : deployStep === i ? 'opacity-100 animate-pulse' : 'opacity-30'}`}>
-                  <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${deployStep > i ? 'bg-emerald-500 text-white' : 'bg-gray-800 text-gray-500'}`}>
-                    {deployStep > i ? '✓' : i + 1}
-                  </div>
-                  <span className={`text-sm ${deployStep === i ? 'text-blue-400 font-medium' : 'text-gray-400'}`}>{s}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
+        {/* Actions */}
+        <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+          <Link href="/">
+            <Button type="button" variant="ghost">Cancel</Button>
+          </Link>
+          <Button id="create-bounty-btn" type="submit" loading={loading}>
+            🚀 Create &amp; Escrow
+          </Button>
+        </div>
+      </form>
     </div>
-  );
+  )
 }

@@ -1,15 +1,36 @@
 steps:
+  # Build the Next.js image using the multi-stage Dockerfile
   - name: 'gcr.io/cloud-builders/docker'
     args:
-      - 'build'
+      - build
+      - '--build-arg'
+      - 'NEXT_PUBLIC_API_URL=${_NEXT_PUBLIC_API_URL}'
+      - '--build-arg'
+      - 'NEXT_PUBLIC_ALGORAND_NETWORK=${_NEXT_PUBLIC_ALGORAND_NETWORK}'
       - '-t'
-      - '$_IMAGE'
-      - '--build-arg'
-      - 'NEXT_PUBLIC_API_URL=$_NEXT_PUBLIC_API_URL'
-      - '--build-arg'
-      - 'NEXT_PUBLIC_SUPABASE_URL=$_NEXT_PUBLIC_SUPABASE_URL'
-      - '--build-arg'
-      - 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$_NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY'
+      - '${_IMAGE}'
       - '.'
+    id: build-frontend
+
+  # Push to GCR
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - push
+      - '${_IMAGE}'
+    id: push-frontend
+    waitFor: ['build-frontend']
+
 images:
-  - '$_IMAGE'
+  - '${_IMAGE}'
+
+substitutions:
+  _IMAGE: 'gcr.io/soul-seeker-500816/algo-bounty-frontend:latest'
+  _NEXT_PUBLIC_API_URL: ''
+  _NEXT_PUBLIC_ALGORAND_NETWORK: 'testnet'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: 'E2_HIGHCPU_8'
+
+# Global build timeout — Next.js standalone builds can be slow on first run
+timeout: '900s'

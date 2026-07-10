@@ -1,52 +1,77 @@
-version: '3.8'
+# docker-compose.yml — Local development orchestration
+# Starts: gateway (FastAPI), worker (indexer), dashboard (Next.js)
+# Requires: AlgoKit LocalNet running on host (algokit localnet start)
+
+version: '3.9'
 
 services:
+  # ── FastAPI Gateway ────────────────────────────────────────────────────────
   gateway:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: gateway/Dockerfile
     ports:
       - "8000:8080"
     environment:
-      - DATABASE_URL=sqlite:///./algobounty.db
+      - DATABASE_URL=sqlite:////data/algobounty.db
       - SECRET_KEY=dev_secret_key_change_in_prod_at_least_32_chars
-      - ALGORAND_NETWORK=sandbox
+      - ALGORAND_NETWORK=localnet
       - ALGOD_ADDRESS=http://host.docker.internal:4001
+      - ALGOD_TOKEN=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
       - INDEXER_ADDRESS=http://host.docker.internal:8980
     volumes:
-      - sqlite-data:/app
+      - sqlite-data:/data
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    restart: always
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
+  # ── Background Indexer Worker ──────────────────────────────────────────────
   worker:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: gateway/Dockerfile
     command: ["python", "-m", "gateway.worker"]
     environment:
-      - DATABASE_URL=sqlite:///./algobounty.db
+      - DATABASE_URL=sqlite:////data/algobounty.db
       - SECRET_KEY=dev_secret_key_change_in_prod_at_least_32_chars
-      - ALGORAND_NETWORK=sandbox
+      - ALGORAND_NETWORK=localnet
       - ALGOD_ADDRESS=http://host.docker.internal:4001
+      - ALGOD_TOKEN=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
       - INDEXER_ADDRESS=http://host.docker.internal:8980
+      - PYTHONPATH=/app
     volumes:
-      - sqlite-data:/app
+      - sqlite-data:/data
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    restart: always
+    depends_on:
+      gateway:
+        condition: service_healthy
+    restart: unless-stopped
 
+  # ── Next.js Dashboard ──────────────────────────────────────────────────────
+  # NOTE: NEXT_PUBLIC_API_URL must point to *host* localhost because SSE
+  # and API requests originate from the user's browser, not from within Docker.
   dashboard:
     build:
       context: ./dashboard
       dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=http://localhost:8000
+        - NEXT_PUBLIC_ALGORAND_NETWORK=localnet
     ports:
       - "3000:8080"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
-      - NEXT_PUBLIC_SUPABASE_URL=http://localhost:54321
-      - NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=dummy-anon-key
-    restart: always
+      - NODE_ENV=production
+    depends_on:
+      gateway:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   sqlite-data:
