@@ -13,6 +13,7 @@ const NAV_LINKS = [
   { href: '/',         label: 'Marketplace', id: 'nav-marketplace' },
   { href: '/create',   label: 'Post Bounty', id: 'nav-create' },
   { href: '/profile',  label: 'Profile',     id: 'nav-profile' },
+  { href: '/docs',     label: 'Docs',        id: 'nav-docs' },
 ]
 
 function NetworkBadge({ network }: { network: string }) {
