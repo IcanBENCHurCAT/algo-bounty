@@ -1,354 +1,465 @@
-'use client';
+﻿'use client'
 
-import { useState, useEffect, useCallback } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import { getBounty, approveWork, rejectWork, submitWork, claimBounty, getClaimTxn, getApproveTxn, getStoredToken, type Bounty } from '@/lib/api';
-import { useWallet } from '@/hooks/useWallet';
-import { useToast } from '@/components/Toast';
-import { useEvents } from '@/hooks/useEvents';
+import React, { useCallback, useEffect, useState } from 'react'
+import { useParams, useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { useAuth } from '@/hooks/useAuth'
+import { useToast } from '@/providers'
+import { useEvents } from '@/hooks/useEvents'
+import type { Bounty, EscrowState, SseEvent } from '@/types'
+import {
+  getBounty,
+  getClaimTxn,
+  claimBounty,
+  submitWork,
+  getApproveTxn,
+  approveWork,
+  rejectWork,
+  disputeWork,
+  getEscrow,
+} from '@/lib/api'
+import { StatusBadge, Badge } from '@/components/ui/Badge'
+import { Button } from '@/components/ui/Button'
+import { Card, CardHeader, CardTitle } from '@/components/ui/Card'
+import { FullPageSpinner } from '@/components/ui/Spinner'
+import { AlgoBountyError } from '@/types'
+
+function formatAlgo(micro: number) {
+  const a = micro / 1_000_000
+  return `${a % 1 === 0 ? a.toFixed(0) : a.toFixed(4)} ALGO`
+}
+
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleString()
+}
 
 export default function BountyDetailPage() {
-  const params = useParams();
-  const router = useRouter();
-  const toast = useToast();
-  const { connected, address, jwt, signTransaction } = useWallet();
+  const params = useParams()
+  const router = useRouter()
+  const bountyId = params.bounty_id as string
 
-  const [bounty, setBounty] = useState<Bounty | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [prUrl, setPrUrl] = useState('');
-  const [prLoading, setPrLoading] = useState(false);
-  const [approveLoading, setApproveLoading] = useState(false);
-  const [rejectLoading, setRejectLoading] = useState(false);
+  const { connected, address, jwt, signTransaction } = useAuth()
+  const toast = useToast()
 
-  const bountyId = typeof params.bounty_id === 'string' ? params.bounty_id : String(params.bounty_id);
+  const [bounty, setBounty] = useState<Bounty | null>(null)
+  const [escrow, setEscrow] = useState<EscrowState | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [actionLoading, setActionLoading] = useState(false)
+  const [prUrl, setPrUrl] = useState('')
+  const [disputeReason, setDisputeReason] = useState('')
+  const [showDisputeForm, setShowDisputeForm] = useState(false)
 
-  const loadBounty = useCallback(async () => {
-    setLoading(true);
+  const fetchBounty = useCallback(async () => {
     try {
-      const data = await getBounty(bountyId);
-      setBounty(data);
-    } catch {
-      setError('Bounty not found');
+      const b = await getBounty(bountyId)
+      setBounty(b)
+      if (b.app_id) {
+        getEscrow(b.app_id)
+          .then(setEscrow)
+          .catch(() => null) // escrow may not be indexed yet
+      }
+    } catch (err) {
+      if (err instanceof AlgoBountyError && err.code === 'BountyNotFound') {
+        router.push('/')
+      }
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  }, [bountyId]);
+  }, [bountyId, router])
 
   useEffect(() => {
-    const timeout = setTimeout(loadBounty, 0);
-    return () => clearTimeout(timeout);
-  }, [loadBounty]);
+    void fetchBounty()
+  }, [fetchBounty])
 
-  // Real-time updates for this specific bounty
-  useEvents(useCallback((event) => {
-    if (event.data?.bounty_id === bountyId) {
-      loadBounty();
-      if (event.event_type === 'bounty.claimed') toast.info('Bounty has been claimed');
-      if (event.event_type === 'bounty.submitted') toast.info('New work submitted');
-      if (event.event_type === 'bounty.approved') toast.success('Bounty approved!');
-    }
-  }, [bountyId, loadBounty, toast]));
+  // Real-time: reload when this bounty changes
+  const handleSseEvent = useCallback(
+    (event: SseEvent) => {
+      if (event.data.bounty_id === bountyId) {
+        void fetchBounty()
+      }
+    },
+    [bountyId, fetchBounty],
+  )
+  useEvents({ onEvent: handleSseEvent })
 
-  const shortAddr = address ? `${address.slice(0, 6)}...${address.slice(-4)}` : '';
-  const shortCreator = bounty ? `${bounty.creator.slice(0, 6)}...${bounty.creator.slice(-4)}` : '';
-  const isCreator = address ? bounty?.creator === address : false;
-  const isWorker = address ? bounty?.worker === address : false;
+  if (loading) return <FullPageSpinner />
+  if (!bounty) return null
 
-  const amountAlgo = bounty ? (bounty.amount / 1_000_000).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 }) : '0';
+  const isCreator = address === bounty.creator
+  const isWorker = address === bounty.worker
+  const canClaim = bounty.status === 'open' && connected && !isCreator
+  const canSubmit = bounty.status === 'claimed' && isWorker
+  const canApprove = bounty.status === 'submitted' && isCreator
+  const canReject = bounty.status === 'submitted' && isCreator
+  const canDispute = (bounty.status === 'submitted' || bounty.status === 'claimed') && (isCreator || isWorker)
 
   const handleClaim = async () => {
-    if (!connected || !jwt) {
-      toast.error('Connect your wallet first');
-      return;
-    }
-    setActionLoading('claim');
+    if (!jwt) return
+    setActionLoading(true)
     try {
-      toast.warning('Generating claim transaction...');
-      const { unsigned_txn } = await getClaimTxn(bountyId, jwt);
-      
-      toast.info('Sign the escrow transaction in your wallet...');
-      const signed_txn = await signTransaction(unsigned_txn);
-      
-      toast.warning('Submitting claim to network...');
-      await claimBounty(bountyId, { signed_txn }, jwt);
-      toast.success('Bounty claimed successfully!');
-      await loadBounty();
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : 'Claim failed');
+      const { unsigned_txn } = await getClaimTxn(bountyId, jwt)
+      const signedTxn = await signTransaction(unsigned_txn)
+      await claimBounty(bountyId, signedTxn, jwt)
+      toast.success('Bounty claimed! You are now the worker.')
+      void fetchBounty()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to claim bounty')
     } finally {
-      setActionLoading(null);
+      setActionLoading(false)
     }
-  };
+  }
 
   const handleSubmit = async () => {
-    if (!connected || !jwt) {
-      toast.error('Connect your wallet first');
-      return;
-    }
-    if (!prUrl.trim()) {
-      toast.error('Please enter a PR URL');
-      return;
-    }
-    setPrLoading(true);
+    if (!jwt || !prUrl.trim()) return
+    setActionLoading(true)
     try {
-      await submitWork(bountyId, { pr_url: prUrl }, jwt);
-      toast.success('Work submitted successfully!');
-      setPrUrl('');
-      await loadBounty();
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : 'Submit failed');
+      await submitWork(bountyId, { pr_url: prUrl.trim() }, jwt)
+      toast.success('Work submitted for review!')
+      void fetchBounty()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to submit work')
     } finally {
-      setPrLoading(false);
+      setActionLoading(false)
     }
-  };
+  }
 
   const handleApprove = async () => {
-    if (!connected || !jwt) {
-      toast.error('Connect your wallet first');
-      return;
-    }
-    setApproveLoading(true);
+    if (!jwt) return
+    setActionLoading(true)
     try {
-      toast.warning('Generating approval transaction...');
-      const { unsigned_txn } = await getApproveTxn(bountyId, jwt);
-      
-      toast.info('Sign the payout transaction in your wallet...');
-      const signed_txn = await signTransaction(unsigned_txn);
-      
-      toast.warning('Releasing funds on-chain...');
-      await approveWork(bountyId, { signed_txn }, jwt);
-      toast.success('Bounty approved! Funds released.');
-      await loadBounty();
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : 'Approve failed');
+      const { unsigned_txn } = await getApproveTxn(bountyId, jwt)
+      const signedTxn = await signTransaction(unsigned_txn)
+      await approveWork(bountyId, signedTxn, jwt)
+      toast.success('Work approved! Funds released to worker. ✅')
+      void fetchBounty()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to approve work')
     } finally {
-      setApproveLoading(false);
+      setActionLoading(false)
     }
-  };
+  }
 
   const handleReject = async () => {
-    if (!connected || !jwt) {
-      toast.error('Connect your wallet first');
-      return;
-    }
-    setRejectLoading(true);
+    if (!jwt) return
+    setActionLoading(true)
     try {
-      await rejectWork(bountyId, jwt, { signed_txn: '' });
-      toast.warning('Bounty rejected.');
-      await loadBounty();
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : 'Reject failed');
+      await rejectWork(bountyId, jwt)
+      toast.warning('Work rejected. Worker may resubmit.')
+      void fetchBounty()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to reject work')
     } finally {
-      setRejectLoading(false);
+      setActionLoading(false)
     }
-  };
-
-  if (loading) {
-    return (
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
-        <div className="animate-pulse space-y-6">
-          <div className="h-6 w-32 bg-gray-800 rounded" />
-          <div className="h-8 w-full bg-gray-800 rounded" />
-          <div className="h-4 w-2/3 bg-gray-800 rounded" />
-          <div className="h-40 w-full bg-gray-800 rounded-xl" />
-          <div className="h-12 w-40 bg-gray-800 rounded-lg" />
-        </div>
-      </div>
-    );
   }
 
-  if (error || !bounty) {
-    return (
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
-        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-6 text-center">
-          <p className="text-red-400 mb-3">{error || 'Bounty not found'}</p>
-          <button onClick={() => router.push('/')} className="text-blue-400 hover:text-blue-300 text-sm">
-            ← Back to Marketplace
-          </button>
-        </div>
-      </div>
-    );
+  const handleDispute = async () => {
+    if (!jwt) return
+    setActionLoading(true)
+    try {
+      await disputeWork(bountyId, jwt, disputeReason || undefined)
+      toast.info('Dispute raised. A mediator will review.')
+      setShowDisputeForm(false)
+      void fetchBounty()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to raise dispute')
+    } finally {
+      setActionLoading(false)
+    }
   }
 
-  const statusColors: Record<string, string> = {
-    open: 'bg-green-500/15 text-green-400 border-green-500/30',
-    claimed: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
-    submitted: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
-    approved: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
-    disputed: 'bg-red-500/15 text-red-400 border-red-500/30',
-    refunded: 'bg-gray-500/15 text-gray-400 border-gray-500/30',
-    closed: 'bg-gray-500/15 text-gray-500 border-gray-600/30',
-  };
+  const sectionStyle: React.CSSProperties = {
+    background: 'rgba(10,10,22,0.7)',
+    backdropFilter: 'blur(20px)',
+    border: '1px solid rgba(255,255,255,0.07)',
+    borderRadius: '1rem',
+    padding: '1.5rem',
+  }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
-      {/* Back */}
-      <button onClick={() => router.push('/')} className="flex items-center gap-1.5 text-gray-400 hover:text-gray-200 text-sm mb-4 transition-colors">
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-        Back to Marketplace
-      </button>
+    <div
+      className="fade-in"
+      style={{
+        maxWidth: '900px',
+        margin: '0 auto',
+        padding: 'clamp(1.5rem, 4vw, 2.5rem) clamp(1rem, 4vw, 2rem)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '1.5rem',
+      }}
+    >
+      {/* Breadcrumb */}
+      <nav style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', color: '#475569' }}>
+        <Link href="/" style={{ color: '#6366f1' }}>Marketplace</Link>
+        <span>/</span>
+        <span style={{ fontFamily: 'monospace', fontSize: '0.8125rem' }}>{bountyId}</span>
+      </nav>
 
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-6">
-        <div className="flex-1">
-          <div className="flex items-center gap-3 mb-2">
-            <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border ${statusColors[bounty.status] || statusColors.open}`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${bounty.status === 'open' ? 'bg-green-400' : bounty.status === 'claimed' || bounty.status === 'submitted' ? 'bg-blue-400' : bounty.status === 'approved' ? 'bg-emerald-400' : bounty.status === 'disputed' ? 'bg-red-400' : 'bg-gray-400'}`} />
-              {bounty.status.charAt(0).toUpperCase() + bounty.status.slice(1)}
-            </span>
-            <span className="text-xs text-gray-500 font-mono">{bounty.bounty_id}</span>
-          </div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-100">{bounty.description}</h1>
+      {/* Header card */}
+      <div style={sectionStyle}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+          <StatusBadge status={bounty.status} />
+          <span style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#475569', padding: '0.25rem 0.5rem', background: 'rgba(255,255,255,0.04)', borderRadius: '0.375rem' }}>
+            {bounty.bounty_id}
+          </span>
         </div>
-        <div className="text-left sm:text-right">
-          <div className="text-2xl font-bold text-cyan-400">{amountAlgo} <span className="text-sm text-gray-400 font-normal">ALGO</span></div>
-          {bounty.hitm && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-orange-500/15 text-orange-400 border border-orange-500/30 mt-1">HITM Required</span>
-          )}
-        </div>
-      </div>
+        <h1
+          style={{
+            margin: '0 0 1.5rem',
+            fontSize: 'clamp(1.25rem, 3vw, 1.75rem)',
+            fontWeight: 800,
+            color: '#f1f5f9',
+            lineHeight: 1.35,
+          }}
+        >
+          {bounty.description}
+        </h1>
 
-      {/* Details Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-        <div className="bg-gray-900/80 border border-gray-800 rounded-xl p-3">
-          <div className="text-xs text-gray-500 mb-1">Creator</div>
-          <div className="text-sm font-mono text-gray-300">{shortCreator}</div>
-        </div>
-        <div className="bg-gray-900/80 border border-gray-800 rounded-xl p-3">
-          <div className="text-xs text-gray-500 mb-1">Created</div>
-          <div className="text-sm text-gray-300">{new Date(bounty.created_at).toLocaleDateString()}</div>
-        </div>
-        <div className="bg-gray-900/80 border border-gray-800 rounded-xl p-3">
-          <div className="text-xs text-gray-500 mb-1">Karma Required</div>
-          <div className="text-sm text-gray-300">{bounty.karma_requirement}</div>
-        </div>
-        {bounty.repo_url && (
-          <div className="bg-gray-900/80 border border-gray-800 rounded-xl p-3">
-            <div className="text-xs text-gray-500 mb-1">Repository</div>
-            <div className="text-sm text-gray-300 truncate">{new URL(bounty.repo_url).hostname}</div>
-          </div>
-        )}
-      </div>
-
-      {/* Description */}
-      {bounty.description && (
-        <div className="bg-gray-900/80 border border-gray-800 rounded-xl p-5 mb-6">
-          <h2 className="text-sm font-semibold text-gray-300 mb-2">Description</h2>
-          <p className="text-sm text-gray-400 whitespace-pre-wrap">{bounty.description}</p>
-        </div>
-      )}
-
-      {/* Repo */}
-      {bounty.repo_url && (
-        <div className="bg-gray-900/80 border border-gray-800 rounded-xl p-5 mb-6">
-          <h2 className="text-sm font-semibold text-gray-300 mb-2">Repository</h2>
-          <a href={bounty.repo_url} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 text-sm break-all">{bounty.repo_url}</a>
-          {bounty.repo_labels?.length > 0 && (
-            <div className="flex flex-wrap gap-1 mt-2">
-              {bounty.repo_labels.map((l) => (<span key={l} className="px-2 py-0.5 rounded bg-gray-800 text-gray-400 text-xs">{l}</span>))}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+            gap: '1rem',
+          }}
+        >
+          {[
+            { label: 'Reward', value: <span style={{ color: '#22d3ee', fontWeight: 800, fontSize: '1.25rem' }}>{formatAlgo(bounty.amount)}</span> },
+            { label: 'Status', value: <StatusBadge status={bounty.status} /> },
+            { label: 'HITM', value: bounty.hitm ? <Badge variant="hitm">Enabled</Badge> : <span style={{ color: '#475569' }}>Disabled</span> },
+            { label: 'Karma Required', value: <span style={{ color: '#818cf8' }}>★ {bounty.karma_required}</span> },
+            { label: 'Created', value: <span style={{ color: '#64748b', fontSize: '0.875rem' }}>{formatDate(bounty.created_at)}</span> },
+            bounty.deadline_rounds_remaining != null && { label: 'Rounds Left', value: <span style={{ color: '#f59e0b' }}>{bounty.deadline_rounds_remaining.toLocaleString()}</span> },
+          ].filter(Boolean).map((item) => item && (
+            <div key={item.label}>
+              <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#475569', fontWeight: 600, marginBottom: '0.375rem' }}>{item.label}</div>
+              <div>{item.value}</div>
             </div>
-          )}
-        </div>
-      )}
-
-      {/* Tags */}
-      {bounty.tags.length > 0 && (
-        <div className="flex flex-wrap gap-2 mb-6">
-          {bounty.tags.map((tag) => (
-            <span key={tag} className="px-2.5 py-1 rounded-full bg-gray-800/60 border border-gray-700 text-gray-400 text-xs">{tag}</span>
           ))}
         </div>
-      )}
+      </div>
 
-      {/* Escrow */}
-      {bounty.app_id && (
-        <div className="bg-gray-900/80 border border-gray-800 rounded-xl p-5 mb-6">
-          <h2 className="text-sm font-semibold text-gray-300 mb-2">On-Chain Status</h2>
-          <div className="text-xs text-gray-500">App ID: <span className="text-gray-300 font-mono">#{bounty.app_id}</span></div>
+      {/* Creator / Worker */}
+      <div style={{ ...sectionStyle, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+        <div>
+          <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#475569', fontWeight: 600, marginBottom: '0.5rem' }}>Creator</div>
+          <Link href={`/agents/${bounty.creator}`} style={{ fontFamily: 'monospace', fontSize: '0.875rem', color: '#6366f1' }}>
+            {bounty.creator.slice(0, 12)}…{bounty.creator.slice(-6)}
+          </Link>
         </div>
-      )}
-
-      {/* Worker */}
-      {(bounty.status === 'claimed' || bounty.status === 'submitted') && bounty.worker && (
-        <div className="bg-gray-900/80 border border-gray-800 rounded-xl p-5 mb-6">
-          <h2 className="text-sm font-semibold text-gray-300 mb-2">Worker</h2>
-          <div className="text-sm font-mono text-gray-300">
-            {bounty.worker === address ? <span className="text-blue-400">You (worker)</span> : `${bounty.worker.slice(0, 8)}...${bounty.worker.slice(-4)}`}
-          </div>
-        </div>
-      )}
-
-      {/* Actions */}
-      <div className="space-y-3">
-        {bounty.status === 'open' && !isCreator && (
-          <button onClick={handleClaim} disabled={!connected || actionLoading === 'claim'} className="w-full sm:w-auto bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl px-8 py-3 font-medium transition-all flex items-center justify-center gap-2">
-            {actionLoading === 'claim' ? (
-              <>
-                <svg className="animate-spin w-5 h-5" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
-                Claiming...
-              </>
-            ) : (
-              <>
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                Claim Bounty
-              </>
-            )}
-          </button>
-        )}
-
-        {bounty.status === 'claimed' && isWorker && (
-          <div className="space-y-3">
-            <div className="flex gap-2">
-              <input type="url" value={prUrl} onChange={(e) => setPrUrl(e.target.value)} placeholder="https://github.com/org/repo/pull/42" className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm text-gray-200 placeholder-gray-600 focus:border-blue-500 focus:outline-none" />
-              <button onClick={handleSubmit} disabled={!prUrl.trim() || prLoading} className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl px-6 py-3 font-medium transition-colors whitespace-nowrap">
-                {prLoading ? 'Submitting...' : 'Submit Work'}
-              </button>
-            </div>
-            <p className="text-xs text-gray-600">Enter the PR URL for your completed work</p>
-          </div>
-        )}
-
-        {bounty.status === 'submitted' && isCreator && (
-          <div className="flex flex-col sm:flex-row gap-3">
-            <button onClick={handleApprove} disabled={approveLoading} className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl px-6 py-3 font-medium transition-colors flex items-center justify-center gap-2">
-              {approveLoading ? 'Approving...' : (
-                <>
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                  Approve & Payout
-                </>
-              )}
-            </button>
-            <button onClick={handleReject} disabled={rejectLoading} className="flex-1 bg-red-600/80 hover:bg-red-500/80 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl px-6 py-3 font-medium transition-colors flex items-center justify-center gap-2">
-              {rejectLoading ? 'Rejecting...' : (
-                <>
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                  Reject
-                </>
-              )}
-            </button>
-          </div>
-        )}
-
-        {bounty.status === 'disputed' && (
-          <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 text-amber-400 text-sm text-center">
-            ⚠️ This bounty is in dispute. Mediation will be handled by a trusted mediator.
-          </div>
-        )}
-
-        {['approved', 'closed', 'refunded'].includes(bounty.status) && (
-          <div className="bg-gray-800/40 border border-gray-700/50 rounded-xl p-4 text-gray-500 text-sm text-center">
-            This bounty is {bounty.status === 'approved' ? 'completed with payout' : bounty.status === 'refunded' ? 'refunded' : 'closed'}.
-          </div>
-        )}
-
-        {!connected && bounty.status === 'open' && (
-          <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4 text-blue-400 text-sm text-center">
-            Connect your Pera Wallet to claim this bounty or create new ones.
+        {bounty.worker && (
+          <div>
+            <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#475569', fontWeight: 600, marginBottom: '0.5rem' }}>Worker</div>
+            <Link href={`/agents/${bounty.worker}`} style={{ fontFamily: 'monospace', fontSize: '0.875rem', color: '#10b981' }}>
+              {bounty.worker.slice(0, 12)}…{bounty.worker.slice(-6)}
+            </Link>
           </div>
         )}
       </div>
+
+      {/* Repo + Tags */}
+      {(bounty.repo_url || bounty.tags.length > 0 || bounty.repo_labels.length > 0) && (
+        <div style={sectionStyle}>
+          {bounty.repo_url && (
+            <div style={{ marginBottom: '1rem' }}>
+              <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#475569', fontWeight: 600, marginBottom: '0.5rem' }}>Repository</div>
+              <a href={bounty.repo_url} target="_blank" rel="noopener noreferrer" style={{ color: '#6366f1', fontSize: '0.9375rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/></svg>
+                {bounty.repo_url.replace('https://', '')}
+              </a>
+            </div>
+          )}
+          {bounty.repo_labels.length > 0 && (
+            <div style={{ marginBottom: '1rem' }}>
+              <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#475569', fontWeight: 600, marginBottom: '0.5rem' }}>Labels</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem' }}>
+                {bounty.repo_labels.map((l) => <Badge key={l}>{l}</Badge>)}
+              </div>
+            </div>
+          )}
+          {bounty.tags.length > 0 && (
+            <div>
+              <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#475569', fontWeight: 600, marginBottom: '0.5rem' }}>Tags</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem' }}>
+                {bounty.tags.map((t) => <Badge key={t} variant="default">{t}</Badge>)}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Escrow panel */}
+      {bounty.app_id && (
+        <div style={sectionStyle}>
+          <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#475569', fontWeight: 600, marginBottom: '0.75rem' }}>Escrow Contract</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.5rem', alignItems: 'center' }}>
+            <div>
+              <div style={{ fontSize: '0.75rem', color: '#475569', marginBottom: '0.25rem' }}>App ID</div>
+              <span style={{ fontFamily: 'monospace', color: '#818cf8', fontWeight: 600 }}>#{bounty.app_id}</span>
+            </div>
+            {escrow && (
+              <>
+                <div>
+                  <div style={{ fontSize: '0.75rem', color: '#475569', marginBottom: '0.25rem' }}>On-chain State</div>
+                  <span style={{ fontFamily: 'monospace', color: '#22d3ee', fontSize: '0.875rem' }}>{escrow.state}</span>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.75rem', color: '#475569', marginBottom: '0.25rem' }}>Balance</div>
+                  <span style={{ color: '#22d3ee', fontWeight: 700 }}>{formatAlgo(escrow.balance)}</span>
+                </div>
+                {escrow.payout_type && (
+                  <div>
+                    <div style={{ fontSize: '0.75rem', color: '#475569', marginBottom: '0.25rem' }}>Payout Type</div>
+                    <Badge>{escrow.payout_type}</Badge>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Action panel */}
+      {connected && (
+        <div style={{ ...sectionStyle, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#f1f5f9' }}>Actions</h3>
+
+          {/* Claim */}
+          {canClaim && (
+            <Button id="claim-btn" fullWidth loading={actionLoading} onClick={() => void handleClaim()}>
+              🤝 Claim This Bounty
+            </Button>
+          )}
+
+          {/* Submit work */}
+          {canSubmit && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <input
+                id="pr-url-input"
+                type="url"
+                placeholder="https://github.com/org/repo/pull/42"
+                value={prUrl}
+                onChange={(e) => setPrUrl(e.target.value)}
+                style={{
+                  padding: '0.625rem 0.875rem',
+                  borderRadius: '0.625rem',
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  color: '#e2e8f0',
+                  fontSize: '0.9375rem',
+                  fontFamily: 'monospace',
+                  outline: 'none',
+                  width: '100%',
+                }}
+              />
+              <Button
+                id="submit-work-btn"
+                fullWidth
+                loading={actionLoading}
+                disabled={!prUrl.trim()}
+                onClick={() => void handleSubmit()}
+              >
+                📬 Submit Work
+              </Button>
+            </div>
+          )}
+
+          {/* Creator actions */}
+          {(canApprove || canReject) && (
+            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <Button
+                id="approve-btn"
+                loading={actionLoading}
+                onClick={() => void handleApprove()}
+                style={{ flex: 1, minWidth: '140px' }}
+              >
+                ✅ Approve & Release
+              </Button>
+              <Button
+                id="reject-btn"
+                variant="warning"
+                loading={actionLoading}
+                onClick={() => void handleReject()}
+                style={{ flex: 1, minWidth: '140px' }}
+              >
+                ↩ Request Revision
+              </Button>
+            </div>
+          )}
+
+          {/* Dispute */}
+          {canDispute && !showDisputeForm && (
+            <Button
+              id="dispute-btn"
+              variant="danger"
+              size="sm"
+              onClick={() => setShowDisputeForm(true)}
+            >
+              ⚖️ Raise Dispute
+            </Button>
+          )}
+          {showDisputeForm && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <textarea
+                id="dispute-reason"
+                placeholder="Describe the reason for this dispute…"
+                value={disputeReason}
+                onChange={(e) => setDisputeReason(e.target.value)}
+                rows={3}
+                style={{
+                  padding: '0.625rem 0.875rem',
+                  borderRadius: '0.625rem',
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(239,68,68,0.3)',
+                  color: '#e2e8f0',
+                  fontSize: '0.9375rem',
+                  resize: 'vertical',
+                  fontFamily: 'inherit',
+                  outline: 'none',
+                  width: '100%',
+                }}
+              />
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <Button id="confirm-dispute-btn" variant="danger" loading={actionLoading} onClick={() => void handleDispute()}>Confirm Dispute</Button>
+                <Button variant="ghost" onClick={() => setShowDisputeForm(false)}>Cancel</Button>
+              </div>
+            </div>
+          )}
+
+          {bounty.status === 'disputed' && (
+            <div style={{ padding: '1rem', borderRadius: '0.75rem', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', color: '#fca5a5', fontSize: '0.9375rem' }}>
+              ⚖️ This bounty is under dispute. A mediator will resolve it within 30 days.
+            </div>
+          )}
+
+          {(bounty.status === 'approved' || bounty.status === 'closed') && (
+            <div style={{ padding: '1rem', borderRadius: '0.75rem', background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)', color: '#6ee7b7', fontSize: '0.9375rem', textAlign: 'center' }}>
+              ✅ Completed — funds have been released
+            </div>
+          )}
+
+          {bounty.status === 'refunded' && (
+            <div style={{ padding: '1rem', borderRadius: '0.75rem', background: 'rgba(148,163,184,0.08)', border: '1px solid rgba(148,163,184,0.15)', color: '#94a3b8', fontSize: '0.9375rem', textAlign: 'center' }}>
+              Bounty was refunded to creator
+            </div>
+          )}
+        </div>
+      )}
+
+      {!connected && (
+        <div
+          style={{
+            textAlign: 'center',
+            padding: '2rem',
+            background: 'rgba(99,102,241,0.06)',
+            border: '1px solid rgba(99,102,241,0.15)',
+            borderRadius: '1rem',
+            color: '#818cf8',
+            fontSize: '0.9375rem',
+          }}
+        >
+          Connect your wallet to interact with this bounty
+        </div>
+      )}
     </div>
-  );
+  )
 }

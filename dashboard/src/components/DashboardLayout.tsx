@@ -1,188 +1,229 @@
-'use client';
+'use client'
 
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import WalletConnect from '@/components/WalletConnect';
-import { useWallet } from '@/hooks/useWallet';
-import { useState, useEffect, useCallback } from 'react';
-import { getNotifications, markNotificationRead, getStoredToken } from '@/lib/api';
+import React, { useEffect, useState } from 'react'
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
+import { useAuth } from '@/hooks/useAuth'
+import { useNetwork } from '@/hooks/useNetwork'
+import { getNotifications } from '@/lib/api'
+import { WalletConnect } from '@/components/WalletConnect'
+import { NotificationsDrawer } from '@/components/NotificationsDrawer'
 
-interface DashboardLayoutProps {
-  children: React.ReactNode;
+const NAV_LINKS = [
+  { href: '/',         label: 'Marketplace', id: 'nav-marketplace' },
+  { href: '/create',   label: 'Post Bounty', id: 'nav-create' },
+  { href: '/profile',  label: 'Profile',     id: 'nav-profile' },
+]
+
+function NetworkBadge({ network }: { network: string }) {
+  const isMain = network?.toLowerCase().includes('mainnet')
+  const isLocal = network?.toLowerCase().includes('local')
+  const color = isMain ? '#10b981' : isLocal ? '#f59e0b' : '#6366f1'
+  const label = isMain ? 'Mainnet' : isLocal ? 'LocalNet' : 'Testnet'
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '0.3rem',
+        padding: '0.2rem 0.5rem',
+        borderRadius: '9999px',
+        background: `${color}15`,
+        color,
+        fontSize: '0.6875rem',
+        fontWeight: 700,
+        border: `1px solid ${color}30`,
+        letterSpacing: '0.04em',
+        textTransform: 'uppercase',
+      }}
+    >
+      <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: color }} />
+      {label}
+    </span>
+  )
 }
 
-const navItems = [
-  { href: '/', label: 'Marketplace', icon: 'M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z' },
-  { href: '/create', label: 'Create Bounty', icon: 'M12 4v16m8-8H4' },
-  { href: '/profile', label: 'Profile', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' },
-  { href: '/docs', label: 'Docs', icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
-] as const;
+export function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname()
+  const { connected, jwt, karma, address } = useAuth()
+  const { activeNetwork } = useNetwork()
+  const [notifCount, setNotifCount] = useState(0)
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
-export default function DashboardLayout({ children }: DashboardLayoutProps) {
-  const pathname = usePathname();
-  const { connected, address, profile, loading: walletLoading } = useWallet();
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [notifCount, setNotifCount] = useState(0);
-  const [notifLoading, setNotifLoading] = useState(false);
-
-  const fetchNotifCount = useCallback(async () => {
-    const token = getStoredToken();
-    if (!token || !connected) {
-      setNotifCount(0);
-      return;
-    }
-    try {
-      setNotifLoading(true);
-      const notifs = await getNotifications(token);
-      setNotifCount(notifs.filter((n) => !n.read).length);
-    } catch {
-      // Ignore notification fetch errors
-    } finally {
-      setNotifLoading(false);
-    }
-  }, [connected]);
-
-  // Refresh notifications every 30s
+  // Poll unread notification count every 30s when connected
   useEffect(() => {
-    if (!connected) return;
-
-    // Defer initial fetch to avoid synchronous setState during render/effect phase
-    const timeout = setTimeout(fetchNotifCount, 0);
-    const interval = setInterval(fetchNotifCount, 30000);
-
-    return () => {
-      clearTimeout(timeout);
-      clearInterval(interval);
-    };
-  }, [connected, fetchNotifCount]);
+    if (!connected || !jwt) return
+    const check = async () => {
+      try {
+        const items = await getNotifications(jwt)
+        setNotifCount(items.filter((n) => !n.read).length)
+      } catch {
+        // silently ignore
+      }
+    }
+    void check()
+    const interval = setInterval(() => void check(), 30_000)
+    return () => clearInterval(interval)
+  }, [connected, jwt])
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-gray-100 flex flex-col">
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#070712' }}>
+
       {/* Header */}
-      <header className="sticky top-0 z-40 border-b border-gray-800/60 bg-[#0a0a0a]/90 backdrop-blur-xl">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6">
-          <div className="flex items-center justify-between h-16">
-            {/* Logo + Nav */}
-            <div className="flex items-center gap-4">
-              <Link href="/" className="flex items-center gap-2 shrink-0">
-                <svg className="w-7 h-7 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-                </svg>
-                <span className="text-lg font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
-                  AlgoBounty
-                </span>
-              </Link>
+      <header
+        style={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 50,
+          height: '64px',
+          display: 'flex',
+          alignItems: 'center',
+          paddingInline: 'clamp(1rem, 4vw, 2rem)',
+          background: 'rgba(7,7,18,0.85)',
+          backdropFilter: 'blur(24px)',
+          borderBottom: '1px solid rgba(255,255,255,0.06)',
+          gap: '1rem',
+        }}
+      >
+        {/* Logo */}
+        <Link href="/" id="header-logo" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.5rem', marginRight: '1rem', flexShrink: 0 }}>
+          <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
+            <defs>
+              <linearGradient id="bolt-grad" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stopColor="#6366f1" />
+                <stop offset="100%" stopColor="#8b5cf6" />
+              </linearGradient>
+            </defs>
+            <rect width="32" height="32" rx="8" fill="url(#bolt-grad)" />
+            <path d="M18 4L10 18h7l-3 10 11-14h-7l4-10z" fill="white" opacity="0.95" />
+          </svg>
+          <span
+            style={{
+              fontWeight: 800,
+              fontSize: '1.125rem',
+              background: 'linear-gradient(135deg, #a5b4fc, #818cf8)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              letterSpacing: '-0.025em',
+            }}
+          >
+            AlgoBounty
+          </span>
+          {activeNetwork && <NetworkBadge network={String(activeNetwork)} />}
+        </Link>
 
-              {/* Desktop Nav */}
-              <nav className="hidden sm:flex items-center gap-1">
-                {navItems.map((item) => (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                      pathname === item.href
-                        ? 'bg-blue-500/15 text-blue-400'
-                        : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/60'
-                    }`}
-                  >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.icon} />
-                    </svg>
-                    {item.label}
-                  </Link>
-                ))}
-              </nav>
-            </div>
-
-            {/* Right side: notifications + wallet */}
-            <div className="flex items-center gap-3">
-              {/* Notification bell */}
-              {connected && (
-                <button
-                  onClick={fetchNotifCount}
-                  className="relative p-2 rounded-lg text-gray-400 hover:text-gray-200 hover:bg-gray-800/60 transition-colors"
-                  title="Notifications"
-                >
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
-                    />
-                  </svg>
-                  {notifCount > 0 && (
-                    <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-blue-500 text-[10px] font-bold flex items-center justify-center text-white">
-                      {notifCount > 9 ? '9+' : notifCount}
-                    </span>
-                  )}
-                </button>
-              )}
-
-              {/* Wallet */}
-              <WalletConnect variant="compact" />
-
-              {/* Mobile menu button */}
-              <button
-                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                className="sm:hidden p-2 rounded-lg text-gray-400 hover:text-gray-200 hover:bg-gray-800/60"
+        {/* Desktop nav */}
+        <nav style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', flex: 1 }} aria-label="Main navigation">
+          {NAV_LINKS.map((link) => {
+            const isActive = link.href === '/' ? pathname === '/' : pathname.startsWith(link.href)
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                id={link.id}
+                style={{
+                  padding: '0.5rem 0.875rem',
+                  borderRadius: '0.5rem',
+                  fontSize: '0.9375rem',
+                  fontWeight: isActive ? 700 : 500,
+                  color: isActive ? '#a5b4fc' : '#64748b',
+                  background: isActive ? 'rgba(99,102,241,0.1)' : 'transparent',
+                  textDecoration: 'none',
+                  transition: 'all 0.15s',
+                  whiteSpace: 'nowrap',
+                }}
               >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  {mobileMenuOpen ? (
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  ) : (
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                  )}
-                </svg>
-              </button>
-            </div>
-          </div>
+                {link.label}
+              </Link>
+            )
+          })}
+        </nav>
 
-          {/* Mobile nav */}
-          {mobileMenuOpen && (
-            <nav className="sm:hidden flex flex-col gap-1 pb-3 border-t border-gray-800/40 pt-2">
-              {navItems.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    pathname === item.href
-                      ? 'bg-blue-500/15 text-blue-400'
-                      : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/60'
-                  }`}
+        {/* Right actions */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginLeft: 'auto' }}>
+          {/* Notification bell */}
+          {connected && (
+            <button
+              id="notifications-bell"
+              onClick={() => setDrawerOpen(true)}
+              title="Notifications"
+              style={{
+                position: 'relative',
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: '0.5rem',
+                padding: '0.5rem',
+                cursor: 'pointer',
+                color: '#64748b',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.15s',
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+              </svg>
+              {notifCount > 0 && (
+                <span
+                  style={{
+                    position: 'absolute',
+                    top: '-4px',
+                    right: '-4px',
+                    width: '18px',
+                    height: '18px',
+                    borderRadius: '50%',
+                    background: '#6366f1',
+                    color: '#fff',
+                    fontSize: '0.625rem',
+                    fontWeight: 700,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: '2px solid #070712',
+                  }}
                 >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.icon} />
-                  </svg>
-                  {item.label}
-                </Link>
-              ))}
-            </nav>
+                  {notifCount > 9 ? '9+' : notifCount}
+                </span>
+              )}
+            </button>
           )}
+          <WalletConnect />
         </div>
       </header>
 
       {/* Main content */}
-      <main className="flex-1">{children}</main>
+      <main style={{ flex: 1 }}>{children}</main>
 
       {/* Footer */}
-      <footer className="border-t border-gray-800/40 py-4 px-4 text-center text-xs text-gray-600">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <span>AlgoBounty — Decentralized bounty marketplace on Algorand</span>
-          {connected && (
-            <span className="hidden sm:inline">
-              Connected as{' '}
-              <span className="text-gray-400 font-mono">
-                {address?.slice(0, 8)}...{address?.slice(-4)}
-              </span>
-              {profile && (
-                <span className="ml-2 text-blue-400">karma: {profile.karma}</span>
-              )}
-            </span>
-          )}
-        </div>
+      <footer
+        style={{
+          borderTop: '1px solid rgba(255,255,255,0.05)',
+          padding: '1.25rem clamp(1rem, 4vw, 2rem)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '1rem',
+          flexWrap: 'wrap',
+        }}
+      >
+        <span style={{ fontSize: '0.8125rem', color: '#334155' }}>
+          AlgoBounty — On-chain bounties for autonomous agents
+        </span>
+        {connected && address && (
+          <span style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#475569', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span style={{ color: '#334155' }}>Karma:</span>
+            <span style={{ color: '#818cf8', fontWeight: 700 }}>{karma}</span>
+            <span style={{ color: '#1e293b' }}>|</span>
+            {address.slice(0, 8)}…{address.slice(-4)}
+          </span>
+        )}
       </footer>
+
+      {/* Notifications drawer */}
+      <NotificationsDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
     </div>
-  );
+  )
 }

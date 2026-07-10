@@ -1,136 +1,222 @@
-'use client';
+'use client'
 
-import { useState } from 'react';
-import { useWallet, type WalletType } from '@/hooks/useWallet';
+import React, { useState } from 'react'
+import { useWallet, WalletId } from '@txnlab/use-wallet-react'
+import { useAuth } from '@/hooks/useAuth'
+import { Button } from '@/components/ui/Button'
 
-interface WalletButtonProps {
-  variant?: 'default' | 'compact';
-  className?: string;
-  onConnect?: () => void;
+const WALLET_LABELS: Record<string, { label: string; color: string }> = {
+  [WalletId.PERA]:   { label: 'Pera',   color: '#FCD34D' },
+  [WalletId.DEFLY]:  { label: 'Defly',  color: '#00D4AA' },
+  [WalletId.EXODUS]: { label: 'Exodus', color: '#8B5CF6' },
 }
 
-export default function WalletConnect({
-  variant = 'default',
-  className = '',
-}: WalletButtonProps) {
-  const { address, connected, walletType, loading, error, connect, disconnect } = useWallet();
-  const [showOptions, setShowOptions] = useState(false);
+function truncate(addr: string): string {
+  return `${addr.slice(0, 6)}…${addr.slice(-4)}`
+}
 
-  const handleConnect = (type: WalletType) => {
-    setShowOptions(false);
-    connect(type);
-  };
+interface WalletConnectProps {
+  variant?: 'full' | 'compact'
+}
 
-  const walletLogos: Record<WalletType, React.ReactNode> = {
-    pera: (
-      <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71L12 2z" />
-      </svg>
-    ),
-    defly: (
-      <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M12 2L2 12l10 10 10-10L12 2zm0 4l6 6-6 6-6-6 6-6z" />
-      </svg>
-    ),
-    exodus: (
-      <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5-10-5-10 5z" />
-      </svg>
-    ),
-  };
+export function WalletConnect({ variant = 'compact' }: WalletConnectProps) {
+  const { wallets } = useWallet()
+  const { connected, address, walletType, loading, error, connect, disconnect } = useAuth()
+  const [showDropdown, setShowDropdown] = useState(false)
 
-  if (error && !connected) {
+  if (loading) {
     return (
-      <div className="relative">
-        <button
-          onClick={() => setShowOptions(true)}
-          className={`flex items-center gap-2 rounded-lg bg-transparent border border-amber-500/50 px-3 py-2 text-sm text-amber-400 hover:bg-amber-500/10 transition-colors ${className}`}
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-          </svg>
-          {variant === 'compact' ? 'Wallet Error' : error}
-        </button>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem',
+          padding: '0.5rem 1rem',
+          borderRadius: '0.625rem',
+          background: 'rgba(255,255,255,0.04)',
+          border: '1px solid rgba(255,255,255,0.08)',
+          color: '#64748b',
+          fontSize: '0.875rem',
+        }}
+      >
+        <span
+          style={{
+            width: '14px',
+            height: '14px',
+            border: '2px solid #6366f130',
+            borderTopColor: '#6366f1',
+            borderRadius: '50%',
+            animation: 'spin 0.7s linear infinite',
+          }}
+        />
+        Authenticating…
       </div>
-    );
+    )
   }
 
   if (connected && address) {
-    const shortAddr = `${address.slice(0, 6)}...${address.slice(-4)}`;
+    const walletInfo = walletType ? WALLET_LABELS[walletType] : null
     return (
-      <div className="flex items-center gap-2">
-        <div className="hidden sm:flex items-center gap-1.5 px-2 py-1 rounded bg-gray-800/40 border border-gray-700/50">
-          <span className="text-gray-500">{walletLogos[walletType || 'pera']}</span>
-          <span className="text-xs font-mono text-gray-400">{shortAddr}</span>
-        </div>
-        <button
-          onClick={disconnect}
-          className="flex items-center gap-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 px-3 py-2 text-sm text-amber-400 hover:bg-amber-500/20 transition-colors"
-          title="Disconnect wallet"
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            padding: '0.375rem 0.75rem',
+            borderRadius: '0.625rem',
+            background: 'rgba(16,185,129,0.08)',
+            border: '1px solid rgba(16,185,129,0.25)',
+            color: '#10b981',
+            fontSize: '0.8125rem',
+            fontWeight: 600,
+            fontFamily: 'monospace',
+          }}
         >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-          </svg>
-          <span className={variant === 'compact' ? 'hidden sm:inline' : ''}>
-            Disconnect
-          </span>
-        </button>
+          {walletInfo && (
+            <span
+              style={{
+                width: '8px',
+                height: '8px',
+                borderRadius: '50%',
+                background: walletInfo.color,
+                flexShrink: 0,
+              }}
+            />
+          )}
+          {truncate(address)}
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => void disconnect()}
+          style={{ color: '#64748b', fontSize: '0.8125rem' }}
+        >
+          Disconnect
+        </Button>
       </div>
-    );
+    )
   }
 
   return (
-    <div className="relative">
-      <button
-        onClick={() => setShowOptions(!showOptions)}
-        disabled={loading}
-        className={`flex items-center gap-2 rounded-lg bg-blue-600/20 border border-blue-500/40 px-3 py-2 text-sm text-blue-400 hover:bg-blue-600/30 hover:border-blue-400/60 transition-colors disabled:opacity-50 ${className}`}
+    <div style={{ position: 'relative' }}>
+      {error && (
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 'calc(100% + 8px)',
+            right: 0,
+            background: 'rgba(239,68,68,0.12)',
+            border: '1px solid rgba(239,68,68,0.3)',
+            borderRadius: '0.5rem',
+            padding: '0.5rem 0.75rem',
+            fontSize: '0.75rem',
+            color: '#f87171',
+            whiteSpace: 'nowrap',
+            zIndex: 10,
+          }}
+        >
+          {error}
+        </div>
+      )}
+      <Button
+        variant="primary"
+        size="sm"
+        onClick={() => setShowDropdown((v) => !v)}
+        id="wallet-connect-btn"
       >
-        {loading ? (
-          <>
-            <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
-            Connecting...
-          </>
-        ) : (
-          <>
-            <WalletIcon />
-            <span className={variant === 'compact' ? 'hidden sm:inline' : ''}>
-              Connect Wallet
-            </span>
-          </>
-        )}
-      </button>
+        Connect Wallet
+      </Button>
 
-      {showOptions && (
+      {showDropdown && (
         <>
-          <div className="fixed inset-0 z-50" onClick={() => setShowOptions(false)} />
-          <div className="absolute right-0 mt-2 w-48 rounded-xl bg-gray-900 border border-gray-800 shadow-2xl z-[60] overflow-hidden p-1">
-            {(['pera', 'defly', 'exodus'] as const).map((type) => (
-              <button
-                key={type}
-                onClick={() => handleConnect(type)}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition-colors"
-              >
-                <span className="text-gray-500">{walletLogos[type]}</span>
-                {type.charAt(0).toUpperCase() + type.slice(1)} Wallet
-              </button>
-            ))}
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 40,
+            }}
+            onClick={() => setShowDropdown(false)}
+          />
+          <div
+            style={{
+              position: 'absolute',
+              top: 'calc(100% + 8px)',
+              right: 0,
+              background: 'rgba(10,10,20,0.98)',
+              backdropFilter: 'blur(24px)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: '0.875rem',
+              padding: '0.5rem',
+              minWidth: '200px',
+              zIndex: 50,
+              boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
+            }}
+          >
+            <p
+              style={{
+                margin: '0 0 0.5rem',
+                padding: '0.5rem 0.75rem',
+                fontSize: '0.75rem',
+                color: '#64748b',
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.1em',
+              }}
+            >
+              Choose Wallet
+            </p>
+            {wallets.map((wallet) => {
+              const info = WALLET_LABELS[wallet.id]
+              if (!info) return null
+              return (
+                <button
+                  key={wallet.id}
+                  id={`connect-${wallet.id}`}
+                  onClick={() => {
+                    setShowDropdown(false)
+                    void connect(wallet.id)
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.75rem',
+                    width: '100%',
+                    padding: '0.625rem 0.875rem',
+                    borderRadius: '0.625rem',
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#e2e8f0',
+                    cursor: 'pointer',
+                    fontSize: '0.9375rem',
+                    fontWeight: 500,
+                    textAlign: 'left',
+                    transition: 'background 0.15s',
+                    fontFamily: 'inherit',
+                  }}
+                  onMouseEnter={(e) =>
+                    (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')
+                  }
+                  onMouseLeave={(e) =>
+                    (e.currentTarget.style.background = 'transparent')
+                  }
+                >
+                  <span
+                    style={{
+                      width: '10px',
+                      height: '10px',
+                      borderRadius: '50%',
+                      background: info.color,
+                      flexShrink: 0,
+                    }}
+                  />
+                  {info.label}
+                </button>
+              )
+            })}
           </div>
         </>
       )}
     </div>
-  );
-}
-
-function WalletIcon() {
-  return (
-    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect x="2" y="6" width="20" height="14" rx="2" stroke="currentColor" strokeWidth="1.5" />
-      <path d="M6 6V4a2 2 0 012-2h8a2 2 0 012 2v2" stroke="currentColor" strokeWidth="1.5" />
-      <circle cx="12" cy="13" r="2" stroke="currentColor" strokeWidth="1.5" />
-    </svg>
-  );
+  )
 }

@@ -1,0 +1,82 @@
+name: Deploy Frontend
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_url:
+        description: 'Public API URL for the deployed gateway (used as NEXT_PUBLIC_API_URL). Optional if you call this workflow from another workflow that provides it.'
+        required: false
+        default: ''
+  workflow_call:
+    inputs:
+      api_url:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  PROJECT_ID: soul-seeker-500816
+  PROJECT_NUMBER: 546240368861
+  REGION: us-central1
+  FRONTEND_SERVICE: algo-bounty-frontend
+  FRONTEND_API_URL: ${{ inputs.api_url || github.event.inputs.api_url || secrets.FRONTEND_API_URL || '' }}
+
+jobs:
+  deploy-frontend:
+    name: Deploy Frontend
+    runs-on: ubuntu-latest
+    environment: deployment
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+      with:
+        project_id: ${{ env.PROJECT_ID }}
+
+    - name: Configure Docker for GCR
+      run: gcloud auth configure-docker
+
+    - name: Generate Frontend Image Tag
+      run: |
+        echo "FRONTEND_IMAGE_TAG=gcr.io/${{ env.PROJECT_ID }}/${{ env.FRONTEND_SERVICE }}:$(git rev-parse --short HEAD)-$(date +%s)" >> $GITHUB_ENV
+
+    - name: Build and Push Frontend Image
+      run: |
+        gcloud builds submit dashboard/ \
+          --config=dashboard/cloudbuild.yaml \
+          --substitutions=_IMAGE="${{ env.FRONTEND_IMAGE_TAG }}",_NEXT_PUBLIC_API_URL="${{ env.FRONTEND_API_URL }}",_NEXT_PUBLIC_ALGORAND_NETWORK="testnet"
+      env:
+        CLOUDSDK_CORE_DISABLE_PROMPTS: '1'
+
+    - name: Deploy Frontend to Cloud Run
+      id: deploy_frontend
+      uses: google-github-actions/deploy-cloudrun@v2
+      with:
+        service: ${{ env.FRONTEND_SERVICE }}
+        image: ${{ env.FRONTEND_IMAGE_TAG }}
+        region: ${{ env.REGION }}
+        flags: |
+          --allow-unauthenticated
+          --port=8080
+          --memory=512Mi
+          --cpu=1
+          --concurrency=250
+          --timeout=60
+          --min-instances=0
+          --set-env-vars=NODE_ENV=production,NEXT_PUBLIC_ALGORAND_NETWORK=testnet,NEXT_PUBLIC_API_URL=${{ env.FRONTEND_API_URL }}
+
+    - name: Post deployment summary
+      if: success()
+      run: |
+        echo "## AlgoBounty Frontend Deployment Successful" >> $GITHUB_STEP_SUMMARY
+        echo "- **Frontend**: ${{ steps.deploy_frontend.outputs.url }}" >> $GITHUB_STEP_SUMMARY
