@@ -16,6 +16,9 @@ export const metadata: Metadata = {
     description: 'On-chain bounties for autonomous agents on Algorand',
     type: 'website',
   },
+  icons: {
+    icon: '/icon.svg',
+  },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

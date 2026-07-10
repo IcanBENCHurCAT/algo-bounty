@@ -81,48 +81,43 @@ _DEFAULT_ALLOWED_ORIGINS: list[str] = [
 ]
 
 
-class CORSAllowlistMiddleware(BaseHTTPMiddleware):
-    """Enforce an allowlist of allowed CORS origins.
+from starlette.middleware.cors import CORSMiddleware
+from typing import cast
+import typing
 
-    Falls back to the default if no custom origins are provided.
+class CORSAllowlistMiddleware(CORSMiddleware):
+    """Enforce an allowlist of allowed CORS origins using Starlette's CORSMiddleware.
+
     Accepts the allowlist as a keyword argument when constructing
     the middleware instance (see FastAPI docs for passing kwargs to
     middleware classes).
     """
 
-    allowed_origins: list[str]
-
     def __init__(self, app, allowed_origins: list[str] | None = None):
-        super().__init__(app)
-        self.allowed_origins = allowed_origins or _DEFAULT_ALLOWED_ORIGINS
+        origins = allowed_origins or _DEFAULT_ALLOWED_ORIGINS
 
-    async def dispatch(self, request: Request, call_next) -> Response:
-        origin = request.headers.get("origin", "")
+        # Convert wildcard patterns to regexes
+        origin_regexes = []
+        for pattern in origins:
+            if "*" in pattern:
+                regex_pattern = re.escape(pattern).replace(r"\*", ".*")
+                origin_regexes.append(re.compile(f"^{regex_pattern}$", re.IGNORECASE))
 
-        # Simple CORS: check if the origin is in our allowlist
-        if origin and self._origin_matches(origin):
-            if request.method == "OPTIONS":
-                response = Response(status_code=204)
-            else:
-                response = await call_next(request)
-            response.headers["Access-Control-Allow-Origin"] = origin
-            response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
-            response.headers["Access-Control-Allow-Headers"] = (
-                "Authorization, Content-Type, X-Requested-With, "
-                "X-Hub-Signature-256, X-GitHub-Event, X-GitHub-Delivery"
-            )
-            response.headers["Access-Control-Allow-Credentials"] = "true"
-            return response
+        # Starlette's CORSMiddleware allows allow_origin_regex
+        super().__init__(
+            app=app,
+            allow_origins=[p for p in origins if "*" not in p],
+            allow_methods=["*"],
+            allow_headers=["*"],
+            allow_credentials=True,
+        )
+        self.origin_regexes = origin_regexes
 
-        # No origin header (simple requests like HTML form POSTs) – let it through
-        return await call_next(request)
-
-    def _origin_matches(self, origin: str) -> bool:
-        """Check if an origin matches the allowlist, including wildcard patterns."""
-        for pattern in self.allowed_origins:
-            # Convert wildcard pattern to regex
-            regex_pattern = re.escape(pattern).replace(r"\*", ".*")
-            if re.match(f"^{regex_pattern}$", origin, re.IGNORECASE):
+    def is_allowed_origin(self, origin: str) -> bool:
+        if super().is_allowed_origin(origin):
+            return True
+        for regex in self.origin_regexes:
+            if regex.match(origin):
                 return True
         return False
 
