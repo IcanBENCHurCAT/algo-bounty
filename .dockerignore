@@ -54,3 +54,4 @@ build/
 
 # Cloud build cache
 .gcloud/
+!docs/content.md

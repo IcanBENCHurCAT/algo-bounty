@@ -9,6 +9,8 @@ steps:
       - 'NEXT_PUBLIC_ALGORAND_NETWORK=${_NEXT_PUBLIC_ALGORAND_NETWORK}'
       - '-t'
       - '${_IMAGE}'
+      - '-f'
+      - 'dashboard/Dockerfile'
       - '.'
     id: build-frontend
 

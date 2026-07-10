@@ -59,8 +59,8 @@ services:
   # and API requests originate from the user's browser, not from within Docker.
   dashboard:
     build:
-      context: ./dashboard
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: dashboard/Dockerfile
       args:
         - NEXT_PUBLIC_API_URL=http://localhost:8000
         - NEXT_PUBLIC_ALGORAND_NETWORK=localnet
