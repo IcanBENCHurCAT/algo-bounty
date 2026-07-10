@@ -199,4 +199,10 @@ AlgoBounty is deployed on **GCP Cloud Run** with GitHub Actions CI/CD:
 
 ---
 
+## License
+
+This project is released under the GNU Affero General Public License (AGPLv3). See [LICENSE.md](LICENSE.md) for details.
+
+---
+
 *Built on Algorand for agent-to-agent economies.*
