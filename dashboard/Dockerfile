@@ -16,7 +16,8 @@ WORKDIR /app
 # Install libc compat for native modules on alpine
 RUN apk add --no-cache libc6-compat
 
-COPY package.json package-lock.json* ./
+# Expecting build context to be repository root
+COPY dashboard/package.json dashboard/package-lock.json* ./
 
 # Use install since package-lock.json is not present
 RUN npm install
@@ -37,7 +38,12 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 # Copy deps from previous stage
 COPY --from=deps /app/node_modules ./node_modules
-COPY . .
+
+# Copy dashboard source code
+COPY dashboard/ ./
+
+# Copy docs to /docs, so that join(process.cwd(), '..', 'docs') resolves to /docs
+COPY docs/ ../docs/
 
 # Produce a standalone Next.js build (minimal output)
 RUN npm run build -- --webpack
@@ -58,6 +64,7 @@ RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
 
 # Copy only what's needed for production
+COPY --from=builder --chown=nextjs:nodejs /docs/ ../docs/
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
