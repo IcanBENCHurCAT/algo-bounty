@@ -54,7 +54,7 @@ jobs:
       run: |
         gcloud builds submit dashboard/ \
           --config=dashboard/cloudbuild.yaml \
-          --substitutions=_IMAGE="${{ env.FRONTEND_IMAGE_TAG }}",_NEXT_PUBLIC_API_URL="${{ env.FRONTEND_API_URL }}",_NEXT_PUBLIC_SUPABASE_URL="${{ secrets.SUPABASE_URL }}",_NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY="${{ secrets.SUPABASE_PUBLISHABLE_KEY }}"
+          --substitutions=_IMAGE="${{ env.FRONTEND_IMAGE_TAG }}",_NEXT_PUBLIC_API_URL="${{ env.FRONTEND_API_URL }}",_NEXT_PUBLIC_ALGORAND_NETWORK="testnet"
       env:
         CLOUDSDK_CORE_DISABLE_PROMPTS: '1'
 
@@ -68,12 +68,12 @@ jobs:
         flags: |
           --allow-unauthenticated
           --port=8080
-          --memory=256Mi
+          --memory=512Mi
           --cpu=1
           --concurrency=250
           --timeout=60
           --min-instances=0
-          --set-env-vars=NEXT_PUBLIC_SUPABASE_URL=${{ secrets.SUPABASE_URL }},NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${{ secrets.SUPABASE_PUBLISHABLE_KEY }},NEXT_PUBLIC_API_URL=${{ env.FRONTEND_API_URL }}
+          --set-env-vars=NODE_ENV=production,NEXT_PUBLIC_ALGORAND_NETWORK=testnet,NEXT_PUBLIC_API_URL=${{ env.FRONTEND_API_URL }}
 
     - name: Post deployment summary
       if: success()
