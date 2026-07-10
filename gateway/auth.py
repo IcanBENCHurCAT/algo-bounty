@@ -38,8 +38,7 @@ def verify_signature(address: str, signature: str, challenge: str) -> bool:
 
         # If that fails, try to decode as an unsendable transaction
         try:
-            signed_txn_bytes = base64.b64decode(signature)
-            stxn = encoding.msgpack_decode(signed_txn_bytes)
+            stxn = encoding.msgpack_decode(signature)
             if not isinstance(stxn, transaction.SignedTransaction):
                 return False
 
@@ -82,8 +81,6 @@ def verify_txn_signature(stxn: transaction.SignedTransaction, address: str) -> b
 
         # The correct way to get the message to verify for a transaction in py-algorand-sdk
         # is prefixing 'TX' to the msgpack encoded raw transaction
-        msg_bytes = b"TX" + encoding.msgpack_encode(stxn.transaction)
-
         # Actually msgpack_encode returns base64 string, so we need to decode it first
         import base64
         raw_txn_bytes = base64.b64decode(encoding.msgpack_encode(stxn.transaction))
