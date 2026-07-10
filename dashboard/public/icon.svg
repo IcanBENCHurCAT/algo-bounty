@@ -1,0 +1,10 @@
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" class="lucide lucide-zap" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bolt-grad-icon" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stopColor="#6366f1" />
+      <stop offset="100%" stopColor="#8b5cf6" />
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="8" fill="url(#bolt-grad-icon)" />
+  <path d="M18 4L10 18h7l-3 10 11-14h-7l4-10z" fill="white" opacity="0.95" />
+</svg>
