@@ -68,11 +68,11 @@ export default function DocsPageClient({ rawContent, tocItems }: DocsPageClientP
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 components={{
-                  h2: ({ children, ...props }) => {
+                  h2: ({ node, children, ...props }) => {
                     let id = (props as any).id;
                     if (!id) {
-                      const text = typeof children === 'string' ? children : '';
-                      id = text
+                      const text = typeof children === 'string' ? children : Array.isArray(children) ? children.join('') : '';
+                      id = String(text)
                         .toLowerCase()
                         .replace(/[^a-z0-9]+/g, '-')
                         .replace(/(^-|-$)/g, '')
@@ -96,11 +96,11 @@ export default function DocsPageClient({ rawContent, tocItems }: DocsPageClientP
                       </h2>
                     );
                   },
-                  h3: ({ children, ...props }) => {
+                  h3: ({ node, children, ...props }) => {
                     let id = (props as any).id;
                     if (!id) {
-                      const text = typeof children === 'string' ? children : '';
-                      id = text
+                      const text = typeof children === 'string' ? children : Array.isArray(children) ? children.join('') : '';
+                      id = String(text)
                         .toLowerCase()
                         .replace(/[^a-z0-9]+/g, '-')
                         .replace(/(^-|-$)/g, '')
@@ -124,8 +124,8 @@ export default function DocsPageClient({ rawContent, tocItems }: DocsPageClientP
                       </h3>
                     );
                   },
-                  code: ({ children, ...props }) => {
-                    const inline = !props.className;
+                  code: ({ node, children, className, ...props }) => {
+                    const inline = !className;
                     if (inline) {
                       return (
                         <code
@@ -136,7 +136,7 @@ export default function DocsPageClient({ rawContent, tocItems }: DocsPageClientP
                         </code>
                       );
                     }
-                    return null;
+                    return <code className={className} {...props}>{children}</code>;
                   },
                 }}
               >
