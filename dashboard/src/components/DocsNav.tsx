@@ -43,7 +43,7 @@ export default function DocsNav({ tocItems, className = '' }: DocsNavProps) {
           }
         });
       },
-      { rootMargin: '-100px 0px -60% 0px', threshold: 0.1 }
+      { rootMargin: '-80px 0px -80% 0px', threshold: 1.0 }
     );
 
     const els: HTMLElement[] = [];
