@@ -159,3 +159,26 @@ def test_bounties_router_error_cases(client, db_session, seeded_agents):
     assert res.status_code == 403
     assert "Only bounty participants can open a dispute" in res.json()["detail"]
 
+
+def test_get_txn_endpoints_missing_app_id(client, db_session, seeded_agents):
+    from tests.conftest import get_auth_token
+    creator, worker, low_karma = seeded_agents
+
+    # Seed bounty with app_id = None
+    db_session.add(Bounty(bounty_id="b_null_app", status="open", creator="CREATOR_ADDR", amount=1000, repo_url="r", app_id=None))
+    db_session.add(Bounty(bounty_id="b_submitted_null_app", status="submitted", creator="CREATOR_ADDR", worker="WORKER_ADDR", amount=1000, repo_url="r", app_id=None))
+    db_session.commit()
+
+    # Test claim txn missing app_id
+    worker_token = get_auth_token(client, "WORKER_ADDR")
+    res = client.post("/api/v1/bounties/b_null_app/claim/txn", headers={"Authorization": f"Bearer {worker_token}"})
+    assert res.status_code == 400
+    assert "Bounty has no deployed smart contract application ID" in res.json()["detail"]
+
+    # Test approve txn missing app_id
+    creator_token = get_auth_token(client, "CREATOR_ADDR")
+    res = client.post("/api/v1/bounties/b_submitted_null_app/approve/txn", headers={"Authorization": f"Bearer {creator_token}"})
+    assert res.status_code == 400
+    assert "Bounty has no deployed smart contract application ID" in res.json()["detail"]
+
+
