@@ -27,10 +27,12 @@ export function getStoredToken(): string | null {
 }
 
 export function storeToken(token: string): void {
+  if (typeof window === 'undefined') return
   localStorage.setItem(JWT_KEY, token)
 }
 
 export function clearToken(): void {
+  if (typeof window === 'undefined') return
   localStorage.removeItem(JWT_KEY)
 }
 
