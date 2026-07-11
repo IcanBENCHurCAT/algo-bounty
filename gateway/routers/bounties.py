@@ -136,7 +136,7 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
                 # Encode app args
                 from algosdk.abi import ABIType
                 bounty_id_bytes = body.description[:64].encode()
-                escrow_amount = int(body.amount * 1_000_000)
+                escrow_amount = int(body.amount)
                 asset_id = int(body.asset_id)
                 is_hitm = 1 if body.hitm else 0
                 review_days = int(body.hitm_review_days)
