@@ -1,7 +1,7 @@
 import pytest
 import jwt
 from unittest.mock import patch, AsyncMock, MagicMock
-from gateway.oidc import get_github_jwks, verify_github_oidc_token
+from gateway.oidc import get_github_jwks, verify_github_oidc_token, GITHUB_OIDC_ISSUER
 
 @pytest.mark.asyncio
 async def test_get_github_jwks():
