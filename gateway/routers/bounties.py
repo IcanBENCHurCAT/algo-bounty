@@ -289,6 +289,8 @@ async def get_claim_txn(
     b = db.query(Bounty).filter(Bounty.bounty_id == bounty_id).first()
     if not b:
         raise HTTPException(status_code=404, detail="Bounty not found")
+    if b.app_id is None:
+        raise HTTPException(status_code=400, detail="Bounty has no deployed smart contract application ID.")
     if b.status != "open":
         raise HTTPException(status_code=400, detail="Bounty not claimable")
     if b.creator == current_user:
@@ -476,6 +478,8 @@ async def get_approve_txn(
     b = db.query(Bounty).filter(Bounty.bounty_id == bounty_id).first()
     if not b:
         raise HTTPException(status_code=404, detail="Bounty not found")
+    if b.app_id is None:
+        raise HTTPException(status_code=400, detail="Bounty has no deployed smart contract application ID.")
     if b.creator != current_user:
         raise HTTPException(status_code=403, detail="Only creator can approve work")
     if b.status != "submitted":
