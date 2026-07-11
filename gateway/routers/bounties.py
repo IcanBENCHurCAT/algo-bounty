@@ -171,7 +171,7 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
                 )
 
                 signed_txn = create_txn.sign(platform_account.private_key)
-                tx_id = client.send_transaction([signed_txn])
+                tx_id = client.send_transaction(signed_txn)
 
                 # Wait for confirmation
                 from algosdk.transaction import wait_for_confirmation
@@ -196,7 +196,7 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
                             amt=fund_amount
                         )
                         signed_fund = fund_txn.sign(platform_account.private_key)
-                        fund_txid = client.send_transaction([signed_fund])
+                        fund_txid = client.send_transaction(signed_fund)
                         wait_for_confirmation(client, fund_txid, 4)
 
                         # Step 3: Call create_bounty NoOp to initialize contract state
@@ -237,13 +237,15 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
                             boxes=boxes
                         )
                         signed_call = call_txn.sign(platform_account.private_key)
-                        call_txid = client.send_transaction([signed_call])
+                        call_txid = client.send_transaction(signed_call)
                         wait_for_confirmation(client, call_txid, 4)
 
         except Exception as e:
             print(f"[WEB3] Escrow deploy failed: {e}")
-            app_id = None
-            onchain = False
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to deploy escrow smart contract on-chain: {e}"
+            )
 
     # Create DB record (always works, on-chain or not)
     new_bounty = Bounty(
