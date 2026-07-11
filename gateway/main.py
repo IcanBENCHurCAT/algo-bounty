@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from .database import init_db
 from .rate_limiter import RateLimitMiddleware
 from .algod_client import NODE_ENV, is_sandbox
+from .middleware.x402 import X402Middleware
 from .middleware import (
     SecurityHeadersMiddleware,
     RequestSizeLimitMiddleware,
@@ -70,6 +71,10 @@ app.add_middleware(SecurityHeadersMiddleware)
 
 # 4. Webhook API key auth – protects webhook endpoints
 app.add_middleware(WebhookApiKeyAuthMiddleware)
+
+
+# 4.5. x402 Header Protocol Middleware
+app.add_middleware(X402Middleware)
 
 # 5. GitHub webhook signature verification
 app.add_middleware(GitHubWebhookSignatureMiddleware)
