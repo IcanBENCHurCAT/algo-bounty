@@ -1,7 +1,7 @@
 import os
 from datetime import datetime, UTC
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 
 from .database import init_db
@@ -94,6 +94,26 @@ async def health_check():
         "sandbox_active": sandbox_active,
         "node_env": NODE_ENV,
     }
+
+# ── Exception Handlers ───────────────────────────────────────────
+
+import traceback
+import sys
+from fastapi.responses import JSONResponse
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Catch-all handler for unhandled exceptions to ensure they are logged and return CORS headers."""
+    print(f"[ERROR] Unhandled exception: {exc}", file=sys.stderr)
+    traceback.print_exc(file=sys.stderr)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": "Internal Server Error",
+            "error_type": type(exc).__name__,
+            "message": str(exc)
+        }
+    )
 
 # ── API Routers ──────────────────────────────────────────────────
 
