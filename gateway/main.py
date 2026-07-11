@@ -60,18 +60,14 @@ app = FastAPI(title="AlgoBounty Gateway", version="1.0.0", lifespan=lifespan)
 
 # ── Middleware (order matters: top to bottom, bottom to top) ──────
 
-# 1. Request size limit (runs first on incoming requests)
+# 1. Request size limit (runs first on incoming requests, innermost base middleware)
 app.add_middleware(RequestSizeLimitMiddleware)
 
-# 2. CORS with origin allowlist
-app.add_middleware(CORSAllowlistMiddleware, allowed_origins=ALLOWED_ORIGINS)
-
-# 3. Security headers (runs on outgoing responses)
+# 2. Security headers (runs on outgoing responses)
 app.add_middleware(SecurityHeadersMiddleware)
 
-# 4. Webhook API key auth – protects webhook endpoints
+# 3. Webhook API key auth – protects webhook endpoints
 app.add_middleware(WebhookApiKeyAuthMiddleware)
-
 
 # 4.5. x402 Header Protocol Middleware
 app.add_middleware(X402Middleware)
@@ -79,8 +75,11 @@ app.add_middleware(X402Middleware)
 # 5. GitHub webhook signature verification
 app.add_middleware(GitHubWebhookSignatureMiddleware)
 
-# 6. Rate limiting – protects public endpoints from DDoS / spam
+# 5. Rate limiting – protects public endpoints from DDoS / spam
 app.add_middleware(RateLimitMiddleware)
+
+# 6. CORS with origin allowlist (MUST BE OUTERMOST so it catches RateLimit/Auth responses)
+app.add_middleware(CORSAllowlistMiddleware, allowed_origins=ALLOWED_ORIGINS)
 
 # Algorand network config
 sandbox_active = is_sandbox()
