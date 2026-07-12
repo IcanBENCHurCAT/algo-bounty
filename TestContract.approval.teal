@@ -1,0 +1,68 @@
+#pragma version 11
+#pragma typetrack false
+
+// algopy.arc4.ARC4Contract.approval_program() -> uint64:
+main:
+    // test_struct.py:10
+    // class TestContract(ARC4Contract):
+    txn NumAppArgs
+    bz main___algopy_default_create@7
+    pushbytes 0x66dbf099 // method "test(address)void"
+    txna ApplicationArgs 0
+    match main_test_route@5
+    err
+
+main_test_route@5:
+    // test_struct.py:14
+    // @arc4.abimethod
+    txn OnCompletion
+    !
+    txn ApplicationID
+    &&
+    assert
+    b test
+
+main___algopy_default_create@7:
+    txn OnCompletion
+    !
+    txn ApplicationID
+    !
+    &&
+    return
+
+
+// test_struct.TestContract.test[routing]() -> void:
+test:
+    // test_struct.py:14
+    // @arc4.abimethod
+    txna ApplicationArgs 1
+    dup
+    len
+    pushint 32
+    ==
+    assert // invalid number of bytes for arc4.static_array<arc4.uint8, 32>
+    // test_struct.py:16-21
+    // self.mediator_data.value = MediatorData(
+    //     address=arc4.Address(mediator),
+    //     bond_amount=arc4.UInt64(0),
+    //     is_bonded=arc4.UInt64(0),
+    //     did_hash=arc4.StaticArray[arc4.Byte, typing.Literal[32]].from_bytes(Bytes(b"\x00" * 32))
+    // )
+    pushbytes 0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+    concat
+    // test_struct.py:16
+    // self.mediator_data.value = MediatorData(
+    pushbytes "mediator_data"
+    // test_struct.py:16-21
+    // self.mediator_data.value = MediatorData(
+    //     address=arc4.Address(mediator),
+    //     bond_amount=arc4.UInt64(0),
+    //     is_bonded=arc4.UInt64(0),
+    //     did_hash=arc4.StaticArray[arc4.Byte, typing.Literal[32]].from_bytes(Bytes(b"\x00" * 32))
+    // )
+    swap
+    box_put
+    // test_struct.py:14
+    // @arc4.abimethod
+    pushint 1
+    return

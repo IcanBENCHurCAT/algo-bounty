@@ -181,6 +181,9 @@ export interface CreateBountyPayload {
   tags: string[]
   github_issue?: number
   hitm_review_days?: number
+  signed_txn?: string
+  app_id?: number
+  bounty_id?: string
 }
 
 export interface CreateBountyResponse {
