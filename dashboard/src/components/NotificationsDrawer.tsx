@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useState } from 'react'
 import type { NotificationItem } from '@/types'
 import { getNotifications, markNotificationRead, markAllNotificationsRead } from '@/lib/api'
 import { useAuth } from '@/hooks/useAuth'
+import { useEvents } from '@/hooks/useEvents'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 
@@ -17,14 +18,16 @@ function timeAgo(iso: string): string {
   return `${Math.floor(hrs / 24)}d ago`
 }
 
-const EVENT_ICONS: Record<string, string> = {
-  'bounty.created':   '🎯',
-  'bounty.claimed':   '🤝',
-  'bounty.submitted': '📬',
-  'bounty.approved':  '✅',
-  'bounty.rejected':  '❌',
-  'bounty.disputed':  '⚖️',
-  'karma.updated':    '⭐',
+function getIconForMessage(msg: string): string {
+  const lower = msg.toLowerCase()
+  if (lower.includes('claimed')) return '🤝'
+  if (lower.includes('submitted')) return '📬'
+  if (lower.includes('approved')) return '✅'
+  if (lower.includes('rejected')) return '❌'
+  if (lower.includes('dispute')) return '⚖️'
+  if (lower.includes('karma')) return '⭐'
+  if (lower.includes('bounty')) return '🎯'
+  return '📢'
 }
 
 interface NotificationsDrawerProps {
@@ -39,16 +42,16 @@ export function NotificationsDrawer({ open, onClose }: NotificationsDrawerProps)
 
   const unreadCount = notifications.filter((n) => !n.read).length
 
-  const fetchNotifications = useCallback(async () => {
+  const fetchNotifications = useCallback(async (isSilent = false) => {
     if (!jwt) return
-    setLoading(true)
+    if (!isSilent) setLoading(true)
     try {
       const items = await getNotifications(jwt)
       setNotifications(items)
     } catch {
       // silently ignore
     } finally {
-      setLoading(false)
+      if (!isSilent) setLoading(false)
     }
   }, [jwt])
 
@@ -58,11 +61,16 @@ export function NotificationsDrawer({ open, onClose }: NotificationsDrawerProps)
     }
   }, [open, connected, fetchNotifications])
 
+  useEvents({
+    enabled: open && connected,
+    onEvent: () => void fetchNotifications(true)
+  })
+
   const handleMarkRead = async (id: number) => {
     if (!jwt) return
     await markNotificationRead(id, jwt)
     setNotifications((prev) =>
-      prev.map((n) => (n.notification_id === id ? { ...n, read: true } : n)),
+      prev.map((n) => (n.id === id ? { ...n, read: true } : n)),
     )
   }
 
@@ -182,8 +190,8 @@ export function NotificationsDrawer({ open, onClose }: NotificationsDrawerProps)
 
           {notifications.map((n) => (
             <div
-              key={n.notification_id}
-              onClick={() => !n.read && void handleMarkRead(n.notification_id)}
+              key={n.id}
+              onClick={() => !n.read && void handleMarkRead(n.id)}
               style={{
                 display: 'flex',
                 gap: '0.875rem',
@@ -197,17 +205,12 @@ export function NotificationsDrawer({ open, onClose }: NotificationsDrawerProps)
               }}
             >
               <span style={{ fontSize: '1.25rem', flexShrink: 0, marginTop: '0.125rem' }}>
-                {EVENT_ICONS[n.event_type] ?? '📢'}
+                {getIconForMessage(n.message)}
               </span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: '0.875rem', color: '#cbd5e1', marginBottom: '0.25rem', fontWeight: n.read ? 400 : 600 }}>
-                  {n.event_type.replace('.', ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
+                  {n.message}
                 </div>
-                {n.data.bounty_id != null && (
-                  <div style={{ fontSize: '0.75rem', color: '#475569', fontFamily: 'monospace' }}>
-                    {String(n.data.bounty_id)}
-                  </div>
-                )}
                 <div style={{ fontSize: '0.6875rem', color: '#334155', marginTop: '0.375rem' }}>
                   {timeAgo(n.created_at)}
                 </div>

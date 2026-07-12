@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import { useNetwork } from '@/hooks/useNetwork'
+import { useEvents } from '@/hooks/useEvents'
 import { getNotifications } from '@/lib/api'
 import { WalletConnect } from '@/components/WalletConnect'
 import { NotificationsDrawer } from '@/components/NotificationsDrawer'
@@ -52,21 +53,26 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
-  // Poll unread notification count every 30s when connected
-  useEffect(() => {
+  const checkNotifications = React.useCallback(async () => {
     if (!connected || !jwt) return
-    const check = async () => {
-      try {
-        const items = await getNotifications(jwt)
-        setNotifCount(items.filter((n) => !n.read).length)
-      } catch {
-        // silently ignore
-      }
+    try {
+      const items = await getNotifications(jwt)
+      setNotifCount(items.filter((n) => !n.read).length)
+    } catch {
+      // silently ignore
     }
-    void check()
-    const interval = setInterval(() => void check(), 30_000)
-    return () => clearInterval(interval)
   }, [connected, jwt])
+
+  useEffect(() => {
+    void checkNotifications()
+  }, [checkNotifications])
+
+  useEvents({
+    enabled: connected,
+    onEvent: () => {
+      setTimeout(() => void checkNotifications(), Math.random() * 500)
+    }
+  })
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#070712' }}>
