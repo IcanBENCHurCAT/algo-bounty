@@ -232,7 +232,7 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
                         boxes1 = [(app_id, name) for name in box_names1]
 
                         box_names2 = [
-                            b"is_hitm", b"review_days", b"agent_address", b"rejection_count"
+                            b"is_hitm", b"review_days", b"github_status"
                         ]
                         boxes2 = [(app_id, name) for name in box_names2]
 
@@ -244,12 +244,13 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
                             boxes=boxes1
                         )
 
-                        info_method = Method.from_signature("get_bounty_info()void")
+                        status_method = Method.from_signature("set_github_status(byte[])void")
+                        encoded_pending = status_method.args[0].type.encode(b"pending")
                         call_txn2 = ApplicationNoOpTxn(
                             sender=platform_account.address,
                             sp=params,
                             index=app_id,
-                            app_args=[info_method.get_selector()],
+                            app_args=[status_method.get_selector(), encoded_pending],
                             boxes=boxes2
                         )
 
