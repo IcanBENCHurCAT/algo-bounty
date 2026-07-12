@@ -51,6 +51,8 @@ export interface BountyFilters {
   sortBy?: 'created_at' | 'amount' | 'karma_required' | 'deadline'
   page?: number
   limit?: number
+  creator?: string
+  worker?: string
 }
 
 // ─── Agent / Profile ──────────────────────────────────────────────────────────
@@ -99,10 +101,9 @@ export interface WalletAuthState {
 // ─── Notifications ────────────────────────────────────────────────────────────
 
 export interface NotificationItem {
-  notification_id: number
-  event_type: string
+  id: number
+  message: string
   read: boolean
-  data: Record<string, unknown>
   created_at: string
 }
 
@@ -182,9 +183,6 @@ export interface CreateBountyPayload {
   tags: string[]
   github_issue?: number
   hitm_review_days?: number
-  signed_txn?: string
-  app_id?: number
-  bounty_id?: string
 }
 
 export interface CreateBountyResponse {

@@ -91,6 +91,8 @@ export async function getBounties(
   if (filters.sortBy) params.set('sort', filters.sortBy)
   if (filters.page) params.set('page', String(filters.page))
   if (filters.limit) params.set('limit', String(filters.limit))
+  if (filters.creator) params.set('creator', filters.creator)
+  if (filters.worker) params.set('worker', filters.worker)
 
   const qs = params.toString()
   return apiFetch<BountyListResponse>(`/api/v1/bounties${qs ? `?${qs}` : ''}`)
@@ -100,19 +102,7 @@ export async function getBounty(bountyId: string): Promise<Bounty> {
   return apiFetch<Bounty>(`/api/v1/bounties/${bountyId}`)
 }
 
-
-export async function getDeployTxn(
-  payload: CreateBountyPayload,
-  token: string,
-): Promise<{ unsigned_txns: string[], bounty_id: string, app_id: number }> {
-  return apiFetch<{ unsigned_txns: string[], bounty_id: string, app_id: number }>('/api/v1/bounties/deploy/txn', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  }, token)
-}
-
 export async function createBounty(
-
   payload: CreateBountyPayload,
   token: string,
 ): Promise<CreateBountyResponse> {
@@ -147,23 +137,11 @@ export async function claimBounty(
 
 export async function submitWork(
   bountyId: string,
-  payload: { pr_url: string; proof_data?: Record<string, unknown>; signed_txn?: string },
+  payload: { pr_url: string; proof_data?: Record<string, unknown> },
   token: string,
 ): Promise<{ bounty_id: string; status: string; review_deadline: string }> {
   return apiFetch(
     `/api/v1/bounties/${bountyId}/submit`,
-    { method: 'POST', body: JSON.stringify(payload) },
-    token,
-  )
-}
-
-export async function getSubmitTxn(
-  bountyId: string,
-  payload: { pr_url: string; proof_data?: Record<string, unknown> },
-  token: string,
-): Promise<{ unsigned_txn: string }> {
-  return apiFetch<{ unsigned_txn: string }>(
-    `/api/v1/bounties/${bountyId}/submit/txn`,
     { method: 'POST', body: JSON.stringify(payload) },
     token,
   )
@@ -280,7 +258,7 @@ export async function markAllNotificationsRead(token: string): Promise<void> {
   // Mark each unread notification as read
   const notifications = await getNotifications(token)
   const unread = notifications.filter((n) => !n.read)
-  await Promise.all(unread.map((n) => markNotificationRead(n.notification_id, token)))
+  await Promise.all(unread.map((n) => markNotificationRead(n.id, token)))
 }
 
 // ─── Escrow endpoints ─────────────────────────────────────────────────────────
