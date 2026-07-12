@@ -77,7 +77,8 @@ def list_bounties(
             "repo_url": b.repo_url,
             "karma_requirement": b.karma_requirement,
             "created_at": b.created_at.replace(tzinfo=UTC).isoformat().replace("+00:00", "Z"),
-            "rejection_count": b.rejection_count
+            "rejection_count": b.rejection_count,
+            "treasury_altered": b.treasury_altered
         })
     return {"bounties": result, "total": len(result)}
 
@@ -100,7 +101,8 @@ def get_bounty(bounty_id: str, db: Session = Depends(get_db)):
         "repo_url": b.repo_url,
         "karma_requirement": b.karma_requirement,
         "created_at": b.created_at.replace(tzinfo=UTC).isoformat().replace("+00:00", "Z"),
-        "rejection_count": b.rejection_count
+        "rejection_count": b.rejection_count,
+        "treasury_altered": b.treasury_altered
     }
 
 @router.post("", summary="Create a new bounty", description="Deploy a new bounty escrow on-chain (if not in sandbox) and create a database record. Deducts 1 karma from the creator.")
@@ -110,191 +112,112 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
     if not agent:
         raise HTTPException(status_code=403, detail="Agent profile missing")
 
-    # Karma System: Deduct 1 karma for creating a bounty (v2 scoring rules)
-    agent.karma -= 1
-    db.commit()
-
-    bounty_id = f"b_{int(datetime.now(UTC).timestamp())}"
-
-    # Deploy escrow contract on-chain (if on a live network)
-    app_id = None
     tx_id = None
     onchain = False
 
+    bounty_id = body.bounty_id or f"b_{int(datetime.now(UTC).timestamp())}"
+
+    if body.bounty_id:
+        pending_bounty = db.query(Bounty).filter(Bounty.bounty_id == body.bounty_id, Bounty.creator == current_user).first()
+        if not pending_bounty:
+            raise HTTPException(status_code=404, detail="Pending bounty not found or you are not the creator")
+
+        if body.app_id and pending_bounty.app_id != body.app_id:
+            raise HTTPException(status_code=400, detail="app_id mismatch. Possible spoofing detected.")
+
+        app_id = pending_bounty.app_id
+    else:
+        app_id = body.app_id
+
     if not sandbox_active:
+        if not body.signed_txn:
+            raise HTTPException(status_code=400, detail="signed_txn is required for on-chain deployment")
+
         try:
+            import base64
+            from algosdk.transaction import wait_for_confirmation
             client = get_algod_client()
 
-            # Compile the escrow contract (approval and clear program)
-            approval_teal = compile_escrow_contract("approval")
-            clear_teal = compile_escrow_contract("clear")
+            if "," in body.signed_txn:
+                stxns = []
+                for b64 in body.signed_txn.split(","):
+                    stxns.append(base64.b64decode(b64.strip()))
+                tx_id = client.send_transactions(stxns)
+            else:
+                from ..algod_client import send_signed_transaction
+                tx_id = send_signed_transaction(body.signed_txn)
 
-            import base64
-            compile_resp_app = client.compile(approval_teal)
-            approval_compiled = base64.b64decode(compile_resp_app.get("result", ""))
-
-            compile_resp_clr = client.compile(clear_teal)
-            clear_compiled = base64.b64decode(compile_resp_clr.get("result", ""))
-
-            if approval_compiled and clear_compiled:
-                params = client.suggested_params()
-
-                # Encode app args
-                from algosdk.abi import ABIType
-                bounty_id_bytes = body.description[:64].encode()
-                escrow_amount = int(body.amount)
-                asset_id = int(body.asset_id)
-                is_hitm = 1 if body.hitm else 0
-                review_days = int(body.hitm_review_days)
-
-                platform_account = get_default_account()
-                if platform_account is None:
-                    raise HTTPException(
-                        status_code=500,
-                        detail="PLATFORM_PRIVATE_KEY not configured"
-                    )
-
-                # Mediator is the platform account (default)
-                mediator_address = platform_account.address
-                # Treasury is configured in config.py
-                treasury_address = settings.TREASURY_ADDRESS or platform_account.address
-
-                from algosdk.abi import Method
-                deploy_method = Method.from_signature("deploy()void")
-                deploy_selector = deploy_method.get_selector()
-
-                from algosdk.transaction import ApplicationCreateTxn, OnComplete, StateSchema
-                create_txn = ApplicationCreateTxn(
-                    sender=platform_account.address,
-                    sp=params,
-                    on_complete=OnComplete.NoOpOC,
-                    approval_program=approval_compiled,
-                    clear_program=clear_compiled,
-                    global_schema=StateSchema(0, 0),
-                    local_schema=StateSchema(0, 0),
-                    app_args=[deploy_selector],
-                    extra_pages=2,
-                )
-
-                signed_txn = create_txn.sign(platform_account.private_key)
-                tx_id = client.send_transaction(signed_txn)
-
-                # Wait for confirmation
-                from algosdk.transaction import wait_for_confirmation
-                pending_info = wait_for_confirmation(client, tx_id, 4)
-                if pending_info:
-                    app_id = pending_info.get("application-index")
-                    onchain = app_id is not None and app_id > 0
-
-                    if onchain:
-                        from algosdk.logic import get_application_address
-                        app_address = get_application_address(app_id)
-
-                        # Step 2: Fund the contract address (escrow amount + 0.35 ALGO for box MBR)
-                        mbr_buffer = 350_000
-                        fund_amount = escrow_amount + mbr_buffer
-
-                        from algosdk.transaction import PaymentTxn
-                        fund_txn = PaymentTxn(
-                            sender=platform_account.address,
-                            sp=params,
-                            receiver=app_address,
-                            amt=fund_amount
-                        )
-                        signed_fund = fund_txn.sign(platform_account.private_key)
-                        fund_txid = client.send_transaction(signed_fund)
-                        wait_for_confirmation(client, fund_txid, 4)
-
-                        # Step 3: Call create_bounty NoOp to initialize contract state
-                        method = Method.from_signature("create_bounty(byte[],uint64,uint64,uint64,uint64,address,address)void")
-                        selector = method.get_selector()
-
-                        import algosdk.encoding as encoding
-                        bounty_id_arg = ABIType.from_string("byte[]").encode(bounty_id_bytes)
-                        escrow_amount_arg = ABIType.from_string("uint64").encode(escrow_amount)
-                        is_hitm_arg = ABIType.from_string("uint64").encode(is_hitm)
-                        asset_id_arg = ABIType.from_string("uint64").encode(asset_id)
-                        review_days_arg = ABIType.from_string("uint64").encode(review_days)
-                        mediator_arg = encoding.decode_address(mediator_address)
-                        treasury_arg = encoding.decode_address(treasury_address)
-
-                        app_args = [
-                            selector,
-                            bounty_id_arg,
-                            escrow_amount_arg,
-                            is_hitm_arg,
-                            asset_id_arg,
-                            review_days_arg,
-                            mediator_arg,
-                            treasury_arg
-                        ]
-
-                        from algosdk.transaction import ApplicationNoOpTxn, calculate_group_id
-                        box_names1 = [
-                            b"state", b"mediator_address", b"treasury_address",
-                            b"escrow_amount", b"bounty_id", b"creator_address",
-                            b"asset_id"
-                        ]
-                        boxes1 = [(app_id, name) for name in box_names1]
-
-                        box_names2 = [
-                            b"is_hitm", b"review_days", b"github_status"
-                        ]
-                        boxes2 = [(app_id, name) for name in box_names2]
-
-                        call_txn1 = ApplicationNoOpTxn(
-                            sender=platform_account.address,
-                            sp=params,
-                            index=app_id,
-                            app_args=app_args,
-                            boxes=boxes1
-                        )
-
-                        status_method = Method.from_signature("set_github_status(byte[])void")
-                        encoded_pending = status_method.args[0].type.encode(b"pending")
-                        call_txn2 = ApplicationNoOpTxn(
-                            sender=platform_account.address,
-                            sp=params,
-                            index=app_id,
-                            app_args=[status_method.get_selector(), encoded_pending],
-                            boxes=boxes2
-                        )
-
-                        # Group transactions to pool the box references budget
-                        gid = calculate_group_id([call_txn1, call_txn2])
-                        call_txn1.group = gid
-                        call_txn2.group = gid
-
-                        signed1 = call_txn1.sign(platform_account.private_key)
-                        signed2 = call_txn2.sign(platform_account.private_key)
-
-                        call_txid = client.send_transactions([signed1, signed2])
-                        wait_for_confirmation(client, call_txid, 4)
-
+            wait_for_confirmation(client, tx_id, 4)
+            onchain = True
         except Exception as e:
-            print(f"[WEB3] Escrow deploy failed: {e}")
+            print(f"[WEB3] Escrow initialization failed: {e}")
             raise HTTPException(
                 status_code=500,
-                detail=f"Failed to deploy escrow smart contract on-chain: {e}"
+                detail=f"Failed to initialize escrow smart contract on-chain: {e}"
             )
 
-    # Create DB record (always works, on-chain or not)
-    new_bounty = Bounty(
-        bounty_id=bounty_id,
-        app_id=app_id,
-        status="open",
-        creator=current_user,
-        amount=body.amount,
-        asset_id=body.asset_id,
-        is_hitm=body.hitm,
-        description=body.description,
-        repo_url=body.repo_url,
-        karma_requirement=body.karma_requirement,
-        hitm_review_days=body.hitm_review_days
-    )
-    db.add(new_bounty)
+    is_custom_treasury = False
+    if body.signed_txn:
+        try:
+            import base64
+            import algosdk.encoding as encoding
+            from algosdk.abi import Method
+
+            b64_list = body.signed_txn.split(",") if "," in body.signed_txn else [body.signed_txn]
+            
+            method = Method.from_signature("create_bounty(byte[],uint64,uint64,uint64,uint64,address,address)void")
+            create_selector = method.get_selector()
+
+            for b64 in b64_list:
+                b64_str = b64.strip()
+                missing_padding = len(b64_str) % 4
+                if missing_padding:
+                    b64_str += "=" * (4 - missing_padding)
+                stxn = encoding.msgpack_decode(b64_str)
+                
+                txn = getattr(stxn, "transaction", stxn)
+                
+                if getattr(txn, "type", None) == "appl":
+                    if txn.app_args and txn.app_args[0] == create_selector:
+                        if len(txn.app_args) > 7:
+                            txn_treasury = encoding.encode_address(txn.app_args[7])
+                            platform_account = get_default_account()
+                            expected_treasury = settings.TREASURY_ADDRESS or (platform_account.address if platform_account else None)
+                            
+                            if expected_treasury and txn_treasury != expected_treasury:
+                                is_custom_treasury = True
+                                break
+        except Exception:
+            pass
+
+    # Now that the transaction is successful, deduct karma
+    if is_custom_treasury:
+        agent.karma -= 5
+    else:
+        agent.karma -= 1
     db.commit()
-    db.refresh(new_bounty)
+
+    if body.bounty_id:
+        pending_bounty.status = "open"
+        pending_bounty.treasury_altered = is_custom_treasury
+        db.commit()
+    else:
+        new_bounty = Bounty(
+            bounty_id=bounty_id,
+            app_id=app_id,
+            status="open",
+            creator=current_user,
+            amount=body.amount,
+            asset_id=body.asset_id,
+            is_hitm=body.hitm,
+            description=body.description,
+            repo_url=body.repo_url,
+            karma_requirement=body.karma_requirement,
+            hitm_review_days=body.hitm_review_days,
+            treasury_altered=is_custom_treasury
+        )
+        db.add(new_bounty)
+        db.commit()
 
     # Broadcast event
     broker.publish("bounty.created", {
