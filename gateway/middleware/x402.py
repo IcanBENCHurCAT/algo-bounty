@@ -15,6 +15,9 @@ class X402Middleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
         path = request.url.path
 
+        if request.method == "OPTIONS":
+            return await call_next(request)
+
         # Only intercept /api/v2/bounties/{id}/accept or related matching endpoints
         if not ("/api/v2/bounties/" in path and path.endswith("/accept")):
             return await call_next(request)
