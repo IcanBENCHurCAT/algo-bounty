@@ -69,8 +69,11 @@ app.add_middleware(SecurityHeadersMiddleware)
 # 3. Webhook API key auth – protects webhook endpoints
 app.add_middleware(WebhookApiKeyAuthMiddleware)
 
-# 4.5. x402 Header Protocol Middleware (Disabled for now)
-# app.add_middleware(X402Middleware)
+# 4.5. x402 Header Protocol Middleware (Enabled only for testing, disabled otherwise)
+import os
+if os.environ.get("TESTING") == "True":
+    from .middleware.x402 import X402Middleware
+    app.add_middleware(X402Middleware)
 
 # 5. GitHub webhook signature verification
 app.add_middleware(GitHubWebhookSignatureMiddleware)
