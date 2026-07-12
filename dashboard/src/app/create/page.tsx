@@ -7,7 +7,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/providers'
 import { createBounty, getDeployTxn } from '@/lib/api'
 import { useWallet } from '@txnlab/use-wallet-react'
-import { bytesToBase64, base64ToBytes } from '@/lib/utils'
+import { bytesToBase64, base64ToBytes } from '@/lib/algorand'
 import { Button } from '@/components/ui/Button'
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card'
 
@@ -161,7 +161,10 @@ export default function CreateBountyPage() {
         if (!signed || signed.length === 0) throw new Error('Wallet rejected signing')
 
         // Encode each signed transaction to base64, then join with comma
-        signedTxnStr = signed.map(bytes => bytesToBase64(bytes)).join(',')
+        signedTxnStr = signed.map(bytes => {
+          if (!bytes) throw new Error('Failed to sign transaction')
+          return bytesToBase64(bytes)
+        }).join(',')
       }
 
       // 2. Submit signed transaction
