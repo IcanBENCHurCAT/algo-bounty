@@ -485,13 +485,16 @@ def send_signed_transaction(signed_txn_b64: str):
         if missing_padding:
             signed_txn_b64 += "=" * (4 - missing_padding)
 
-        # Decode base64 signed transaction
-        decoded_txn = base64.b64decode(signed_txn_b64)
-
-        txid = client.send_raw_transaction(decoded_txn)
+        # Pass the cleaned base64 string directly to send_raw_transaction,
+        # since the SDK internally calls base64.b64decode on it.
+        txid = client.send_raw_transaction(signed_txn_b64)
         return txid
     except Exception as e:
         print(f"[WEB3] Error sending transaction: {e}")
+        try:
+            print(f"[WEB3] signed_txn_b64 len={len(signed_txn_b64)} prefix={signed_txn_b64[:100]}")
+        except Exception as log_err:
+            print(f"[WEB3] Failed to log txn debug info: {log_err}")
         raise e
 
 
