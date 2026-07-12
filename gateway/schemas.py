@@ -19,6 +19,14 @@ class BountyCreate(BaseModel):
     karma_requirement: int = 0
     github_issue: Optional[int] = None
     hitm_review_days: int = 7
+    signed_txn: Optional[str] = None
+    app_id: Optional[int] = None
+    bounty_id: Optional[str] = None
+
+class BountyDeployResponse(BaseModel):
+    unsigned_txns: list[str]
+    bounty_id: str
+    app_id: int
 
 class BountyClaim(BaseModel):
     signed_txn: str
