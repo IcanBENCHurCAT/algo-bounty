@@ -1,0 +1,33 @@
+name: Cleanup Stale PRs
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: write
+    steps:
+      - name: Mark and close stale PRs
+        uses: actions/stale@v9
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          days-before-stale: 3
+          days-before-close: 5
+          days-before-issue-stale: -1
+          days-before-issue-close: -1
+          stale-pr-message: 'This PR has been automatically marked as stale because it has not had recent activity. It will be closed if no further activity occurs. Thank you for your contributions.'
+          close-pr-message: 'This PR was automatically closed because it has been stalled for a long time without any activity. Please feel free to reopen it or create a new one if necessary.'
+          stale-pr-label: 'stale'
+
+      - name: Delete stale branches
+        uses: cbrgm/cleanup-stale-branches-action@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          last-commit-age-days: 37
+          dry-run: false
