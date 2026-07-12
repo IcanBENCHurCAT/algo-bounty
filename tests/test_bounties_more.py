@@ -159,3 +159,33 @@ def test_bounties_router_error_cases(client, db_session, seeded_agents):
     assert res.status_code == 403
     assert "Only bounty participants can open a dispute" in res.json()["detail"]
 
+    # 13. Get submit txn on missing bounty
+    res = client.post("/api/v1/bounties/b_missing/submit/txn", json={"pr_url": "http://pr"}, headers={"Authorization": f"Bearer {worker_token}"})
+    assert res.status_code == 404
+
+    # 14. Get submit txn on non-claimed/rejected bounty
+    res = client.post("/api/v1/bounties/b_open/submit/txn", json={"pr_url": "http://pr"}, headers={"Authorization": f"Bearer {worker_token}"})
+    assert res.status_code == 400
+    assert "Bounty state must be claimed or rejected" in res.json()["detail"]
+
+    # 15. Get submit txn by non-assigned worker
+    res = client.post("/api/v1/bounties/b_claimed/submit/txn", json={"pr_url": "http://pr"}, headers={"Authorization": f"Bearer {stranger_token}"})
+    assert res.status_code == 403
+    assert "Only the claiming worker" in res.json()["detail"]
+
+    # 16. Get submit txn successfully
+    from unittest.mock import patch, MagicMock
+    from algosdk.transaction import SuggestedParams
+    
+    mock_suggested_params = SuggestedParams(fee=1000, first=1, last=100, gh="Z2VuZXNpc19oYXNoXzMyX2J5dGVzX2xvbmdfcGFkZGVk")
+    mock_client = MagicMock()
+    mock_client.suggested_params.return_value = mock_suggested_params
+    
+    with patch("gateway.routers.bounties.get_algod_client", return_value=mock_client), \
+         patch("algosdk.encoding.decode_address", return_value=b"\x00"*32):
+        res = client.post("/api/v1/bounties/b_claimed/submit/txn", json={"pr_url": "http://pr"}, headers={"Authorization": f"Bearer {worker_token}"})
+        assert res.status_code == 200
+        assert "unsigned_txn" in res.json()
+
+
+

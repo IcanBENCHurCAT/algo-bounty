@@ -392,6 +392,70 @@ async def claim_bounty(
 
     return {"bounty_id": bounty_id, "status": "claimed", "worker": current_user, "tx_id": tx_id}
 
+@router.post("/{bounty_id}/submit/txn", response_model=TxnGenResponse, summary="Generate unsigned submit transaction")
+async def get_submit_txn(
+    bounty_id: str,
+    body: WorkSubmit,
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user)
+):
+    b = db.query(Bounty).filter(Bounty.bounty_id == bounty_id).first()
+    if not b:
+        raise HTTPException(status_code=404, detail="Bounty not found")
+    if b.status != "claimed" and b.status != "rejected":
+        raise HTTPException(status_code=400, detail="Bounty state must be claimed or rejected to submit work")
+    if b.worker != current_user:
+        raise HTTPException(status_code=403, detail="Only the claiming worker can submit work")
+
+    client = get_algod_client()
+    params = client.suggested_params()
+    params.fee = 1000
+    params.flat_fee = True
+
+    from algosdk.abi import Method, ABIType
+    submit_method = Method.from_signature("submit_work(byte[],byte[])void")
+    submit_selector = submit_method.get_selector()
+
+    import json
+    proof_dict = body.proof_data or {}
+    proof_bytes = json.dumps(proof_dict).encode('utf-8')
+
+    proof_url_enc = ABIType.from_string("byte[]").encode(body.pr_url.encode('utf-8'))
+    proof_data_enc = ABIType.from_string("byte[]").encode(proof_bytes)
+
+    submit_args = [
+        submit_selector,
+        proof_url_enc,
+        proof_data_enc
+    ]
+
+    app_id = b.app_id or 0
+
+    submit_boxes = [
+        (app_id, b"state"),
+        (app_id, b"proof_url"),
+        (app_id, b"proof_data"),
+        (app_id, b"is_hitm"),
+        (app_id, b"agent_address"),
+        (app_id, b"rejection_count"),
+        (app_id, b"review_days"),
+        (app_id, b"review_deadline")
+    ]
+
+    from algosdk.transaction import ApplicationNoOpTxn
+    submit_txn = ApplicationNoOpTxn(
+        sender=current_user,
+        sp=params,
+        index=app_id,
+        app_args=submit_args,
+        boxes=submit_boxes
+    )
+
+    import algosdk.encoding as encoding
+    txn_b64 = encoding.msgpack_encode(submit_txn)
+
+    return {"unsigned_txn": txn_b64}
+
 @router.post("/{bounty_id}/submit", summary="Submit work for a bounty", description="Allows the claiming worker to submit their solution (PR URL). Updates bounty status to 'submitted'.")
 async def submit_work(
     bounty_id: str,
