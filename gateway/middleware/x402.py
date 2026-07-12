@@ -1,6 +1,5 @@
 import time
 import json
-import redis
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 import nacl.signing
@@ -8,8 +7,11 @@ import nacl.encoding
 from gateway.database import SessionLocal, Agent, Bounty
 from typing import Optional
 
-# Initialize Redis client (defaulting to localhost:6379)
-redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
+try:
+    import redis
+    redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
+except ImportError:
+    redis_client = None
 
 class X402Middleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
@@ -57,15 +59,16 @@ class X402Middleware(BaseHTTPMiddleware):
             )
 
         # 2. Redis-based double-spend/replay check
-        try:
-            if redis_client.set(f"nonce:{nonce}", "1", ex=300, nx=True) is None:
-                return Response(
-                    content='{"error": "Replay attack detected (nonce reused)"}',
-                    status_code=401,
-                    media_type="application/json",
-                )
-        except redis.ConnectionError:
-             pass # allow pass if redis is not running, usually need a proper logger here
+        if redis_client is not None:
+            try:
+                if redis_client.set(f"nonce:{nonce}", "1", ex=300, nx=True) is None:
+                    return Response(
+                        content='{"error": "Replay attack detected (nonce reused)"}',
+                        status_code=401,
+                        media_type="application/json",
+                    )
+            except Exception:
+                 pass # allow pass if redis is not running or connection fails
 
         # Extract bounty ID from path to map scope and check bounty state
         path_parts = path.strip("/").split("/")
