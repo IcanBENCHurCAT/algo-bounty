@@ -136,7 +136,7 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
                 # Encode app args
                 from algosdk.abi import ABIType
                 bounty_id_bytes = body.description[:64].encode()
-                escrow_amount = int(body.amount * 1_000_000)
+                escrow_amount = int(body.amount)
                 asset_id = int(body.asset_id)
                 is_hitm = 1 if body.hitm else 0
                 review_days = int(body.hitm_review_days)
@@ -171,7 +171,7 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
                 )
 
                 signed_txn = create_txn.sign(platform_account.private_key)
-                tx_id = client.send_transaction([signed_txn])
+                tx_id = client.send_transaction(signed_txn)
 
                 # Wait for confirmation
                 from algosdk.transaction import wait_for_confirmation
@@ -196,13 +196,14 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
                             amt=fund_amount
                         )
                         signed_fund = fund_txn.sign(platform_account.private_key)
-                        fund_txid = client.send_transaction([signed_fund])
+                        fund_txid = client.send_transaction(signed_fund)
                         wait_for_confirmation(client, fund_txid, 4)
 
                         # Step 3: Call create_bounty NoOp to initialize contract state
                         method = Method.from_signature("create_bounty(byte[],uint64,uint64,uint64,uint64,address,address)void")
                         selector = method.get_selector()
 
+                        import algosdk.encoding as encoding
                         bounty_id_arg = ABIType.from_string("byte[]").encode(bounty_id_bytes)
                         escrow_amount_arg = ABIType.from_string("uint64").encode(escrow_amount)
                         is_hitm_arg = ABIType.from_string("uint64").encode(is_hitm)
@@ -225,7 +226,8 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
                         from algosdk.transaction import ApplicationNoOpTxn
                         box_names = [
                             b"state", b"mediator_address", b"treasury_address",
-                            b"escrow_amount", b"bounty_id", b"creator_address"
+                            b"escrow_amount", b"bounty_id", b"creator_address",
+                            b"asset_id", b"is_hitm", b"review_days"
                         ]
                         boxes = [(app_id, name) for name in box_names]
 
@@ -237,13 +239,15 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
                             boxes=boxes
                         )
                         signed_call = call_txn.sign(platform_account.private_key)
-                        call_txid = client.send_transaction([signed_call])
+                        call_txid = client.send_transaction(signed_call)
                         wait_for_confirmation(client, call_txid, 4)
 
         except Exception as e:
             print(f"[WEB3] Escrow deploy failed: {e}")
-            app_id = None
-            onchain = False
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to deploy escrow smart contract on-chain: {e}"
+            )
 
     # Create DB record (always works, on-chain or not)
     new_bounty = Bounty(
@@ -289,6 +293,8 @@ async def get_claim_txn(
     b = db.query(Bounty).filter(Bounty.bounty_id == bounty_id).first()
     if not b:
         raise HTTPException(status_code=404, detail="Bounty not found")
+    if b.app_id is None:
+        raise HTTPException(status_code=400, detail="Bounty has no deployed smart contract application ID.")
     if b.status != "open":
         raise HTTPException(status_code=400, detail="Bounty not claimable")
     if b.creator == current_user:
@@ -476,6 +482,8 @@ async def get_approve_txn(
     b = db.query(Bounty).filter(Bounty.bounty_id == bounty_id).first()
     if not b:
         raise HTTPException(status_code=404, detail="Bounty not found")
+    if b.app_id is None:
+        raise HTTPException(status_code=400, detail="Bounty has no deployed smart contract application ID.")
     if b.creator != current_user:
         raise HTTPException(status_code=403, detail="Only creator can approve work")
     if b.status != "submitted":
