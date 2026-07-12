@@ -71,7 +71,8 @@ def list_bounties(
             "repo_url": b.repo_url,
             "karma_requirement": b.karma_requirement,
             "created_at": b.created_at.replace(tzinfo=UTC).isoformat().replace("+00:00", "Z"),
-            "rejection_count": b.rejection_count
+            "rejection_count": b.rejection_count,
+            "treasury_altered": b.treasury_altered
         })
     return {"bounties": result, "total": len(result)}
 
@@ -94,7 +95,8 @@ def get_bounty(bounty_id: str, db: Session = Depends(get_db)):
         "repo_url": b.repo_url,
         "karma_requirement": b.karma_requirement,
         "created_at": b.created_at.replace(tzinfo=UTC).isoformat().replace("+00:00", "Z"),
-        "rejection_count": b.rejection_count
+        "rejection_count": b.rejection_count,
+        "treasury_altered": b.treasury_altered
     }
 
 @router.post("/deploy/txn", response_model=BountyDeployResponse, summary="Generate unsigned deploy transactions")
@@ -349,12 +351,50 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
                 detail=f"Failed to initialize escrow smart contract on-chain: {e}"
             )
 
+    is_custom_treasury = False
+    if body.signed_txn:
+        try:
+            import base64
+            import algosdk.encoding as encoding
+            from algosdk.abi import Method
+
+            b64_list = body.signed_txn.split(",") if "," in body.signed_txn else [body.signed_txn]
+            
+            method = Method.from_signature("create_bounty(byte[],uint64,uint64,uint64,uint64,address,address)void")
+            create_selector = method.get_selector()
+
+            for b64 in b64_list:
+                b64_str = b64.strip()
+                missing_padding = len(b64_str) % 4
+                if missing_padding:
+                    b64_str += "=" * (4 - missing_padding)
+                stxn = encoding.msgpack_decode(b64_str)
+                
+                txn = getattr(stxn, "transaction", stxn)
+                
+                if getattr(txn, "type", None) == "appl":
+                    if txn.app_args and txn.app_args[0] == create_selector:
+                        if len(txn.app_args) > 7:
+                            txn_treasury = encoding.encode_address(txn.app_args[7])
+                            platform_account = get_default_account()
+                            expected_treasury = settings.TREASURY_ADDRESS or (platform_account.address if platform_account else None)
+                            
+                            if expected_treasury and txn_treasury != expected_treasury:
+                                is_custom_treasury = True
+                                break
+        except Exception:
+            pass
+
     # Now that the transaction is successful, deduct karma
-    agent.karma -= 1
+    if is_custom_treasury:
+        agent.karma -= 5
+    else:
+        agent.karma -= 1
     db.commit()
 
     if body.bounty_id:
         pending_bounty.status = "open"
+        pending_bounty.treasury_altered = is_custom_treasury
         db.commit()
     else:
         new_bounty = Bounty(
@@ -368,7 +408,8 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
             description=body.description,
             repo_url=body.repo_url,
             karma_requirement=body.karma_requirement,
-            hitm_review_days=body.hitm_review_days
+            hitm_review_days=body.hitm_review_days,
+            treasury_altered=is_custom_treasury
         )
         db.add(new_bounty)
         db.commit()

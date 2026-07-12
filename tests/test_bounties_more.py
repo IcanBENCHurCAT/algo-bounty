@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import patch, MagicMock
-from gateway.database import Bounty
+from gateway.database import Bounty, Agent
 
 def test_list_bounties_filters(client, db_session):
     # Seed data
@@ -217,5 +217,82 @@ def test_get_txn_endpoints_missing_app_id(client, db_session, seeded_agents):
     res = client.post("/api/v1/bounties/b_claimed_null_app/submit/txn", json={"pr_url": "http://pr"}, headers={"Authorization": f"Bearer {worker_token}"})
     assert res.status_code == 400
     assert "Bounty has no deployed smart contract application ID" in res.json()["detail"]
+
+
+def test_create_bounty_custom_treasury_deduction(client, db_session, seeded_agents):
+    from tests.conftest import get_auth_token
+    import algosdk
+    from algosdk.abi import Method, ABIType
+    from algosdk.transaction import ApplicationNoOpTxn, SignedTransaction, SuggestedParams
+    from unittest.mock import patch, MagicMock
+    
+    creator, worker, low_karma = seeded_agents
+    creator_token = get_auth_token(client, "CREATOR_ADDR")
+    
+    # 1. Seed pending bounty
+    db_session.add(Bounty(
+        bounty_id="b_custom_t",
+        app_id=123,
+        status="pending_deploy",
+        creator="CREATOR_ADDR",
+        amount=1000,
+        repo_url="https://github.com/test/test"
+    ))
+    db_session.commit()
+    
+    mock_decode_map = {
+        "CREATOR_ADDR": b"\x01" * 32,
+        "WORKER_ADDR": b"\x02" * 32,
+    }
+    
+    from unittest.mock import PropertyMock
+
+    with patch("algosdk.encoding.decode_address", side_effect=lambda x: mock_decode_map.get(x, b"\x00" * 32)), \
+         patch("algosdk.encoding.encode_address", side_effect=lambda x: "CREATOR_ADDR" if x == b"\x01" * 32 else "WORKER_ADDR"), \
+         patch("gateway.config.Config.TREASURY_ADDRESS", new_callable=PropertyMock, return_value="CREATOR_ADDR"):
+         
+        # 2. Build custom treasury transaction
+        method = Method.from_signature("create_bounty(byte[],uint64,uint64,uint64,uint64,address,address)void")
+        selector = method.get_selector()
+        
+        b_id = ABIType.from_string("byte[]").encode(b"b_custom_t")
+        amt = ABIType.from_string("uint64").encode(1000)
+        hitm = ABIType.from_string("uint64").encode(0)
+        asset = ABIType.from_string("uint64").encode(0)
+        days = ABIType.from_string("uint64").encode(7)
+        med = algosdk.encoding.decode_address("CREATOR_ADDR")
+        custom_treasury = algosdk.encoding.decode_address("WORKER_ADDR") # different treasury
+        
+        app_args = [selector, b_id, amt, hitm, asset, days, med, custom_treasury]
+        params = SuggestedParams(fee=1000, first=1, last=100, gh="Z2VuZXNpc19oYXNoXzMyX2J5dGVzX2xvbmdfcGFkZGVk")
+        
+        txn = ApplicationNoOpTxn(
+            sender="CREATOR_ADDR",
+            sp=params,
+            index=123,
+            app_args=app_args
+        )
+        stxn = SignedTransaction(txn, "dummy_sig")
+        serialized = algosdk.encoding.msgpack_encode(stxn)
+        
+        # Verify creator karma starts at 50
+        creator_agent = db_session.query(Agent).filter(Agent.address == "CREATOR_ADDR").first()
+        assert creator_agent.karma == 50
+        
+        res = client.post("/api/v1/bounties", json={
+            "description": "Test Custom Treasury",
+            "amount": 1000,
+            "repo_url": "https://github.com/test/test",
+            "signed_txn": serialized,
+            "bounty_id": "b_custom_t",
+            "app_id": 123
+        }, headers={"Authorization": f"Bearer {creator_token}"})
+        
+        assert res.status_code == 200
+        
+        # Verify 5 karma was deducted instead of 1
+        db_session.refresh(creator_agent)
+        assert creator_agent.karma == 45
+
 
 

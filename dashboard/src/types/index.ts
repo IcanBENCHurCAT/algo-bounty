@@ -30,6 +30,7 @@ export interface Bounty {
   updated_at: string
   tags: string[]
   github_issue: number | null
+  treasury_altered?: boolean
 }
 
 export interface BountyListResponse {
