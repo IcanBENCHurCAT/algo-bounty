@@ -224,22 +224,44 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
                         ]
 
                         from algosdk.transaction import ApplicationNoOpTxn
-                        box_names = [
+                        box_names1 = [
                             b"state", b"mediator_address", b"treasury_address",
                             b"escrow_amount", b"bounty_id", b"creator_address",
-                            b"asset_id", b"is_hitm", b"review_days"
+                            b"asset_id"
                         ]
-                        boxes = [(app_id, name) for name in box_names]
+                        boxes1 = [(app_id, name) for name in box_names1]
 
-                        call_txn = ApplicationNoOpTxn(
+                        box_names2 = [
+                            b"is_hitm", b"review_days"
+                        ]
+                        boxes2 = [(app_id, name) for name in box_names2]
+
+                        call_txn1 = ApplicationNoOpTxn(
                             sender=platform_account.address,
                             sp=params,
                             index=app_id,
                             app_args=app_args,
-                            boxes=boxes
+                            boxes=boxes1
                         )
-                        signed_call = call_txn.sign(platform_account.private_key)
-                        call_txid = client.send_transaction(signed_call)
+
+                        info_method = Method.from_signature("get_bounty_info()void")
+                        call_txn2 = ApplicationNoOpTxn(
+                            sender=platform_account.address,
+                            sp=params,
+                            index=app_id,
+                            app_args=[info_method.get_selector()],
+                            boxes=boxes2
+                        )
+
+                        # Group transactions to pool the box references budget
+                        gid = calculate_group_id([call_txn1, call_txn2])
+                        call_txn1.group = gid
+                        call_txn2.group = gid
+
+                        signed1 = call_txn1.sign(platform_account.private_key)
+                        signed2 = call_txn2.sign(platform_account.private_key)
+
+                        call_txid = client.send_transactions([signed1, signed2])
                         wait_for_confirmation(client, call_txid, 4)
 
         except Exception as e:
