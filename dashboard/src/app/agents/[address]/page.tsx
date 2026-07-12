@@ -87,7 +87,10 @@ function BountyRow({ bounty }: { bounty: Bounty }) {
           ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.05)'
         }}
       >
-        <StatusBadge status={bounty.status} />
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <StatusBadge status={bounty.status} />
+          {bounty.treasury_altered && <Badge variant="altered">CUSTOM PAYOUT</Badge>}
+        </div>
         <span style={{ flex: 1, color: '#cbd5e1', fontSize: '0.9375rem', minWidth: '200px' }}>
           {bounty.description && bounty.description.length > 80
             ? bounty.description.slice(0, 80) + '…'

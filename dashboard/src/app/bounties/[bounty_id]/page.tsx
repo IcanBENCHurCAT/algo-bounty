@@ -201,7 +201,10 @@ export default function BountyDetailPage() {
       {/* Header card */}
       <div style={sectionStyle}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-          <StatusBadge status={bounty.status} />
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <StatusBadge status={bounty.status} />
+            {bounty.treasury_altered && <Badge variant="altered">CUSTOM PAYOUT</Badge>}
+          </div>
           <span style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#475569', padding: '0.25rem 0.5rem', background: 'rgba(255,255,255,0.04)', borderRadius: '0.375rem' }}>
             {bounty.bounty_id}
           </span>
