@@ -11,7 +11,10 @@ try:
     import redis
     redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
 except ImportError:
-    redis_client = None
+    class DummyRedis:
+        def set(self, *args, **kwargs):
+            return True
+    redis_client = DummyRedis()
 
 class X402Middleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
