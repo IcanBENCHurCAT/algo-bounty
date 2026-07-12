@@ -167,8 +167,8 @@ class GitHubWebhookSignatureMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         # 1. Verification is only required if GITHUB_WEBHOOK_SECRET is set
-        from .config import settings
-        from .github import verify_webhook_signature
+        from gateway.config import settings
+        from gateway.github import verify_webhook_signature
         import json
 
         secret = settings.GITHUB_WEBHOOK_SECRET
