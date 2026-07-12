@@ -135,11 +135,23 @@ export async function claimBounty(
 
 export async function submitWork(
   bountyId: string,
-  payload: { pr_url: string; proof_data?: Record<string, unknown> },
+  payload: { pr_url: string; proof_data?: Record<string, unknown>; signed_txn?: string },
   token: string,
 ): Promise<{ bounty_id: string; status: string; review_deadline: string }> {
   return apiFetch(
     `/api/v1/bounties/${bountyId}/submit`,
+    { method: 'POST', body: JSON.stringify(payload) },
+    token,
+  )
+}
+
+export async function getSubmitTxn(
+  bountyId: string,
+  payload: { pr_url: string; proof_data?: Record<string, unknown> },
+  token: string,
+): Promise<{ unsigned_txn: string }> {
+  return apiFetch<{ unsigned_txn: string }>(
+    `/api/v1/bounties/${bountyId}/submit/txn`,
     { method: 'POST', body: JSON.stringify(payload) },
     token,
   )
