@@ -98,10 +98,9 @@ export interface WalletAuthState {
 // ─── Notifications ────────────────────────────────────────────────────────────
 
 export interface NotificationItem {
-  notification_id: number
-  event_type: string
+  id: number
+  message: string
   read: boolean
-  data: Record<string, unknown>
   created_at: string
 }
 

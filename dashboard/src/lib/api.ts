@@ -280,7 +280,7 @@ export async function markAllNotificationsRead(token: string): Promise<void> {
   // Mark each unread notification as read
   const notifications = await getNotifications(token)
   const unread = notifications.filter((n) => !n.read)
-  await Promise.all(unread.map((n) => markNotificationRead(n.notification_id, token)))
+  await Promise.all(unread.map((n) => markNotificationRead(n.id, token)))
 }
 
 // ─── Escrow endpoints ─────────────────────────────────────────────────────────
