@@ -11,44 +11,7 @@ import { StatusBadge } from '@/components/ui/Badge'
 import { Badge } from '@/components/ui/Badge'
 import { SkeletonLine, SkeletonCard } from '@/components/ui/Skeleton'
 
-// ─── Stat card ────────────────────────────────────────────────────────────────
 
-function StatCard({
-  label,
-  value,
-  accent = '#6366f1',
-}: {
-  label: string
-  value: React.ReactNode
-  accent?: string
-}) {
-  return (
-    <div
-      style={{
-        padding: '1.25rem',
-        background: 'rgba(255,255,255,0.03)',
-        border: '1px solid rgba(255,255,255,0.07)',
-        borderRadius: '0.875rem',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '0.375rem',
-      }}
-    >
-      <div
-        style={{
-          fontSize: '0.7rem',
-          textTransform: 'uppercase',
-          letterSpacing: '0.08em',
-          color: '#475569',
-          fontWeight: 600,
-        }}
-      >
-        {label}
-      </div>
-      <div style={{ fontSize: '1.5rem', fontWeight: 800, color: accent }}>{value}</div>
-    </div>
-  )
-}
 
 // ─── Address display ──────────────────────────────────────────────────────────
 
@@ -234,9 +197,7 @@ export default function ProfilePage() {
           <p style={{ color: '#64748b', marginBottom: '1.5rem' }}>
             Connect your wallet to view your AlgoBounty profile.
           </p>
-          <Link href="/">
-            <Button>← Back to Marketplace</Button>
-          </Link>
+
         </div>
       </div>
     )
@@ -334,35 +295,12 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* Karma + Reputation */}
+      {/* Karma */}
       {profile && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '1rem' }}>
-          <StatCard label="Karma" value={`★ ${profile.karma}`} accent="#818cf8" />
-          <StatCard
-            label="Reputation Score"
-            value={(profile.reputation_score || 0).toFixed(1)}
-            accent="#22d3ee"
-          />
-          <StatCard
-            label="Bounties Created"
-            value={profile.bounties_created}
-            accent="#10b981"
-          />
-          <StatCard
-            label="Bounties Claimed"
-            value={profile.bounties_claimed}
-            accent="#6366f1"
-          />
-          <StatCard
-            label="Completed"
-            value={profile.bounties_completed}
-            accent="#10b981"
-          />
-          <StatCard
-            label="Disputed"
-            value={profile.bounties_disputed}
-            accent="#ef4444"
-          />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', background: 'rgba(251,146,60,0.12)', color: '#fb923c', padding: '0.375rem 0.875rem', borderRadius: '9999px', fontSize: '0.9375rem', fontWeight: 600, border: '1px solid rgba(251,146,60,0.3)' }}>
+            Karma: ★ {profile.karma}
+          </div>
         </div>
       )}
 
