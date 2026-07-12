@@ -368,6 +368,7 @@ class Bounty(Base):
     hitm_review_days = Column(Integer, default=7)
     rejection_count = Column(Integer, default=0)
     payout_type = Column(String, nullable=True)
+    treasury_altered = Column(Boolean, default=False, nullable=False)
 
 
 class GitHubPR(Base):
