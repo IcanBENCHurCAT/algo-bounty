@@ -1,12 +1,13 @@
 import os
 from datetime import datetime, UTC
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 
 from .database import init_db
 from .rate_limiter import RateLimitMiddleware
 from .algod_client import NODE_ENV, is_sandbox
+# from .middleware.x402 import X402Middleware
 from .middleware import (
     SecurityHeadersMiddleware,
     RequestSizeLimitMiddleware,
@@ -59,23 +60,29 @@ app = FastAPI(title="AlgoBounty Gateway", version="1.0.0", lifespan=lifespan)
 
 # ── Middleware (order matters: top to bottom, bottom to top) ──────
 
-# 1. Request size limit (runs first on incoming requests)
+# 1. Request size limit (runs first on incoming requests, innermost base middleware)
 app.add_middleware(RequestSizeLimitMiddleware)
 
-# 2. CORS with origin allowlist
-app.add_middleware(CORSAllowlistMiddleware, allowed_origins=ALLOWED_ORIGINS)
-
-# 3. Security headers (runs on outgoing responses)
+# 2. Security headers (runs on outgoing responses)
 app.add_middleware(SecurityHeadersMiddleware)
 
-# 4. Webhook API key auth – protects webhook endpoints
+# 3. Webhook API key auth – protects webhook endpoints
 app.add_middleware(WebhookApiKeyAuthMiddleware)
+
+# 4.5. x402 Header Protocol Middleware (Enabled only for testing, disabled otherwise)
+import os
+if os.environ.get("TESTING") == "True":
+    from .middleware.x402 import X402Middleware
+    app.add_middleware(X402Middleware)
 
 # 5. GitHub webhook signature verification
 app.add_middleware(GitHubWebhookSignatureMiddleware)
 
-# 6. Rate limiting – protects public endpoints from DDoS / spam
+# 5. Rate limiting – protects public endpoints from DDoS / spam
 app.add_middleware(RateLimitMiddleware)
+
+# 6. CORS with origin allowlist (MUST BE OUTERMOST so it catches RateLimit/Auth responses)
+app.add_middleware(CORSAllowlistMiddleware, allowed_origins=ALLOWED_ORIGINS)
 
 # Algorand network config
 sandbox_active = is_sandbox()
@@ -94,6 +101,26 @@ async def health_check():
         "sandbox_active": sandbox_active,
         "node_env": NODE_ENV,
     }
+
+# ── Exception Handlers ───────────────────────────────────────────
+
+import traceback
+import sys
+from fastapi.responses import JSONResponse
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Catch-all handler for unhandled exceptions to ensure they are logged and return CORS headers."""
+    print(f"[ERROR] Unhandled exception: {exc}", file=sys.stderr)
+    traceback.print_exc(file=sys.stderr)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": "Internal Server Error",
+            "error_type": type(exc).__name__,
+            "message": str(exc)
+        }
+    )
 
 # ── API Routers ──────────────────────────────────────────────────
 

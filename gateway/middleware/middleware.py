@@ -89,37 +89,31 @@ class CORSAllowlistMiddleware(CORSMiddleware):
     """Enforce an allowlist of allowed CORS origins using Starlette's CORSMiddleware.
 
     Accepts the allowlist as a keyword argument when constructing
-    the middleware instance (see FastAPI docs for passing kwargs to
-    middleware classes).
+    the middleware instance.
     """
 
     def __init__(self, app, allowed_origins: list[str] | None = None):
         origins = allowed_origins or _DEFAULT_ALLOWED_ORIGINS
 
-        # Convert wildcard patterns to regexes
-        origin_regexes = []
+        # Convert wildcard patterns to regexes and combine them
+        regex_parts = []
         for pattern in origins:
-            if "*" in pattern:
-                regex_pattern = re.escape(pattern).replace(r"\*", ".*")
-                origin_regexes.append(re.compile(f"^{regex_pattern}$", re.IGNORECASE))
+            # Escape regex special characters, then restore wildcards as .*
+            regex_pattern = re.escape(pattern).replace(r"\*", ".*")
+            # Ensure exact match by anchoring
+            regex_parts.append(f"^{regex_pattern}$")
+        
+        combined_regex = "|".join(regex_parts)
 
-        # Starlette's CORSMiddleware allows allow_origin_regex
+        # Starlette's CORSMiddleware natively supports allow_origin_regex (as a string)
         super().__init__(
             app=app,
-            allow_origins=[p for p in origins if "*" not in p],
+            allow_origins=[],
+            allow_origin_regex=combined_regex,
             allow_methods=["*"],
             allow_headers=["*"],
             allow_credentials=True,
         )
-        self.origin_regexes = origin_regexes
-
-    def is_allowed_origin(self, origin: str) -> bool:
-        if super().is_allowed_origin(origin):
-            return True
-        for regex in self.origin_regexes:
-            if regex.match(origin):
-                return True
-        return False
 
 
 # ── Webhook API key authentication ──────────────────────────────
@@ -173,8 +167,8 @@ class GitHubWebhookSignatureMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         # 1. Verification is only required if GITHUB_WEBHOOK_SECRET is set
-        from .config import settings
-        from .github import verify_webhook_signature
+        from gateway.config import settings
+        from gateway.github import verify_webhook_signature
         import json
 
         secret = settings.GITHUB_WEBHOOK_SECRET
