@@ -91,7 +91,10 @@ export function BountyCard({ bounty }: BountyCardProps) {
 
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
-          <StatusBadge status={bounty.status} />
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <StatusBadge status={bounty.status} />
+            {bounty.treasury_altered && <Badge variant="altered">CUSTOM PAYOUT</Badge>}
+          </div>
           <span style={{ fontSize: '0.75rem', color: '#475569', flexShrink: 0 }}>
             {formatTimeAgo(bounty.created_at)}
           </span>
