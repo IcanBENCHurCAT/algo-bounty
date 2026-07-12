@@ -232,7 +232,7 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
                         boxes1 = [(app_id, name) for name in box_names1]
 
                         box_names2 = [
-                            b"is_hitm", b"review_days"
+                            b"is_hitm", b"review_days", b"agent_address", b"rejection_count"
                         ]
                         boxes2 = [(app_id, name) for name in box_names2]
 
