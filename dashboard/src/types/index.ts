@@ -50,6 +50,8 @@ export interface BountyFilters {
   sortBy?: 'created_at' | 'amount' | 'karma_required' | 'deadline'
   page?: number
   limit?: number
+  creator?: string
+  worker?: string
 }
 
 // ─── Agent / Profile ──────────────────────────────────────────────────────────
