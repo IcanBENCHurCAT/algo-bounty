@@ -5,9 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/providers'
-import { createBounty, getDeployTxn } from '@/lib/api'
-import { useWallet } from '@txnlab/use-wallet-react'
-import { bytesToBase64, base64ToBytes } from '@/lib/algorand'
+import { createBounty } from '@/lib/api'
 import { Button } from '@/components/ui/Button'
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card'
 
@@ -94,7 +92,6 @@ const sectionStyle: React.CSSProperties = {
 export default function CreateBountyPage() {
   const router = useRouter()
   const { connected, jwt, karma } = useAuth()
-  const { signTransactions } = useWallet()
   const toast = useToast()
 
   const [form, setForm] = useState<FormState>(INITIAL)
@@ -151,31 +148,7 @@ export default function CreateBountyPage() {
           : {}),
       }
 
-      // 1. Get deployment transactions
-      const { unsigned_txns, bounty_id, app_id } = await getDeployTxn(payload, jwt)
-
-      let signedTxnStr: string | undefined = undefined
-      if (unsigned_txns[0] !== 'sandbox_dummy') {
-        const rawBytesArray = unsigned_txns.map(b64 => base64ToBytes(b64))
-        const signed = await signTransactions(rawBytesArray)
-        if (!signed || signed.length === 0) throw new Error('Wallet rejected signing')
-
-        // Encode each signed transaction to base64, then join with comma
-        signedTxnStr = signed.map(bytes => {
-          if (!bytes) throw new Error('Failed to sign transaction')
-          return bytesToBase64(bytes)
-        }).join(',')
-      }
-
-      // 2. Submit signed transaction
-      const finalPayload = {
-        ...payload,
-        signed_txn: signedTxnStr,
-        bounty_id,
-        app_id,
-      }
-
-      const result = await createBounty(finalPayload, jwt)
+      const result = await createBounty(payload, jwt)
       toast.success(`Bounty created! ID: ${result.bounty_id}`)
       router.push(`/bounties/${result.bounty_id}`)
     } catch (err) {

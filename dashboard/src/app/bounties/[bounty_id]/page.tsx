@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import React, { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
@@ -12,7 +12,6 @@ import {
   getClaimTxn,
   claimBounty,
   submitWork,
-  getSubmitTxn,
   getApproveTxn,
   approveWork,
   rejectWork,
@@ -114,9 +113,7 @@ export default function BountyDetailPage() {
     if (!jwt || !prUrl.trim()) return
     setActionLoading(true)
     try {
-      const { unsigned_txn } = await getSubmitTxn(bountyId, { pr_url: prUrl.trim() }, jwt)
-      const signedTxn = await signTransaction(unsigned_txn)
-      await submitWork(bountyId, { pr_url: prUrl.trim(), signed_txn: signedTxn }, jwt)
+      await submitWork(bountyId, { pr_url: prUrl.trim() }, jwt)
       toast.success('Work submitted for review!')
       void fetchBounty()
     } catch (err) {
