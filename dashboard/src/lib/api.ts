@@ -102,7 +102,19 @@ export async function getBounty(bountyId: string): Promise<Bounty> {
   return apiFetch<Bounty>(`/api/v1/bounties/${bountyId}`)
 }
 
+
+export async function getDeployTxn(
+  payload: CreateBountyPayload,
+  token: string,
+): Promise<{ unsigned_txns: string[], bounty_id: string, app_id: number }> {
+  return apiFetch<{ unsigned_txns: string[], bounty_id: string, app_id: number }>('/api/v1/bounties/deploy/txn', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }, token)
+}
+
 export async function createBounty(
+
   payload: CreateBountyPayload,
   token: string,
 ): Promise<CreateBountyResponse> {
