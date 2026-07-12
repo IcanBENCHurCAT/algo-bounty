@@ -223,7 +223,7 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
                             treasury_arg
                         ]
 
-                        from algosdk.transaction import ApplicationNoOpTxn
+                        from algosdk.transaction import ApplicationNoOpTxn, calculate_group_id
                         box_names1 = [
                             b"state", b"mediator_address", b"treasury_address",
                             b"escrow_amount", b"bounty_id", b"creator_address",
