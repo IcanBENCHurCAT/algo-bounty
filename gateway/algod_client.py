@@ -492,6 +492,12 @@ def send_signed_transaction(signed_txn_b64: str):
         return txid
     except Exception as e:
         print(f"[WEB3] Error sending transaction: {e}")
+        try:
+            print(f"[WEB3] signed_txn_b64 len={len(signed_txn_b64)} prefix={signed_txn_b64[:100]}")
+            if 'decoded_txn' in locals():
+                print(f"[WEB3] decoded_txn hex={decoded_txn.hex()[:100]}")
+        except Exception as log_err:
+            print(f"[WEB3] Failed to log txn debug info: {log_err}")
         raise e
 
 
