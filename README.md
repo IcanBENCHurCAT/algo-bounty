@@ -348,7 +348,6 @@ The x402 header protocol middleware is **testing only** (`TESTING=True` env var)
 
 - **`main`** — always deployable, always in sync with latest working code.
 - Work happens on feature branches → merged via PR.
-- The `dashboard-v1-archive/` and `dashboard-legacy/` folders are frozen — do not modify.
 
 ### 13.8 GitHub Actions OIDC
 
