@@ -203,6 +203,7 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
                         method = Method.from_signature("create_bounty(byte[],uint64,uint64,uint64,uint64,address,address)void")
                         selector = method.get_selector()
 
+                        import algosdk.encoding as encoding
                         bounty_id_arg = ABIType.from_string("byte[]").encode(bounty_id_bytes)
                         escrow_amount_arg = ABIType.from_string("uint64").encode(escrow_amount)
                         is_hitm_arg = ABIType.from_string("uint64").encode(is_hitm)
