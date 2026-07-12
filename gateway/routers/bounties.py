@@ -35,9 +35,15 @@ def list_bounties(
     max_amount: Optional[int] = None,
     min_karma: Optional[int] = None,
     hitm: Optional[bool] = None,
+    creator: Optional[str] = None,
+    worker: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     query = db.query(Bounty)
+    if creator:
+        query = query.filter(Bounty.creator == creator)
+    if worker:
+        query = query.filter(Bounty.worker == worker)
     if status:
         query = query.filter(Bounty.status == status)
     if repo:

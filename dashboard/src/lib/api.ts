@@ -91,6 +91,8 @@ export async function getBounties(
   if (filters.sortBy) params.set('sort', filters.sortBy)
   if (filters.page) params.set('page', String(filters.page))
   if (filters.limit) params.set('limit', String(filters.limit))
+  if (filters.creator) params.set('creator', filters.creator)
+  if (filters.worker) params.set('worker', filters.worker)
 
   const qs = params.toString()
   return apiFetch<BountyListResponse>(`/api/v1/bounties${qs ? `?${qs}` : ''}`)
