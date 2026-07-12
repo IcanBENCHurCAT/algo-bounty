@@ -159,6 +159,37 @@ def test_bounties_router_error_cases(client, db_session, seeded_agents):
     assert res.status_code == 403
     assert "Only bounty participants can open a dispute" in res.json()["detail"]
 
+    # 13. Get submit txn on missing bounty
+    res = client.post("/api/v1/bounties/b_missing/submit/txn", json={"pr_url": "http://pr"}, headers={"Authorization": f"Bearer {worker_token}"})
+    assert res.status_code == 404
+
+    # 14. Get submit txn on non-claimed/rejected bounty
+    res = client.post("/api/v1/bounties/b_open/submit/txn", json={"pr_url": "http://pr"}, headers={"Authorization": f"Bearer {worker_token}"})
+    assert res.status_code == 400
+    assert "Bounty state must be claimed or rejected" in res.json()["detail"]
+
+    # 15. Get submit txn by non-assigned worker
+    res = client.post("/api/v1/bounties/b_claimed/submit/txn", json={"pr_url": "http://pr"}, headers={"Authorization": f"Bearer {stranger_token}"})
+    assert res.status_code == 403
+    assert "Only the claiming worker" in res.json()["detail"]
+
+    # 16. Get submit txn successfully
+    from unittest.mock import patch, MagicMock
+    from algosdk.transaction import SuggestedParams
+    
+    b_claimed = db_session.query(Bounty).filter(Bounty.bounty_id == "b_claimed").first()
+    b_claimed.app_id = 123
+    db_session.commit()
+    
+    mock_suggested_params = SuggestedParams(fee=1000, first=1, last=100, gh="Z2VuZXNpc19oYXNoXzMyX2J5dGVzX2xvbmdfcGFkZGVk")
+    mock_client = MagicMock()
+    mock_client.suggested_params.return_value = mock_suggested_params
+    
+    with patch("gateway.routers.bounties.get_algod_client", return_value=mock_client), \
+         patch("algosdk.encoding.decode_address", return_value=b"\x00"*32):
+        res = client.post("/api/v1/bounties/b_claimed/submit/txn", json={"pr_url": "http://pr"}, headers={"Authorization": f"Bearer {worker_token}"})
+        assert res.status_code == 200
+        assert "unsigned_txn" in res.json()
 
 def test_get_txn_endpoints_missing_app_id(client, db_session, seeded_agents):
     from tests.conftest import get_auth_token
@@ -167,6 +198,7 @@ def test_get_txn_endpoints_missing_app_id(client, db_session, seeded_agents):
     # Seed bounty with app_id = None
     db_session.add(Bounty(bounty_id="b_null_app", status="open", creator="CREATOR_ADDR", amount=1000, repo_url="r", app_id=None))
     db_session.add(Bounty(bounty_id="b_submitted_null_app", status="submitted", creator="CREATOR_ADDR", worker="WORKER_ADDR", amount=1000, repo_url="r", app_id=None))
+    db_session.add(Bounty(bounty_id="b_claimed_null_app", status="claimed", creator="CREATOR_ADDR", worker="WORKER_ADDR", amount=1000, repo_url="r", app_id=None))
     db_session.commit()
 
     # Test claim txn missing app_id
@@ -178,6 +210,11 @@ def test_get_txn_endpoints_missing_app_id(client, db_session, seeded_agents):
     # Test approve txn missing app_id
     creator_token = get_auth_token(client, "CREATOR_ADDR")
     res = client.post("/api/v1/bounties/b_submitted_null_app/approve/txn", headers={"Authorization": f"Bearer {creator_token}"})
+    assert res.status_code == 400
+    assert "Bounty has no deployed smart contract application ID" in res.json()["detail"]
+
+    # Test submit txn missing app_id
+    res = client.post("/api/v1/bounties/b_claimed_null_app/submit/txn", json={"pr_url": "http://pr"}, headers={"Authorization": f"Bearer {worker_token}"})
     assert res.status_code == 400
     assert "Bounty has no deployed smart contract application ID" in res.json()["detail"]
 
