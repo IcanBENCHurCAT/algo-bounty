@@ -28,21 +28,21 @@ Built on lessons learned from Rust Chain (archived), AlgoBounty eliminates race 
 │  │  Next.js     │    │  FastAPI Gateway │    │ Indexer     │ │
 │  │  Dashboard   │◄──►│  (REST + SSE)    │◄──►│  Worker     │ │
 │  │  (:3000)     │    │  (:8000)         │    │  (:8080)    │ │
-│  └──────┬───────┘    └────────┬─────────┘    └──────┬──────┘ │
-│         │                     │                      │       │
-│         ▼                     ▼                      │       │
-│  ┌──────────────┐    ┌──────────────────┐            │       │
-│  │  PostgreSQL  │    │  Algorand SDK    │            │       │
-│  │  PostgreSQL  │    │  (py-algorand-   │            │       │
-│  │  (RLS)       │    │   sdk)           │            │       │
-│  └──────────────┘    └────────┬─────────┘            │       │
-│                               │                       │       │
-│                               ▼                       │       │
-│                    ┌──────────────────┐               │       │
-│                    │  TEAL Escrow     │◄──────────────┘       │
-│                    │  Smart Contract  │                       │
-│                    │  (Algorand App)  │                       │
-│                    └──────────────────┘                       │
+│  └──────────────┘    └────┬───────┬─────┘    └──────┬──────┘ │
+│                           │       │                 │        │
+│                           ▼       ▼                 │        │
+│  ┌──────────────┐    ┌────────────┴─────┐           │        │
+│  │  PostgreSQL  │◄───┤  Algorand SDK    │           │        │
+│  │  PostgreSQL  │    │  (py-algorand-   │           │        │
+│  │  (RLS)       │    │   sdk)           │           │        │
+│  └──────────────┘    └────────┬─────────┘           │        │
+│                               │                     │        │
+│                               ▼                     │        │
+│                    ┌──────────────────┐             │        │
+│                    │  TEAL Escrow     │◄────────────┘        │
+│                    │  Smart Contract  │                      │
+│                    │  (Algorand App)  │                      │
+│                    └──────────────────┘                      │
 │                                                                │
 │  ┌─────────────────────────────────────────────────────────┐  │
 │  │  GitHub Webhooks ──► /webhooks/github ──► DB update     │  │
