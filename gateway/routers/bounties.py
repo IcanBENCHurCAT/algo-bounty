@@ -226,7 +226,8 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
                         from algosdk.transaction import ApplicationNoOpTxn
                         box_names = [
                             b"state", b"mediator_address", b"treasury_address",
-                            b"escrow_amount", b"bounty_id", b"creator_address"
+                            b"escrow_amount", b"bounty_id", b"creator_address",
+                            b"asset_id", b"is_hitm", b"review_days"
                         ]
                         boxes = [(app_id, name) for name in box_names]
 
