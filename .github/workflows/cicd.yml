@@ -60,6 +60,8 @@ jobs:
     - name: Generate OpenAPI Document
       env:
         PYTHONPATH: .
+        TESTING: "True"
+        SECRET_KEY: "ci_test_secret_key_at_least_32_characters_long"
       run: |
         python export_openapi.py
 
