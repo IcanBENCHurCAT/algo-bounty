@@ -22,13 +22,13 @@ AlgoBounty is a platform that enables AI agents to claim and complete bounty tas
 
 | Doc | File | Size | Status |
 |-----|------|------|--------|
-| v0 — Rust Chain Autopsy | `v0-rust-chain-autopsy.md` | 18KB | ✅ Done |
-| v1 — TEAL Escrow Contract | `v1-teal-escrow-contract.md` | 28KB | ✅ Done (synced with code) |
-| v2 — Karma/Reputation | `v2-karma-reputation-system.md` | 11KB | ✅ Done |
+| v0 — Rust Chain Autopsy | `0000-rust-chain-autopsy.md` | 18KB | ✅ Done |
+| v1 — TEAL Escrow Contract | `0001-teal-escrow-contract.md` | 28KB | ✅ Done (synced with code) |
+| v2 — Karma/Reputation | `0002-karma-reputation-system.md` | 11KB | ✅ Done |
 | v3 — Verification/Challenge | (covered in v0/v2 docs) | — | ✅ Done |
-| v4 — Dashboard & API | `v4-dashboard-api.md` | 23KB | ✅ Done |
+| v4 — Dashboard & API | `0004-dashboard-api.md` | 23KB | ✅ Done |
 | v5 — GitHub Integration | **NOT WRITTEN** | — | 🔴 **NEXT PRIORITY** |
-| v6 — HITM Mode | `v6-hitm-design.md` | 16KB | ✅ Done |
+| v6 — HITM Mode | `0006-hitm-design.md` | 16KB | ✅ Done |
 | v7 — Governance/Economics | **NOT WRITTEN** | — | 🟡 OPTIONAL |
 
 ### 2. Smart Contract Code
@@ -58,7 +58,7 @@ AlgoBounty is a platform that enables AI agents to claim and complete bounty tas
 
 ### v5 — GitHub Integration (PRIORITY #1)
 
-**File to write:** `v5-github-integration.md`  
+**File to write:** `0005-github-integration.md`
 **Scope:** Full GitHub integration architecture
 
 **Must cover:**
@@ -75,16 +75,16 @@ AlgoBounty is a platform that enables AI agents to claim and complete bounty tas
 7. **Failure Recovery** — Self-check workflow, action failure detection, escrow timeout fallback
 
 **Reference files to read:**
-- `v4-dashboard-api.md` (for notification endpoints)
-- `v6-hitm-design.md` (for HITM workflow)
+- `0004-dashboard-api.md` (for notification endpoints)
+- `0006-hitm-design.md` (for HITM workflow)
 - `escrow.algo` (for state machine)
-- `v1-teal-escrow-contract.md` (for contract methods)
+- `0001-teal-escrow-contract.md` (for contract methods)
 
 ---
 
 ### v7 — Governance & Economics (OPTIONAL)
 
-**File to write:** `v7-governance-economics.md`  
+**File to write:** `0007-governance-economics.md`
 **Scope:** Revenue model, platform economics, optional governance token
 
 **Must cover:**
@@ -102,13 +102,13 @@ AlgoBounty is a platform that enables AI agents to claim and complete bounty tas
 /home/st9797/.openclaw/workspace/algo-bounty-design/
 ├── escrow.algo              # ✅ Puya/pyTEAL escrow contract (25KB)
 ├── tests/test_escrow_contract.py  # ✅ Unit tests
-├── v0-rust-chain-autopsy.md # ✅ Rust Chain failure analysis
-├── v1-teal-escrow-contract.md  # ✅ TEAL contract spec
-├── v2-karma-reputation-system.md  # ✅ Karma system design
-├── v4-dashboard-api.md      # ✅ Dashboard & API design
-├── v6-hitm-design.md        # ✅ HITM mode design
-├── v5-github-integration.md # 🔴 WRITE THIS FIRST
-└── v7-governance-economics.md  # 🟡 Optional
+├── 0000-rust-chain-autopsy.md # ✅ Rust Chain failure analysis
+├── 0001-teal-escrow-contract.md  # ✅ TEAL contract spec
+├── 0002-karma-reputation-system.md  # ✅ Karma system design
+├── 0004-dashboard-api.md      # ✅ Dashboard & API design
+├── 0006-hitm-design.md        # ✅ HITM mode design
+├── 0005-github-integration.md # 🔴 WRITE THIS FIRST
+└── 0007-governance-economics.md  # 🟡 Optional
 
 Server: 10.0.0.67 (DGX Spark GB10)
 User: st9797
@@ -139,8 +139,8 @@ Algorand Indexer: http://localhost:8980 (local indexer)
 **If you're taking over this project, work in this order:**
 
 ### Phase 1: Design Completion
-1. **v5-github-integration.md** — The most critical missing piece
-2. **v7-governance-economics.md** — If building a business case
+1. **0005-github-integration.md** — The most critical missing piece
+2. **0007-governance-economics.md** — If building a business case
 
 ### Phase 2: Smart Contract Implementation
 3. Expand `escrow.algo` with HITM methods from v6 spec
