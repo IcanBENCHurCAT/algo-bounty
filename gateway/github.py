@@ -390,32 +390,43 @@ async def handle_pr_event(db: Session, payload: dict):
     if not issue_numbers:
         return
         
-    bounties_completed = 0
+    bounty_ids = [f"b_{issue_number}" for issue_number in issue_numbers]
+    repo_url = repo.get("html_url", "")
+
+    # Pre-fetch bounties and existing PRs
+    bounties = db.query(Bounty).filter(Bounty.bounty_id.in_(bounty_ids)).all()
+    bounty_by_id = {b.bounty_id: b for b in bounties}
+
+    existing_prs = db.query(GitHubPR).filter(
+        GitHubPR.pr_number == pr_number,
+        GitHubPR.repo_url == repo_url,
+        GitHubPR.bounty_id.in_(bounty_ids)
+    ).all()
+    existing_pr_bounty_ids = {pr.bounty_id for pr in existing_prs}
+
+    # Pre-fetch worker agent if needed for "closed" action
+    worker_agent = None
+    if action == "closed" and pr.get("merged") is True:
+        worker_agent = db.query(Agent).filter(Agent.address == author).first()
 
     for issue_number in issue_numbers:
         bounty_id = f"b_{issue_number}"
         
         # Find the corresponding bounty
-        bounty = db.query(Bounty).filter(Bounty.bounty_id == bounty_id).first()
+        bounty = bounty_by_id.get(bounty_id)
         if not bounty:
             continue
             
-        # Link PR to bounty
-        existing_pr = db.query(GitHubPR).filter(
-            GitHubPR.pr_number == pr_number,
-            GitHubPR.repo_url == repo.get("html_url", ""),
-            GitHubPR.bounty_id == bounty_id
-        ).first()
-
-        if not existing_pr:
+        if bounty_id not in existing_pr_bounty_ids:
             new_pr = GitHubPR(
                 pr_number=pr_number,
-                repo_url=repo.get("html_url", ""),
+                repo_url=repo_url,
                 bounty_id=bounty_id,
                 state=pr.get("state", "open"),
                 author=author
             )
             db.add(new_pr)
+            existing_pr_bounty_ids.add(bounty_id) # Prevent duplicates if multiple same issue numbers
 
         # Handle PR lifecycle actions for each linked bounty
         if action in ["opened", "synchronize"]:
@@ -484,8 +495,11 @@ async def handle_pr_event(db: Session, payload: dict):
                         remove_labels=["bounty:submitted", "bounty:claimed"]
                     )
 
-                    # Track completed bounties to reward karma later
-                    bounties_completed += 1
+                    # Reward karma
+                    if worker_agent:
+                        worker_agent.karma += 5
+                        worker_agent.completed_bounties += 1
+                        db.commit()
                 else:
                     # HITM mode: require human approval, remind creator
                     comment_text = (
