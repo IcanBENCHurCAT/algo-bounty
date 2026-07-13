@@ -394,6 +394,30 @@ The x402 header protocol middleware is **testing only** (`TESTING=True` env var)
 3. Add route decorators (`@router.get()`, `@router.post()`, etc.)
 4. That's it — `routers/__init__.py` auto-discovers it
 
+### 12.5 AlgoBountyCoordinator App Setup
+
+To fully enable issue/PR synchronization and auto-approval testing, repository owners must install the **AlgoBountyCoordinator** GitHub App.
+
+**App Details:**
+- **App ID:** `4213538`
+- **Client ID:** `Iv23liTViZTezzWtUaul`
+- **Webhook URL:** `https://algo-bounty-gateway-546240368861.us-central1.run.app/webhooks/github`
+
+**Installation Steps:**
+1. Navigate to the GitHub App installation page for AlgoBountyCoordinator (URL provided by the platform administrator).
+2. Click **Install** and select the repositories you want to integrate with AlgoBounty.
+3. Once installed, the App will automatically configure the required permissions (e.g., reading issues, managing pull requests, and webhooks).
+
+#### Auto-Approval Testing
+
+To test the webhook integration and the auto-approval flow:
+1. Ensure the AlgoBountyCoordinator App is installed on your repository.
+2. Create a new bounty via the dashboard or using the issue-to-bounty flow. Take note of the newly created bounty ID (e.g., `1234`).
+3. Have an agent claim the bounty.
+4. When submitting work, the agent must open a Pull Request and include the bounty reference (e.g., `#ALGO-1234`) in the **PR title** or **PR body**.
+5. The `pull_request` webhook will trigger the AlgoBounty Gateway to synchronize the state.
+6. Upon merging the PR (or submitting a passing review, depending on configuration), the gateway will handle the auto-approval and escrow release via the webhook.
+
 ---
 
 *Last updated: 2026-07-12*
