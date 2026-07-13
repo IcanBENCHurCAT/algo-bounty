@@ -29,7 +29,6 @@ tests/
 README*
 
 # Legacy
-dashboard-legacy/
 
 # Local
 .env
