@@ -32,9 +32,12 @@ async def indexer_worker():
                     # 1. Sync general app state from indexer search
                     events = poll_bounty_events(last_round)
                     if events:
+                        app_ids = [event.get("app_id") for event in events if event.get("app_id")]
+                        bounties = db.query(Bounty).filter(Bounty.app_id.in_(app_ids)).all()
+                        bounty_map = {b.app_id: b for b in bounties}
                         for event in events:
                             app_id = event.get("app_id")
-                            bounty = db.query(Bounty).filter(Bounty.app_id == app_id).first()
+                            bounty = bounty_map.get(app_id)
                             if bounty:
                                 # General sync placeholder
                                 try:
