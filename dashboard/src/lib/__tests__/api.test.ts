@@ -31,22 +31,23 @@ describe('Token helpers in api.ts', () => {
   });
 
   describe('storeToken', () => {
-    it('stores the token in localStorage', () => {
-      storeToken('new-test-token');
-      expect(localStorage.getItem(JWT_KEY)).toBe('new-test-token');
+    it('should save the provided token to localStorage when window is defined', () => {
+      storeToken('test-jwt-token-123');
+      expect(localStorage.getItem(JWT_KEY)).toBe('test-jwt-token-123');
     });
 
-    it('does not store the token if window is undefined', () => {
+    it('should safely do nothing if window is undefined', () => {
       const originalWindow = global.window;
       const setItemSpy = jest.spyOn(global.localStorage, 'setItem');
 
       // @ts-ignore
       delete global.window;
 
-      storeToken('new-test-token');
+      storeToken('another-token');
 
       expect(setItemSpy).not.toHaveBeenCalled();
 
+      // Restore window
       global.window = originalWindow;
       setItemSpy.mockRestore();
     });
