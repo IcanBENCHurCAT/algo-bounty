@@ -508,3 +508,11 @@ async def handle_pr_event(db: Session, payload: dict):
                         f"Creator @{bounty.creator} must sign the release transaction on the dashboard to pay the worker."
                     )
                     await post_github_comment_and_labels(bounty.repo_url, int(issue_number), comment=comment_text)
+
+    # Reward karma in bulk if any bounties were completed trustlessly
+    if bounties_completed > 0:
+        worker_agent = db.query(Agent).filter(Agent.address == author).first()
+        if worker_agent:
+            worker_agent.karma += (5 * bounties_completed)
+            worker_agent.completed_bounties += bounties_completed
+            db.commit()
