@@ -78,6 +78,19 @@ async def indexer_worker():
                         Bounty.status.in_(["open", "claimed", "submitted", "rejected", "disputed"])
                     ).all()
 
+                    # Pre-fetch agents involved in active bounties to avoid N+1 queries
+                    agent_addresses = set()
+                    for bounty in active_bounties:
+                        if bounty.worker:
+                            agent_addresses.add(bounty.worker)
+                        if bounty.creator:
+                            agent_addresses.add(bounty.creator)
+
+                    agent_map = {}
+                    if agent_addresses:
+                        agents = db.query(Agent).filter(Agent.address.in_(agent_addresses)).all()
+                        agent_map = {agent.address: agent for agent in agents}
+
                     for bounty in active_bounties:
                         if not bounty.app_id:
                             continue
@@ -92,9 +105,9 @@ async def indexer_worker():
                                         bounty.status = "closed"
                                         bounty.payout_type = "PAYOUT"
                                         # Karma: +3 worker, +2 creator
-                                        worker = db.query(Agent).filter(Agent.address == bounty.worker).first()
+                                        worker = agent_map.get(bounty.worker) if bounty.worker else None
                                         if worker: worker.karma += 3
-                                        creator = db.query(Agent).filter(Agent.address == bounty.creator).first()
+                                        creator = agent_map.get(bounty.creator) if bounty.creator else None
                                         if creator: creator.karma += 2
                                         db.commit()
                                         print(f"[WORKER] Bounty {bounty.bounty_id} auto-released.")
@@ -105,9 +118,9 @@ async def indexer_worker():
                                         bounty.status = "closed"
                                         bounty.payout_type = "SPLIT"
                                         # Karma: -1 both parties
-                                        worker = db.query(Agent).filter(Agent.address == bounty.worker).first()
+                                        worker = agent_map.get(bounty.worker) if bounty.worker else None
                                         if worker: worker.karma -= 1
-                                        creator = db.query(Agent).filter(Agent.address == bounty.creator).first()
+                                        creator = agent_map.get(bounty.creator) if bounty.creator else None
                                         if creator: creator.karma -= 1
                                         db.commit()
                                         print(f"[WORKER] Bounty {bounty.bounty_id} dispute timed out (split).")
@@ -116,7 +129,7 @@ async def indexer_worker():
                                 elif log_bytes == b"claim_expired":
                                     if bounty.status != "open":
                                         # Penalty: -20 karma for the ghosting worker
-                                        worker = db.query(Agent).filter(Agent.address == bounty.worker).first()
+                                        worker = agent_map.get(bounty.worker) if bounty.worker else None
                                         if worker: worker.karma -= 20
 
                                         bounty.status = "open"
