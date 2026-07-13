@@ -1,6 +1,6 @@
 import React from 'react'
 
-type BadgeVariant = 'open' | 'claimed' | 'submitted' | 'approved' | 'disputed' | 'refunded' | 'closed' | 'hitm' | 'novice' | 'default'
+type BadgeVariant = 'open' | 'claimed' | 'submitted' | 'approved' | 'disputed' | 'refunded' | 'closed' | 'hitm' | 'novice' | 'default' | 'altered'
 
 const VARIANT_STYLES: Record<BadgeVariant, { bg: string; color: string; dot: string }> = {
   open:      { bg: 'rgba(16,185,129,0.12)', color: '#10b981', dot: '#10b981' },
@@ -13,6 +13,7 @@ const VARIANT_STYLES: Record<BadgeVariant, { bg: string; color: string; dot: str
   hitm:      { bg: 'rgba(251,146,60,0.12)', color: '#fb923c', dot: '#fb923c' },
   novice:    { bg: 'rgba(99,102,241,0.12)', color: '#a78bfa', dot: '#a78bfa' },
   default:   { bg: 'rgba(100,116,139,0.12)',color: '#94a3b8', dot: '#94a3b8' },
+  altered:   { bg: 'rgba(236,72,153,0.12)', color: '#ec4899', dot: '#ec4899' },
 }
 
 interface BadgeProps {

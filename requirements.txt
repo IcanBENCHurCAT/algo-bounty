@@ -13,3 +13,5 @@ slowapi>=0.1.9
 aiohttp>=3.9.0
 psycopg2-binary>=2.9.9
 aiosqlite>=0.20.0
+jcs
+base58

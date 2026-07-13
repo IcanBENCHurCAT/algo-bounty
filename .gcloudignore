@@ -36,7 +36,6 @@ README.md
 *.md
 
 # Legacy
-dashboard-legacy/
 
 # Supabase (CLI tools, not needed)
 supabase/

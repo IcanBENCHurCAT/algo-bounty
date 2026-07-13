@@ -470,13 +470,23 @@ def send_signed_transaction(signed_txn_b64: str):
 
     client = get_algod_client()
     try:
+        # Strip data URL prefix if present (e.g. data:application/octet-stream;base64,)
+        if "," in signed_txn_b64:
+            signed_txn_b64 = signed_txn_b64.split(",")[-1]
+
+        # Strip spaces and quotes
+        signed_txn_b64 = signed_txn_b64.strip().strip('"').strip("'")
+
+        # Support url-safe base64
+        signed_txn_b64 = signed_txn_b64.replace("-", "+").replace("_", "/")
+
+        # Restore missing padding if needed
+        missing_padding = len(signed_txn_b64) % 4
+        if missing_padding:
+            signed_txn_b64 += "=" * (4 - missing_padding)
+
         # Decode base64 signed transaction
         decoded_txn = base64.b64decode(signed_txn_b64)
-
-        # In some cases, the frontend might send a single signed transaction
-        # or a list of them. algosdk.v2client.algod.send_transaction expects a list.
-        # However, if it's already a single signed transaction, we might need to
-        # wrap it in a list or use send_raw_transaction.
 
         txid = client.send_raw_transaction(decoded_txn)
         return txid

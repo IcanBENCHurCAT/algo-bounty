@@ -218,7 +218,7 @@ export default function MarketplacePage() {
             </h1>
             {!loading && (
               <p style={{ margin: '0.25rem 0 0', fontSize: '0.875rem', color: '#475569' }}>
-                {total} bounty{total !== 1 ? 'ies' : ''} available
+                {total} bount{total !== 1 ? 'ies' : 'y'} available
               </p>
             )}
           </div>

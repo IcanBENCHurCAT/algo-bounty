@@ -497,246 +497,246 @@
             "sourceInfo": [
                 {
                     "pc": [
-                        770
+                        766
                     ],
                     "errorMessage": "Bounty already claimed"
                 },
                 {
                     "pc": [
-                        607
+                        603
                     ],
                     "errorMessage": "Bounty already initialized"
                 },
                 {
                     "pc": [
-                        764
+                        760
                     ],
                     "errorMessage": "Cannot claim your own bounty"
                 },
                 {
                     "pc": [
-                        2290
+                        2286
                     ],
                     "errorMessage": "Claim deadline not yet reached"
                 },
                 {
                     "pc": [
-                        793
+                        789
                     ],
                     "errorMessage": "Claiming agent must opt-in to the asset first"
                 },
                 {
                     "pc": [
-                        2740
+                        2736
                     ],
                     "errorMessage": "Contract is not opted into the asset"
                 },
                 {
                     "pc": [
-                        1937
+                        1933
                     ],
                     "errorMessage": "Dispute timeout not yet reached"
                 },
                 {
                     "pc": [
-                        2750
+                        2746
                     ],
                     "errorMessage": "Failed to read contract balance"
                 },
                 {
                     "pc": [
-                        2744
+                        2740
                     ],
                     "errorMessage": "Insufficient asset balance"
                 },
                 {
                     "pc": [
-                        2754
+                        2750
                     ],
                     "errorMessage": "Insufficient contract balance"
                 },
                 {
                     "pc": [
-                        1653
+                        1649
                     ],
                     "errorMessage": "Invalid mediator signature"
                 },
                 {
                     "pc": [
-                        1028
+                        1024
                     ],
                     "errorMessage": "Invalid state for submit_work"
                 },
                 {
                     "pc": [
-                        921,
-                        1047
+                        917,
+                        1043
                     ],
                     "errorMessage": "Only claiming agent can submit work"
                 },
                 {
                     "pc": [
-                        1211
+                        1207
                     ],
                     "errorMessage": "Only creator can approve work"
                 },
                 {
                     "pc": [
-                        2676
+                        2672
                     ],
                     "errorMessage": "Only creator can delete application"
                 },
                 {
                     "pc": [
-                        1339
+                        1335
                     ],
                     "errorMessage": "Only creator can reject work"
                 },
                 {
                     "pc": [
-                        919,
-                        2659
+                        915,
+                        2655
                     ],
                     "errorMessage": "check self.agent_address exists"
                 },
                 {
                     "pc": [
-                        2316,
-                        2500,
-                        2643
+                        2312,
+                        2496,
+                        2639
                     ],
                     "errorMessage": "check self.bounty_id exists"
                 },
                 {
                     "pc": [
-                        2285
+                        2281
                     ],
                     "errorMessage": "check self.claim_deadline exists"
                 },
                 {
                     "pc": [
-                        762,
-                        1209,
-                        1337,
-                        1440,
-                        1750,
-                        1863,
-                        2004,
-                        2190,
-                        2229,
-                        2654,
-                        2674,
-                        2691
+                        758,
+                        1205,
+                        1333,
+                        1436,
+                        1746,
+                        1859,
+                        2000,
+                        2186,
+                        2225,
+                        2650,
+                        2670,
+                        2687
                     ],
                     "errorMessage": "check self.creator_address exists"
                 },
                 {
                     "pc": [
-                        1815,
-                        1927
+                        1811,
+                        1923
                     ],
                     "errorMessage": "check self.dispute_timestamp exists"
                 },
                 {
                     "pc": [
-                        1215,
-                        1657,
-                        1843,
-                        1941,
-                        2088,
-                        2196,
-                        2648
+                        1211,
+                        1653,
+                        1839,
+                        1937,
+                        2084,
+                        2192,
+                        2644
                     ],
                     "errorMessage": "check self.escrow_amount exists"
                 },
                 {
                     "pc": [
-                        1643
+                        1639
                     ],
                     "errorMessage": "check self.mediator_address exists"
                 },
                 {
                     "pc": [
-                        2664
+                        2660
                     ],
                     "errorMessage": "check self.rejection_count exists"
                 },
                 {
                     "pc": [
-                        2079
+                        2075
                     ],
                     "errorMessage": "check self.review_deadline exists"
                 },
                 {
                     "pc": [
-                        754,
-                        906,
-                        1200,
-                        1328,
-                        1419,
-                        1592,
-                        1806,
-                        1918,
-                        2058,
-                        2166,
-                        2277,
-                        2439,
-                        2636
+                        750,
+                        902,
+                        1196,
+                        1324,
+                        1415,
+                        1588,
+                        1802,
+                        1914,
+                        2054,
+                        2162,
+                        2273,
+                        2435,
+                        2632
                     ],
                     "errorMessage": "check self.state_box exists"
                 },
                 {
                     "pc": [
-                        1261,
-                        1994
+                        1257,
+                        1990
                     ],
                     "errorMessage": "check self.treasury_address exists"
                 },
                 {
                     "pc": [
-                        503,
-                        863,
-                        879,
-                        1301,
-                        1392,
-                        1547,
-                        1564,
-                        2380,
-                        2396,
-                        2412,
-                        2512
+                        499,
+                        859,
+                        875,
+                        1297,
+                        1388,
+                        1543,
+                        1560,
+                        2376,
+                        2392,
+                        2408,
+                        2508
                     ],
                     "errorMessage": "invalid array length header"
                 },
                 {
                     "pc": [
-                        510,
-                        870,
-                        886,
-                        1308,
-                        1399,
-                        1554,
-                        1571,
-                        2387,
-                        2403,
-                        2419,
-                        2519
+                        506,
+                        866,
+                        882,
+                        1304,
+                        1395,
+                        1550,
+                        1567,
+                        2383,
+                        2399,
+                        2415,
+                        2515
                     ],
                     "errorMessage": "invalid number of bytes for arc4.dynamic_array<arc4.uint8>"
                 },
                 {
                     "pc": [
-                        576,
-                        587
+                        572,
+                        583
                     ],
                     "errorMessage": "invalid number of bytes for arc4.static_array<arc4.uint8, 32>"
                 },
                 {
                     "pc": [
-                        523,
-                        536,
-                        549,
-                        562
+                        519,
+                        532,
+                        545,
+                        558
                     ],
                     "errorMessage": "invalid number of bytes for arc4.uint64"
                 }
@@ -753,7 +753,7 @@
         "clear": "I3ByYWdtYSB2ZXJzaW9uIDExCiNwcmFnbWEgdHlwZXRyYWNrIGZhbHNlCgovLyBhbGdvcHkuYXJjNC5BUkM0Q29udHJhY3QuY2xlYXJfc3RhdGVfcHJvZ3JhbSgpIC0+IHVpbnQ2NDoKbWFpbjoKICAgIHB1c2hpbnQgMQogICAgcmV0dXJuCg=="
     },
     "byteCode": {
-        "approval": "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",
+        "approval": "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",
         "clear": "C4EBQw=="
     },
     "compilerInfo": {
@@ -768,11 +768,11 @@
     "templateVariables": {
         "CLAIM_TIMEOUT": {
             "type": "AVMUint64",
-            "value": "AAAAAAACowA="
+            "value": "AAAAAAAAAHg="
         },
         "DISPUTE_TIMEOUT": {
             "type": "AVMUint64",
-            "value": "AAAAAAAnjQA="
+            "value": "AAAAAAAAASw="
         }
     }
 }

@@ -91,6 +91,8 @@ export async function getBounties(
   if (filters.sortBy) params.set('sort', filters.sortBy)
   if (filters.page) params.set('page', String(filters.page))
   if (filters.limit) params.set('limit', String(filters.limit))
+  if (filters.creator) params.set('creator', filters.creator)
+  if (filters.worker) params.set('worker', filters.worker)
 
   const qs = params.toString()
   return apiFetch<BountyListResponse>(`/api/v1/bounties${qs ? `?${qs}` : ''}`)
@@ -256,7 +258,7 @@ export async function markAllNotificationsRead(token: string): Promise<void> {
   // Mark each unread notification as read
   const notifications = await getNotifications(token)
   const unread = notifications.filter((n) => !n.read)
-  await Promise.all(unread.map((n) => markNotificationRead(n.notification_id, token)))
+  await Promise.all(unread.map((n) => markNotificationRead(n.id, token)))
 }
 
 // ─── Escrow endpoints ─────────────────────────────────────────────────────────

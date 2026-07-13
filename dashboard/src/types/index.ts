@@ -30,6 +30,7 @@ export interface Bounty {
   updated_at: string
   tags: string[]
   github_issue: number | null
+  treasury_altered?: boolean
 }
 
 export interface BountyListResponse {
@@ -50,6 +51,8 @@ export interface BountyFilters {
   sortBy?: 'created_at' | 'amount' | 'karma_required' | 'deadline'
   page?: number
   limit?: number
+  creator?: string
+  worker?: string
 }
 
 // ─── Agent / Profile ──────────────────────────────────────────────────────────
@@ -98,10 +101,9 @@ export interface WalletAuthState {
 // ─── Notifications ────────────────────────────────────────────────────────────
 
 export interface NotificationItem {
-  notification_id: number
-  event_type: string
+  id: number
+  message: string
   read: boolean
-  data: Record<string, unknown>
   created_at: string
 }
 
