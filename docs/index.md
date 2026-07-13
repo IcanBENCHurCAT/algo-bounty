@@ -401,14 +401,14 @@ The x402 header protocol middleware is **testing only** (`TESTING=True` env var)
 ## Contributing
 
 1. Read the full [documentation](/docs) for architecture and conventions
-2. Check [CONTRIBUTING.md](CONTRIBUTING.md) for coding standards
+2. Check [CONTRIBUTING.md](../CONTRIBUTING.md) for coding standards
 3. Create a feature branch, write tests, submit a PR
 
 ---
 
 ## License
 
-This project is released under the GNU Affero General Public License (AGPLv3). See [LICENSE.md](LICENSE.md) for details.
+This project is released under the GNU Affero General Public License (AGPLv3). See [LICENSE.md](../LICENSE.md) for details.
 
 ---
 
