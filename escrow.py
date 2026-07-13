@@ -567,6 +567,7 @@ class EscrowContract(ARC4Contract):
     @arc4.abimethod(allow_actions=["DeleteApplication"])
     def delete_bounty(self) -> None:
         assert Txn.sender == self.creator_address.value, "Only creator can delete application"
+        assert self.state_box.value == CLOSED, "Bounty must be fully closed/paid out before deletion"
         
         # Sweep all remaining ALGO and close out the contract account
         app_balance, exists = op.AcctParamsGet.acct_balance(Global.current_application_address)
