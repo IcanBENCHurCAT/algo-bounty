@@ -9,7 +9,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
 
 jobs:
@@ -56,6 +56,18 @@ jobs:
       with:
         pytest-xml-coverage-path: ./coverage.xml
         github-token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Generate OpenAPI Document
+      env:
+        PYTHONPATH: .
+      run: |
+        python export_openapi.py
+
+    - name: Commit OpenAPI documentation
+      uses: stefanzweifel/git-auto-commit-action@v5
+      with:
+        commit_message: "docs(api): auto-generate openapi.json"
+        file_pattern: "docs/api/openapi.json"
 
   # ── Dashboard TypeScript Check ─────────────────────────────────────────────
   typecheck-dashboard:
