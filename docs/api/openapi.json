@@ -1079,6 +1079,112 @@
           }
         }
       }
+    },
+    "/api/v1/arbitrators/register": {
+      "post": {
+        "tags": [
+          "arbitrators"
+        ],
+        "summary": "Register as arbitrator",
+        "description": "Register the authenticated high-karma agent as an arbitrator candidate.",
+        "operationId": "register_arbitrator_api_v1_arbitrators_register_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/arbitrators/deregister": {
+      "post": {
+        "tags": [
+          "arbitrators"
+        ],
+        "summary": "Deregister as arbitrator",
+        "description": "Deregister the authenticated agent from the arbitrator candidate pool.",
+        "operationId": "deregister_arbitrator_api_v1_arbitrators_deregister_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/arbitrators/bounties/{bounty_id}/vote": {
+      "post": {
+        "tags": [
+          "arbitrators"
+        ],
+        "summary": "Cast vote on dispute",
+        "description": "Allows an assigned arbitrator to cast their vote on a disputed bounty.",
+        "operationId": "vote_dispute_api_v1_arbitrators_bounties__bounty_id__vote_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "bounty_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Bounty Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1348,6 +1454,30 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "VoteRequest": {
+        "properties": {
+          "vote": {
+            "type": "string",
+            "title": "Vote"
+          },
+          "signed_txn": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signed Txn"
+          }
+        },
+        "type": "object",
+        "required": [
+          "vote"
+        ],
+        "title": "VoteRequest"
       },
       "WorkApprove": {
         "properties": {
