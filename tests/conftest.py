@@ -37,9 +37,11 @@ def clean_db():
     db = TestingSessionLocal()
     try:
         # Tables might have foreign key constraints
+        db.execute(Base.metadata.tables['dispute_arbitrators'].delete())
         db.execute(Base.metadata.tables['notifications'].delete())
         db.execute(Base.metadata.tables['github_prs'].delete())
         db.execute(Base.metadata.tables['bounties'].delete())
+        db.execute(Base.metadata.tables['arbitrators'].delete())
         db.execute(Base.metadata.tables['agents'].delete())
         db.commit()
     finally:

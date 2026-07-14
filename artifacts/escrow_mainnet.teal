@@ -2276,17 +2276,26 @@ delete_bounty:
     assert // check self.creator_address exists
     ==
     assert // Only creator can delete application
-    // escrow.py:571-572
+    // escrow.py:570
+    // assert self.state_box.value == CLOSED, "Bounty must be fully closed/paid out before deletion"
+    bytec_0 // "state"
+    box_get
+    assert // check self.state_box exists
+    btoi
+    pushint 5
+    ==
+    assert // Bounty must be fully closed/paid out before deletion
+    // escrow.py:572-573
     // # Sweep all remaining ALGO and close out the contract account
     // app_balance, exists = op.AcctParamsGet.acct_balance(Global.current_application_address)
     global CurrentApplicationAddress
     acct_params_get AcctBalance
-    // escrow.py:573
+    // escrow.py:574
     // if exists and app_balance > 0:
     bz delete_bounty_after_if_else@5
     dup
     bz delete_bounty_after_if_else@5
-    // escrow.py:574-579
+    // escrow.py:575-580
     // itxn.Payment(
     //     receiver=self.creator_address.value,
     //     amount=UInt64(0),
@@ -2294,27 +2303,27 @@ delete_bounty:
     //     close_remainder_to=self.creator_address.value
     // ).submit()
     itxn_begin
-    // escrow.py:575
+    // escrow.py:576
     // receiver=self.creator_address.value,
     bytec_3 // "creator_address"
     box_get
     assert // check self.creator_address exists
     dup
     itxn_field CloseRemainderTo
-    // escrow.py:576
+    // escrow.py:577
     // amount=UInt64(0),
     intc_0 // 0
     itxn_field Amount
     itxn_field Receiver
-    // escrow.py:574
+    // escrow.py:575
     // itxn.Payment(
     intc_1 // pay
     itxn_field TypeEnum
-    // escrow.py:577
+    // escrow.py:578
     // fee=0,
     intc_0 // 0
     itxn_field Fee
-    // escrow.py:574-579
+    // escrow.py:575-580
     // itxn.Payment(
     //     receiver=self.creator_address.value,
     //     amount=UInt64(0),

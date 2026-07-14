@@ -21,7 +21,7 @@ from .worker import indexer_worker
 from .dependencies import get_db
 from .routers import (
     auth, bounties, algorand, agents,
-    notifications, events, webhooks, oidc
+    notifications, events, webhooks, oidc, arbitrators
 )
 
 # Initialize database
@@ -132,6 +132,7 @@ app.include_router(notifications.router)
 app.include_router(events.router)
 app.include_router(webhooks.router)
 app.include_router(oidc.router)
+app.include_router(arbitrators.router)
 
 # Serve the frontend Dashboard directly under /dashboard
 # Check if directory exists

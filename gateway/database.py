@@ -23,6 +23,8 @@ from .supabase_migration import (
     Bounty,
     GitHubPR,
     Notification,
+    Arbitrator,
+    DisputeArbitrator,
     sync_engine,
     async_engine,
     engine,  # backward-compatible alias (async_engine)
@@ -43,6 +45,8 @@ __all__ = [
     "Bounty",
     "GitHubPR",
     "Notification",
+    "Arbitrator",
+    "DisputeArbitrator",
     "engine",
     "sync_engine",
     "async_engine",
