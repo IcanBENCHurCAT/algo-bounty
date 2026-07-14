@@ -347,33 +347,53 @@ class EscrowContract(ARC4Contract):
         self.state_box.value = UInt64(DISPUTED)
         self.dispute_timestamp.value = Global.latest_timestamp
 
-        # Randomly select 3 arbitrators
+        # Select 3 arbitrators (fallback to treasury if pool size is too small)
         count = self._get_candidate_count()
-        assert count >= 3, "Insufficient arbitrator candidates"
-
-        # Deterministic linear probing selection
-        seed = op.sha256(Txn.tx_id + op.itob(Global.latest_timestamp))
-        start_idx = op.btoi(seed) % count
-
-        idx = start_idx
-        arb1 = Box(Account, key=Bytes(b"cand_addr_") + op.itob(idx)).value
+        treasury = self.treasury_address.value
         creator = self.creator_address.value
         worker = self._get_agent_address()
-        while arb1 == creator or arb1 == worker:
-            idx = (idx + 1) % count
-            arb1 = Box(Account, key=Bytes(b"cand_addr_") + op.itob(idx)).value
 
-        idx = (idx + 1) % count
-        arb2 = Box(Account, key=Bytes(b"cand_addr_") + op.itob(idx)).value
-        while arb2 == creator or arb2 == worker or arb2 == arb1:
-            idx = (idx + 1) % count
-            arb2 = Box(Account, key=Bytes(b"cand_addr_") + op.itob(idx)).value
+        arb1 = treasury
+        arb2 = treasury
+        arb3 = treasury
 
-        idx = (idx + 1) % count
-        arb3 = Box(Account, key=Bytes(b"cand_addr_") + op.itob(idx)).value
-        while arb3 == creator or arb3 == worker or arb3 == arb1 or arb3 == arb2:
-            idx = (idx + 1) % count
-            arb3 = Box(Account, key=Bytes(b"cand_addr_") + op.itob(idx)).value
+        if count > UInt64(0):
+            seed = op.sha256(Txn.tx_id + op.itob(Global.latest_timestamp))
+            start_idx = op.btoi(seed) % count
+
+            # Try to find arb1
+            idx = start_idx
+            found = False
+            searched = UInt64(0)
+            while searched < count and not found:
+                candidate = Box(Account, key=Bytes(b"cand_addr_") + op.itob(idx)).value
+                if candidate != creator and candidate != worker:
+                    arb1 = candidate
+                    found = True
+                idx = (idx + 1) % count
+                searched = searched + 1
+
+            # Try to find arb2
+            found = False
+            searched = UInt64(0)
+            while searched < count and not found:
+                candidate = Box(Account, key=Bytes(b"cand_addr_") + op.itob(idx)).value
+                if candidate != creator and candidate != worker and candidate != arb1:
+                    arb2 = candidate
+                    found = True
+                idx = (idx + 1) % count
+                searched = searched + 1
+
+            # Try to find arb3
+            found = False
+            searched = UInt64(0)
+            while searched < count and not found:
+                candidate = Box(Account, key=Bytes(b"cand_addr_") + op.itob(idx)).value
+                if candidate != creator and candidate != worker and candidate != arb1 and candidate != arb2:
+                    arb3 = candidate
+                    found = True
+                idx = (idx + 1) % count
+                searched = searched + 1
 
         self.arbitrator_1.value = arb1
         self.arbitrator_2.value = arb2
@@ -398,17 +418,18 @@ class EscrowContract(ARC4Contract):
         assert vote_option == UInt64(1) or vote_option == UInt64(2) or vote_option == UInt64(3), "Invalid vote option"
 
         sender = Txn.sender
-        if sender == self.arbitrator_1.value:
-            assert self.arbitrator_1_vote.value == UInt64(0), "Already voted"
+        voted = False
+        if sender == self.arbitrator_1.value and self.arbitrator_1_vote.value == UInt64(0):
             self.arbitrator_1_vote.value = vote_option
-        elif sender == self.arbitrator_2.value:
-            assert self.arbitrator_2_vote.value == UInt64(0), "Already voted"
+            voted = True
+        elif sender == self.arbitrator_2.value and self.arbitrator_2_vote.value == UInt64(0):
             self.arbitrator_2_vote.value = vote_option
-        elif sender == self.arbitrator_3.value:
-            assert self.arbitrator_3_vote.value == UInt64(0), "Already voted"
+            voted = True
+        elif sender == self.arbitrator_3.value and self.arbitrator_3_vote.value == UInt64(0):
             self.arbitrator_3_vote.value = vote_option
-        else:
-            assert False, "Sender is not an assigned arbitrator"
+            voted = True
+
+        assert voted, "Sender is not an assigned arbitrator with a pending vote"
 
         log(Bytes(b"arbitrator_voted"))
         log(sender.bytes)
