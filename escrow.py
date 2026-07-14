@@ -67,6 +67,17 @@ class EscrowContract(ARC4Contract):
         self.mediator_data = Box(MediatorData, key="mediator_data")
         self.treasury_address = Box(Account, key="treasury_address")
         self.oidc_token = Box(Bytes, key="oidc_token")
+        self.candidate_count = Box(UInt64, key="candidate_count")
+        self.arbitrator_1 = Box(Account, key="arbitrator_1")
+        self.arbitrator_2 = Box(Account, key="arbitrator_2")
+        self.arbitrator_3 = Box(Account, key="arbitrator_3")
+        self.arbitrator_1_vote = Box(UInt64, key="arbitrator_1_vote")
+        self.arbitrator_2_vote = Box(UInt64, key="arbitrator_2_vote")
+        self.arbitrator_3_vote = Box(UInt64, key="arbitrator_3_vote")
+
+    def _get_candidate_count(self) -> UInt64:
+        val, exists = self.candidate_count.maybe()
+        return val if exists else UInt64(0)
 
     def _get_asset_id(self) -> UInt64:
         val, exists = self.asset_id.maybe()
@@ -336,7 +347,164 @@ class EscrowContract(ARC4Contract):
         self.state_box.value = UInt64(DISPUTED)
         self.dispute_timestamp.value = Global.latest_timestamp
 
+        # Select 3 arbitrators (fallback to treasury if pool size is too small)
+        count = self._get_candidate_count()
+        treasury = self.treasury_address.value
+        creator = self.creator_address.value
+        worker = self._get_agent_address()
+
+        arb1 = treasury
+        arb2 = treasury
+        arb3 = treasury
+
+        if count > UInt64(0):
+            seed = op.sha256(Txn.tx_id + op.itob(Global.latest_timestamp))
+            start_idx = op.btoi(seed) % count
+
+            # Try to find arb1
+            idx = start_idx
+            found = False
+            searched = UInt64(0)
+            while searched < count and not found:
+                candidate = Box(Account, key=Bytes(b"cand_addr_") + op.itob(idx)).value
+                if candidate != creator and candidate != worker:
+                    arb1 = candidate
+                    found = True
+                idx = (idx + 1) % count
+                searched = searched + 1
+
+            # Try to find arb2
+            found = False
+            searched = UInt64(0)
+            while searched < count and not found:
+                candidate = Box(Account, key=Bytes(b"cand_addr_") + op.itob(idx)).value
+                if candidate != creator and candidate != worker and candidate != arb1:
+                    arb2 = candidate
+                    found = True
+                idx = (idx + 1) % count
+                searched = searched + 1
+
+            # Try to find arb3
+            found = False
+            searched = UInt64(0)
+            while searched < count and not found:
+                candidate = Box(Account, key=Bytes(b"cand_addr_") + op.itob(idx)).value
+                if candidate != creator and candidate != worker and candidate != arb1 and candidate != arb2:
+                    arb3 = candidate
+                    found = True
+                idx = (idx + 1) % count
+                searched = searched + 1
+
+        self.arbitrator_1.value = arb1
+        self.arbitrator_2.value = arb2
+        self.arbitrator_3.value = arb3
+
+        self.arbitrator_1_vote.value = UInt64(0)
+        self.arbitrator_2_vote.value = UInt64(0)
+        self.arbitrator_3_vote.value = UInt64(0)
+
         log(Bytes(b"dispute_submitted"))
+        log(arb1.bytes)
+        log(arb2.bytes)
+        log(arb3.bytes)
+
+    @arc4.abimethod
+    def vote_dispute(self, vote_option: UInt64) -> None:
+        assert Txn.type_enum == TransactionType.ApplicationCall
+        assert Txn.on_completion == OnCompleteAction.NoOp
+        assert Txn.rekey_to == Account(Bytes(32 * b"\x00"))
+
+        assert self.state_box.value == DISPUTED, "Bounty is not disputed"
+        assert vote_option == UInt64(1) or vote_option == UInt64(2) or vote_option == UInt64(3), "Invalid vote option"
+
+        sender = Txn.sender
+        voted = False
+        if sender == self.arbitrator_1.value and self.arbitrator_1_vote.value == UInt64(0):
+            self.arbitrator_1_vote.value = vote_option
+            voted = True
+        elif sender == self.arbitrator_2.value and self.arbitrator_2_vote.value == UInt64(0):
+            self.arbitrator_2_vote.value = vote_option
+            voted = True
+        elif sender == self.arbitrator_3.value and self.arbitrator_3_vote.value == UInt64(0):
+            self.arbitrator_3_vote.value = vote_option
+            voted = True
+
+        assert voted, "Sender is not an assigned arbitrator with a pending vote"
+
+        log(Bytes(b"arbitrator_voted"))
+        log(sender.bytes)
+        log(op.itob(vote_option))
+
+        # Check consensus
+        v1 = self.arbitrator_1_vote.value
+        v2 = self.arbitrator_2_vote.value
+        v3 = self.arbitrator_3_vote.value
+
+        consensus_option = UInt64(0)
+        if v1 != UInt64(0) and v1 == v2:
+            consensus_option = v1
+        elif v1 != UInt64(0) and v1 == v3:
+            consensus_option = v1
+        elif v2 != UInt64(0) and v2 == v3:
+            consensus_option = v2
+        elif v1 != UInt64(0) and v2 != UInt64(0) and v3 != UInt64(0):
+            consensus_option = UInt64(3)
+
+        if consensus_option != UInt64(0):
+            self._execute_arbitration_payout(consensus_option)
+
+    def _execute_arbitration_payout(self, consensus_option: UInt64) -> None:
+        escrow_amount = self.escrow_amount.value
+        asset_id = self._get_asset_id()
+        self._verify_escrow_balance(asset_id, escrow_amount)
+
+        fee_treasury = escrow_amount * 2 // 100
+        fee_arbitration = escrow_amount * 5 // 10000
+
+        v1 = self.arbitrator_1_vote.value
+        v2 = self.arbitrator_2_vote.value
+        v3 = self.arbitrator_3_vote.value
+
+        voted_count = UInt64(0)
+        if v1 != UInt64(0):
+            voted_count = voted_count + 1
+        if v2 != UInt64(0):
+            voted_count = voted_count + 1
+        if v3 != UInt64(0):
+            voted_count = voted_count + 1
+
+        fee_per_arbitrator = fee_arbitration // voted_count
+        actual_arbitration_payout = fee_per_arbitrator * voted_count
+        remaining_amount = escrow_amount - fee_treasury - actual_arbitration_payout
+
+        # Pay Treasury
+        self._send_payout(self.treasury_address.value, fee_treasury, asset_id)
+
+        # Pay voting arbitrators
+        if v1 != UInt64(0):
+            self._send_payout(self.arbitrator_1.value, fee_per_arbitrator, asset_id)
+        if v2 != UInt64(0):
+            self._send_payout(self.arbitrator_2.value, fee_per_arbitrator, asset_id)
+        if v3 != UInt64(0):
+            self._send_payout(self.arbitrator_3.value, fee_per_arbitrator, asset_id)
+
+        if consensus_option == UInt64(1):
+            self.payout_type.value = Bytes(PAYOUT)
+            self.state_box.value = UInt64(CLOSED)
+            self._send_payout(self._get_agent_address(), remaining_amount, asset_id)
+            log(Bytes(b"dispute_resolved_agent_win"))
+        elif consensus_option == UInt64(2):
+            self.payout_type.value = Bytes(REFUND)
+            self.state_box.value = UInt64(CLOSED)
+            self._send_payout(self.creator_address.value, remaining_amount, asset_id)
+            log(Bytes(b"dispute_resolved_creator_win"))
+        else:
+            self.payout_type.value = Bytes(SPLIT)
+            self.state_box.value = UInt64(CLOSED)
+            half_amount = remaining_amount // 2
+            self._send_payout(self.creator_address.value, half_amount, asset_id)
+            self._send_payout(self._get_agent_address(), half_amount, asset_id)
+            log(Bytes(b"dispute_resolved_split"))
 
     @arc4.abimethod
     def resolve_dispute(self, resolution: Bytes, mediator_signature: Bytes) -> None:
@@ -563,6 +731,65 @@ class EscrowContract(ARC4Contract):
         log(self.creator_address.value.bytes)
         log(self.agent_address.value.bytes)
         log(op.itob(self.rejection_count.value))
+
+    @arc4.abimethod
+    def register_arbitrator(self, address: Account) -> None:
+        assert Txn.type_enum == TransactionType.ApplicationCall
+        assert Txn.on_completion == OnCompleteAction.NoOp
+        assert Txn.rekey_to == Account(Bytes(32 * b"\x00"))
+
+        assert Txn.sender == address, "Sender must match address to register"
+
+        # Check if already registered
+        key_idx = Bytes(b"cand_idx_") + address.bytes
+        dummy, exists = op.Box.get(key_idx)
+        assert not exists, "Arbitrator already registered"
+
+        count = self._get_candidate_count()
+
+        # Write to pool
+        Box(Account, key=Bytes(b"cand_addr_") + op.itob(count)).value = address
+        Box(UInt64, key=key_idx).value = count
+
+        # Increment count
+        self.candidate_count.value = count + 1
+
+        log(Bytes(b"arbitrator_registered"))
+        log(address.bytes)
+
+    @arc4.abimethod
+    def deregister_arbitrator(self, address: Account) -> None:
+        assert Txn.type_enum == TransactionType.ApplicationCall
+        assert Txn.on_completion == OnCompleteAction.NoOp
+        assert Txn.rekey_to == Account(Bytes(32 * b"\x00"))
+
+        assert Txn.sender == address, "Sender must match address to deregister"
+
+        # Check if registered
+        key_idx = Bytes(b"cand_idx_") + address.bytes
+        dummy, exists = op.Box.get(key_idx)
+        assert exists, "Arbitrator not registered"
+
+        idx_box = Box(UInt64, key=key_idx)
+        count = self._get_candidate_count()
+        remove_idx = idx_box.value
+        last_idx = count - 1
+
+        if remove_idx != last_idx:
+            # Swap with last element
+            last_addr = Box(Account, key=Bytes(b"cand_addr_") + op.itob(last_idx)).value
+            Box(Account, key=Bytes(b"cand_addr_") + op.itob(remove_idx)).value = last_addr
+            Box(UInt64, key=Bytes(b"cand_idx_") + last_addr.bytes).value = remove_idx
+
+        # Delete last element box and reverse mapping index box
+        key_addr = Bytes(b"cand_addr_") + op.itob(last_idx)
+        assert op.Box.delete(key_addr), "Failed to delete address box"
+        assert op.Box.delete(key_idx), "Failed to delete index box"
+
+        self.candidate_count.value = last_idx
+
+        log(Bytes(b"arbitrator_deregistered"))
+        log(address.bytes)
 
     @arc4.abimethod(allow_actions=["DeleteApplication"])
     def delete_bounty(self) -> None:

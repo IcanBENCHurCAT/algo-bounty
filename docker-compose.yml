@@ -31,28 +31,6 @@ services:
       retries: 3
       start_period: 10s
 
-  # ── Background Indexer Worker ──────────────────────────────────────────────
-  worker:
-    build:
-      context: .
-      dockerfile: gateway/Dockerfile
-    command: ["python", "-m", "gateway.worker"]
-    environment:
-      - DATABASE_URL=sqlite:////data/algobounty.db
-      - SECRET_KEY=dev_secret_key_change_in_prod_at_least_32_chars
-      - ALGORAND_NETWORK=localnet
-      - ALGOD_ADDRESS=http://host.docker.internal:4001
-      - ALGOD_TOKEN=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-      - INDEXER_ADDRESS=http://host.docker.internal:8980
-      - PYTHONPATH=/app
-    volumes:
-      - sqlite-data:/data
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    depends_on:
-      gateway:
-        condition: service_healthy
-    restart: unless-stopped
 
   # ── Next.js Dashboard ──────────────────────────────────────────────────────
   # NOTE: NEXT_PUBLIC_API_URL must point to *host* localhost because SSE

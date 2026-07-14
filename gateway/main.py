@@ -21,7 +21,7 @@ from .worker import indexer_worker
 from .dependencies import get_db
 from .routers import (
     auth, bounties, algorand, agents,
-    notifications, events, webhooks, oidc
+    notifications, events, webhooks, oidc, arbitrators
 )
 
 # Initialize database
@@ -46,13 +46,13 @@ async def lifespan(app: FastAPI):
     await broker.start_cleanup()
     print(f"[SSE] Started cleanup task (interval={broker.CLEANUP_INTERVAL_SECONDS}s, stale_timeout={broker.STALE_TIMEOUT_SECONDS}s)")
 
-    # Start indexer polling background task only if explicitly requested or in sandbox mode (local dev)
-    run_indexer = os.environ.get("RUN_INDEXER", "true" if NODE_ENV == "sandbox" else "false")
+    # Start indexer polling background task inside gateway lifespan by default
+    run_indexer = os.environ.get("RUN_INDEXER", "true")
     if run_indexer.lower() == "true":
         asyncio.create_task(indexer_worker())
         print("[INDEXER] Started background indexer polling task")
     else:
-        print("[INDEXER] Standalone indexer polling task disabled (running as separate worker)")
+        print("[INDEXER] Background indexer polling task disabled")
 
     yield
 
@@ -132,6 +132,7 @@ app.include_router(notifications.router)
 app.include_router(events.router)
 app.include_router(webhooks.router)
 app.include_router(oidc.router)
+app.include_router(arbitrators.router)
 
 # Serve the frontend Dashboard directly under /dashboard
 # Check if directory exists
