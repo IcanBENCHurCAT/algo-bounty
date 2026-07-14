@@ -234,6 +234,23 @@ CREATE TABLE IF NOT EXISTS notifications (
     created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Arbitrators: registered high-karma agents
+CREATE TABLE IF NOT EXISTS arbitrators (
+    address            VARCHAR PRIMARY KEY,
+    status             VARCHAR DEFAULT 'active',
+    registered_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Dispute-arbitrator assignments and votes
+CREATE TABLE IF NOT EXISTS dispute_arbitrators (
+    id                 SERIAL PRIMARY KEY,
+    bounty_id          VARCHAR REFERENCES bounties(bounty_id) ON DELETE CASCADE,
+    arbitrator_address VARCHAR REFERENCES arbitrators(address) ON DELETE CASCADE,
+    vote               VARCHAR,
+    voted_at           TIMESTAMPTZ,
+    UNIQUE(bounty_id, arbitrator_address)
+);
+
 -- Useful indexes
 CREATE INDEX IF NOT EXISTS idx_bounties_creator        ON bounties (creator);
 CREATE INDEX IF NOT EXISTS idx_bounties_repo_url       ON bounties (repo_url);
@@ -243,6 +260,8 @@ CREATE INDEX IF NOT EXISTS idx_github_prs_pr_number    ON github_prs (pr_number)
 CREATE INDEX IF NOT EXISTS idx_github_prs_repo_url     ON github_prs (repo_url);
 CREATE INDEX IF NOT EXISTS idx_github_prs_bounty_id    ON github_prs (bounty_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_recipient ON notifications (recipient);
+CREATE INDEX IF NOT EXISTS idx_dispute_arbitrators_bounty_id ON dispute_arbitrators (bounty_id);
+CREATE INDEX IF NOT EXISTS idx_dispute_arbitrators_arbitrator ON dispute_arbitrators (arbitrator_address);
 """
 
 
@@ -393,6 +412,24 @@ class Notification(Base):
     created_at = Column(
         DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
     )
+
+
+class Arbitrator(Base):
+    __tablename__ = "arbitrators"
+    address = Column(String, primary_key=True, index=True)
+    status = Column(String, default="active", nullable=False)
+    registered_at = Column(
+        DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+
+
+class DisputeArbitrator(Base):
+    __tablename__ = "dispute_arbitrators"
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    bounty_id = Column(String, ForeignKey("bounties.bounty_id", ondelete="CASCADE"), nullable=False)
+    arbitrator_address = Column(String, ForeignKey("arbitrators.address", ondelete="CASCADE"), nullable=False)
+    vote = Column(String, nullable=True)
+    voted_at = Column(DateTime, nullable=True)
 
 
 # ---------------------------------------------------------------------------

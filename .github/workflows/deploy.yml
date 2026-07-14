@@ -59,28 +59,29 @@ jobs:
           --memory=512Mi
           --cpu=1
           --concurrency=250
-          --max-instances=10
+          --max-instances=1
           --timeout=300
-          --min-instances=0
+          --min-instances=1
+          --no-cpu-throttling
           --set-env-vars=ALGORAND_NETWORK=testnet,SUPABASE_URL=${{ secrets.SUPABASE_URL }}
           --set-secrets=DATABASE_URL=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-db-url:latest,SECRET_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-jwt-secret:latest,PLATFORM_PRIVATE_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty_platform_private_key:latest,GITHUB_WEBHOOK_SECRET=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-github-webhook-secret:latest,SUPABASE_SERVICE_ROLE_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty_supabase_service_role_key:latest,GITHUB_PRIVATE_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-github-private-key:latest
 
-    - name: Deploy Indexer to Cloud Run
-      uses: google-github-actions/deploy-cloudrun@v2
-      with:
-        service: algo-bounty-indexer
-        image: ${{ env.IMAGE_TAG }}
-        region: ${{ env.REGION }}
-        flags: |
-          --command=python
-          --args=gateway/worker.py
-          --memory=512Mi
-          --cpu=1
-          --min-instances=1
-          --max-instances=1
-          --no-cpu-throttling
-          --set-env-vars=ALGORAND_NETWORK=testnet,SUPABASE_URL=${{ secrets.SUPABASE_URL }},PYTHONPATH=/app
-          --set-secrets=DATABASE_URL=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-db-url:latest,SECRET_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-jwt-secret:latest,PLATFORM_PRIVATE_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty_platform_private_key:latest,GITHUB_WEBHOOK_SECRET=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-github-webhook-secret:latest,SUPABASE_SERVICE_ROLE_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty_supabase_service_role_key:latest,GITHUB_PRIVATE_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-github-private-key:latest
+#    - name: Deploy Indexer to Cloud Run
+#      uses: google-github-actions/deploy-cloudrun@v2
+#      with:
+#        service: algo-bounty-indexer
+#        image: ${{ env.IMAGE_TAG }}
+#        region: ${{ env.REGION }}
+#        flags: |
+#          --command=python
+#          --args=gateway/worker.py
+#          --memory=512Mi
+#          --cpu=1
+#          --min-instances=1
+#          --max-instances=1
+#          --no-cpu-throttling
+#          --set-env-vars=ALGORAND_NETWORK=testnet,SUPABASE_URL=${{ secrets.SUPABASE_URL }},PYTHONPATH=/app
+#          --set-secrets=DATABASE_URL=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-db-url:latest,SECRET_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-jwt-secret:latest,PLATFORM_PRIVATE_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty_platform_private_key:latest,GITHUB_WEBHOOK_SECRET=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-github-webhook-secret:latest,SUPABASE_SERVICE_ROLE_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty_supabase_service_role_key:latest,GITHUB_PRIVATE_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-github-private-key:latest
 
     - name: Generate Frontend Image Tag
       run: |

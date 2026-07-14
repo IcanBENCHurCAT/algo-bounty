@@ -2,7 +2,8 @@ import asyncio
 import os
 import signal
 import base64
-from gateway.database import SessionLocal, Bounty, Agent
+from datetime import datetime, timezone
+from gateway.database import SessionLocal, Bounty, Agent, Arbitrator, DisputeArbitrator
 from gateway.indexer import poll_bounty_events, fetch_app_logs, read_box_value, sync_bounty_from_chain
 
 async def indexer_worker():
@@ -141,6 +142,110 @@ async def indexer_worker():
                                         bounty.rejection_count = 0
                                         changes_made = True
                                         print(f"[WORKER] Bounty {bounty.bounty_id} claim expired. Reopened.")
+
+                                # Handle Dispute Submitted and Arbitrator Selection
+                                elif log_bytes == b"dispute_submitted":
+                                    from algosdk.encoding import encode_address
+                                    logs_in_tx = log_entry["logs"]
+                                    idx_in_tx = log_entry["logs"].index(log_b64)
+                                    if idx_in_tx + 3 < len(logs_in_tx):
+                                        arb1_bytes = base64.b64decode(logs_in_tx[idx_in_tx + 1])
+                                        arb2_bytes = base64.b64decode(logs_in_tx[idx_in_tx + 2])
+                                        arb3_bytes = base64.b64decode(logs_in_tx[idx_in_tx + 3])
+                                        
+                                        arb1_addr = encode_address(arb1_bytes)
+                                        arb2_addr = encode_address(arb2_bytes)
+                                        arb3_addr = encode_address(arb3_bytes)
+                                        
+                                        bounty.status = "disputed"
+                                        
+                                        # Ensure they exist in DB and update assignment
+                                        for addr in [arb1_addr, arb2_addr, arb3_addr]:
+                                            if not db.query(Arbitrator).filter(Arbitrator.address == addr).first():
+                                                db.add(Arbitrator(address=addr, status="active"))
+                                            
+                                            assignment = db.query(DisputeArbitrator).filter(
+                                                DisputeArbitrator.bounty_id == bounty.bounty_id,
+                                                DisputeArbitrator.arbitrator_address == addr
+                                            ).first()
+                                            if not assignment:
+                                                db.add(DisputeArbitrator(bounty_id=bounty.bounty_id, arbitrator_address=addr))
+                                        
+                                        changes_made = True
+                                        print(f"[WORKER] Bounty {bounty.bounty_id} disputed. Assigned: {arb1_addr}, {arb2_addr}, {arb3_addr}")
+
+                                # Handle Arbitrator Voted
+                                elif log_bytes == b"arbitrator_voted":
+                                    from algosdk.encoding import encode_address
+                                    import struct
+                                    logs_in_tx = log_entry["logs"]
+                                    idx_in_tx = log_entry["logs"].index(log_b64)
+                                    if idx_in_tx + 2 < len(logs_in_tx):
+                                        voter_bytes = base64.b64decode(logs_in_tx[idx_in_tx + 1])
+                                        voter_addr = encode_address(voter_bytes)
+                                        
+                                        vote_opt_bytes = base64.b64decode(logs_in_tx[idx_in_tx + 2])
+                                        vote_opt_val = struct.unpack('>Q', vote_opt_bytes)[0]
+                                        
+                                        vote_map = {1: "worker", 2: "payer", 3: "split"}
+                                        vote_str = vote_map.get(vote_opt_val)
+                                        
+                                        if vote_str:
+                                            assignment = db.query(DisputeArbitrator).filter(
+                                                DisputeArbitrator.bounty_id == bounty.bounty_id,
+                                                DisputeArbitrator.arbitrator_address == voter_addr
+                                            ).first()
+                                            if assignment and assignment.vote is None:
+                                                assignment.vote = vote_str
+                                                assignment.voted_at = datetime.now(timezone.utc)
+                                                changes_made = True
+                                                print(f"[WORKER] Arbitrator {voter_addr} voted {vote_str} on {bounty.bounty_id}")
+
+                                # Handle Dispute Resolved Win/Loss/Split
+                                elif log_bytes == b"dispute_resolved_agent_win":
+                                    if bounty.status != "closed":
+                                        bounty.status = "closed"
+                                        bounty.payout_type = "PAYOUT"
+                                        
+                                        # Karma: +5 worker, -5 creator
+                                        worker = agents_by_address.get(bounty.worker)
+                                        if worker:
+                                            worker.karma += 5
+                                            worker.completed_bounties += 1
+                                        creator = agents_by_address.get(bounty.creator)
+                                        if creator:
+                                            creator.karma -= 5
+                                            creator.disputes_lost += 1
+                                        changes_made = True
+                                        print(f"[WORKER] Dispute on bounty {bounty.bounty_id} resolved in favor of worker.")
+
+                                elif log_bytes == b"dispute_resolved_creator_win":
+                                    if bounty.status != "closed":
+                                        bounty.status = "closed"
+                                        bounty.payout_type = "REFUND"
+                                        
+                                        # Karma: +5 creator, -5 worker
+                                        creator = agents_by_address.get(bounty.creator)
+                                        if creator:
+                                            creator.karma += 5
+                                        worker = agents_by_address.get(bounty.worker)
+                                        if worker:
+                                            worker.karma -= 5
+                                            worker.disputes_lost += 1
+                                        changes_made = True
+                                        print(f"[WORKER] Dispute on bounty {bounty.bounty_id} resolved in favor of creator.")
+
+                                elif log_bytes == b"dispute_resolved_split":
+                                    if bounty.status != "closed":
+                                        bounty.status = "closed"
+                                        bounty.payout_type = "SPLIT"
+                                        # Karma: No karma changes for split (already penalized or neutral)
+                                        # Increment completed_bounties for worker as they did some work
+                                        worker = agents_by_address.get(bounty.worker)
+                                        if worker:
+                                            worker.completed_bounties += 1
+                                        changes_made = True
+                                        print(f"[WORKER] Dispute on bounty {bounty.bounty_id} resolved with a split payout.")
 
                             if log_entry["round"] > last_round:
                                 last_round = log_entry["round"]
