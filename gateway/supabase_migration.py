@@ -262,6 +262,15 @@ CREATE INDEX IF NOT EXISTS idx_github_prs_bounty_id    ON github_prs (bounty_id)
 CREATE INDEX IF NOT EXISTS idx_notifications_recipient ON notifications (recipient);
 CREATE INDEX IF NOT EXISTS idx_dispute_arbitrators_bounty_id ON dispute_arbitrators (bounty_id);
 CREATE INDEX IF NOT EXISTS idx_dispute_arbitrators_arbitrator ON dispute_arbitrators (arbitrator_address);
+
+-- Idempotency tracking for GitHub webhook deliveries (prevents duplicate payout)
+CREATE TABLE IF NOT EXISTS webhook_delivery_records (
+    id           SERIAL PRIMARY KEY,
+    delivery_id  VARCHAR NOT NULL UNIQUE,
+    processed_at TIMESTAMPTZ DEFAULT NOW(),
+    status       VARCHAR DEFAULT 'success'
+);
+CREATE INDEX IF NOT EXISTS idx_webhook_delivery_delivery_id ON webhook_delivery_records (delivery_id);
 """
 
 
@@ -430,6 +439,18 @@ class DisputeArbitrator(Base):
     arbitrator_address = Column(String, ForeignKey("arbitrators.address", ondelete="CASCADE"), nullable=False)
     vote = Column(String, nullable=True)
     voted_at = Column(DateTime, nullable=True)
+
+
+class WebhookDeliveryRecord(Base):
+    """Idempotency guard: stores processed X-GitHub-Delivery IDs to prevent
+    duplicate trustless payout transactions on webhook re-delivery (FR-004)."""
+    __tablename__ = "webhook_delivery_records"
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    delivery_id = Column(String, unique=True, index=True, nullable=False)
+    processed_at = Column(
+        DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+    status = Column(String, default="success", nullable=False)
 
 
 # ---------------------------------------------------------------------------

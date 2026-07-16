@@ -495,6 +495,89 @@ def send_signed_transaction(signed_txn_b64: str):
         raise e
 
 
+def release_trustless(app_id: int, worker_address: str) -> dict:
+    """Dispatch the trustless payout for a bounty escrow (FR-003 / US3/AC1).
+
+    Calls the escrow contract's ``approve_work()`` ABI method, signed by the
+    platform account, which distributes 98% to *worker_address* and 2% to the
+    treasury account stored in the contract at creation time.
+
+    In **sandbox** mode without a ``PLATFORM_PRIVATE_KEY``, a mock tx_id is
+    returned so the gateway can be tested locally without a live node.
+
+    Args:
+        app_id:         The Algorand Application ID of the escrow contract.
+        worker_address: The Algorand address of the worker receiving the payout.
+
+    Returns:
+        dict with keys:
+            success (bool)  — True if the transaction was submitted successfully.
+            tx_id   (str)   — Transaction ID (real or mock).
+            error   (str)   — Error message if success is False, else None.
+    """
+    result: dict = {"success": False, "tx_id": None, "error": None}
+
+    platform_account = get_default_account()
+
+    # Sandbox / test fallback — no platform key required
+    if platform_account is None:
+        if is_sandbox():
+            mock_tx = f"MOCK-TRUSTLESS-RELEASE-{app_id}-SANDBOX"
+            print(f"[ALGOD] Sandbox mock: release_trustless app={app_id} → {mock_tx}")
+            result["success"] = True
+            result["tx_id"] = mock_tx
+            return result
+        result["error"] = (
+            "PLATFORM_PRIVATE_KEY not set — cannot sign trustless release transaction."
+        )
+        return result
+
+    try:
+        client = get_algod_client()
+        params = client.suggested_params()
+        params.flat_fee = True
+        params.fee = 2000  # cover inner transaction fee
+
+        from algosdk.abi import Method
+        from algosdk.transaction import ApplicationCallTxn, OnComplete
+
+        # approve_work() ABI selector
+        method = Method.from_signature("approve_work()void")
+        selector = method.get_selector()
+
+        # Box references needed by approve_work: state_box, worker, treasury
+        boxes = [
+            (app_id, b"state"),
+            (app_id, b"worker_address"),
+            (app_id, b"treasury_address"),
+        ]
+
+        txn = ApplicationCallTxn(
+            sender=platform_account.address,
+            sp=params,
+            index=app_id,
+            on_complete=OnComplete.NoOpOC,
+            app_args=[selector],
+            boxes=boxes,
+        )
+
+        signed = txn.sign(platform_account.private_key)
+        tx_id = client.send_transaction(signed)
+
+        from algosdk.transaction import wait_for_confirmation
+        wait_for_confirmation(client, tx_id, 4)
+
+        print(f"[ALGOD] release_trustless: app={app_id} worker={worker_address} tx={tx_id}")
+        result["success"] = True
+        result["tx_id"] = tx_id
+
+    except Exception as exc:
+        result["error"] = str(exc)
+        print(f"[ALGOD] release_trustless failed: {exc}")
+
+    return result
+
+
 # --- ABI type definitions ---
 # Note: These are reference strings for documentation.
 # The actual contract uses Puya external methods -- deployment is handled

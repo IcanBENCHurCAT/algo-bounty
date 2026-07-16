@@ -43,6 +43,7 @@ def clean_db():
         db.execute(Base.metadata.tables['bounties'].delete())
         db.execute(Base.metadata.tables['arbitrators'].delete())
         db.execute(Base.metadata.tables['agents'].delete())
+        db.execute(Base.metadata.tables['webhook_delivery_records'].delete())
         db.commit()
     finally:
         db.close()

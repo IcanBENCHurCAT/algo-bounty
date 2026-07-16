@@ -11,7 +11,7 @@ from typing import Optional
 from datetime import datetime, UTC
 from sqlalchemy.orm import Session
 from .database import Bounty, GitHubPR, Notification, Agent
-from .algod_client import NODE_ENV
+from .algod_client import NODE_ENV, release_trustless
 from .config import settings
 
 logger = logging.getLogger(__name__)
@@ -303,6 +303,56 @@ async def log_bot_comment(repo_url: str, issue_or_pr_number: int, comment_text: 
     """
     await post_github_comment_and_labels(repo_url, issue_or_pr_number, comment=comment_text)
 
+
+async def _set_commit_status(
+    repo_url: str,
+    sha: str,
+    state: str,
+    description: str = "",
+    context: str = "algobounty/trustless",
+    target_url: str = "",
+) -> None:
+    """Set a GitHub commit status check on the given SHA (T024 / US2/AC2).
+
+    Args:
+        repo_url:    Repository HTML URL (e.g. https://github.com/org/repo).
+        sha:         The full commit SHA to update.
+        state:       One of 'pending', 'success', 'failure', 'error'.
+        description: Human-readable status message (max 140 chars).
+        context:     Unique name for this status check.
+        target_url:  Optional link to more details (e.g. dashboard).
+    """
+    match = re.search(r'github\.com/([^/]+)/([^/]+)', repo_url)
+    if not match:
+        logger.warning(f"[GITHUB] _set_commit_status: cannot parse repo_url={repo_url}")
+        return
+
+    owner = match.group(1)
+    repo = match.group(2)
+    token = await get_github_bot_token(owner, repo)
+
+    if not token:
+        logger.warning("[GITHUB] _set_commit_status: no token available, skipping status update")
+        return
+
+    api_url = f"https://api.github.com/repos/{owner}/{repo}/statuses/{sha}"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github.v3+json",
+        "User-Agent": "AlgoBounty-Gateway",
+    }
+    body: dict = {"state": state, "description": description[:140], "context": context}
+    if target_url:
+        body["target_url"] = target_url
+
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(api_url, json=body, headers=headers)
+            resp.raise_for_status()
+            logger.info(f"[GITHUB] Commit status '{state}' set on {sha[:7]} ({context})")
+    except Exception as exc:
+        logger.error(f"[GITHUB] Failed to set commit status on {sha[:7]}: {exc}")
+
 async def handle_issue_event(db: Session, payload: dict):
     """
     Handle GitHub issue webhook events.
@@ -366,7 +416,11 @@ async def handle_issue_event(db: Session, payload: dict):
         f"- **Bounty ID**: `ALGO-{issue_number}`\n\n"
         f"[📋 Deploy Escrow & Activate on Dashboard](http://localhost:8000/dashboard?bounty_id={bounty_id})"
     )
-    await post_github_comment_and_labels(bounty.repo_url, issue_number, comment=comment_text)
+    await post_github_comment_and_labels(
+        bounty.repo_url, issue_number,
+        comment=comment_text,
+        add_labels=["bounty:open"]
+    )
 
 async def handle_pr_event(db: Session, payload: dict):
     """
@@ -447,6 +501,18 @@ async def handle_pr_event(db: Session, payload: dict):
                     comment=comment_text,
                     add_labels=["bounty:claimed"]
                 )
+
+                # Set GitHub commit status to pending (US2/AC2 — T024)
+                pr_html_url = pr.get("head", {}).get("repo", {}).get("html_url", repo_url)
+                commit_sha = pr.get("head", {}).get("sha", "")
+                if commit_sha:
+                    await _set_commit_status(
+                        repo_url=pr_html_url,
+                        sha=commit_sha,
+                        state="pending",
+                        description=f"Bounty ALGO-{issue_number}: awaiting work submission",
+                        context="algobounty/trustless",
+                    )
                 
             # If bounty is claimed, transition to submitted
             elif bounty.status == "claimed" and bounty.worker == author:
@@ -478,7 +544,22 @@ async def handle_pr_event(db: Session, payload: dict):
             # PR Merged! If trustless mode is on, auto-approve the payout!
             if bounty.status in ["claimed", "submitted"]:
                 if not bounty.is_hitm:
-                    # Trustless mode: auto payout!
+                    # Trustless mode: dispatch on-chain payout before updating DB (T022)
+                    tx_id = None
+                    if bounty.app_id:
+                        payout_result = release_trustless(
+                            app_id=bounty.app_id,
+                            worker_address=bounty.worker or author,
+                        )
+                        if not payout_result["success"]:
+                            logger.error(
+                                f"[GITHUB] release_trustless failed for bounty "
+                                f"{bounty.bounty_id}: {payout_result['error']}"
+                            )
+                            # Do not update DB status — payout did not execute
+                            continue
+                        tx_id = payout_result["tx_id"]
+
                     bounty.status = "closed"
                     bounty.payout_type = "PAYOUT"
                     db.commit()
@@ -486,12 +567,13 @@ async def handle_pr_event(db: Session, payload: dict):
                     comment_text = (
                         f"🎉 **Bounty Completed & Funds Released!**\n\n"
                         f"PR #{pr_number} has been merged. Since this bounty was in **Trustless Mode**, "
-                        f"the escrow has been closed, and funds have been automatically released to @{author}!"
+                        f"the escrow has been closed, and funds have been automatically released to @{author}!\n"
+                        + (f"- **Payout TX**: `{tx_id}`" if tx_id else "")
                     )
                     await post_github_comment_and_labels(
                         bounty.repo_url, int(issue_number),
                         comment=comment_text,
-                        add_labels=["bounty:completed"],
+                        add_labels=["bounty:approved"],
                         remove_labels=["bounty:submitted", "bounty:claimed"]
                     )
 

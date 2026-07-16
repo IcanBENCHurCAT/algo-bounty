@@ -292,3 +292,77 @@ async def test_worker_dispute_resolved_split(db_session, seeded_agents):
     assert worker.karma == 30 # no change
     assert worker.completed_bounties == 1
     assert creator.karma == 50 # no change
+
+
+def test_inactive_arbitrator_penalised(db_session):
+    """T024 - Arbitrators who miss the voting deadline get -5 karma and vote='abstained'."""
+    from datetime import datetime, timezone, timedelta
+    from gateway.worker import check_inactive_arbitrators, ARBITRATOR_VOTE_DEADLINE_HOURS
+
+    # Create a disputed bounty
+    bounty = Bounty(
+        bounty_id="b_inactive_arb",
+        app_id=999,
+        status="disputed",
+        creator="CREATOR_INACTIVE",
+        worker="WORKER_INACTIVE",
+        amount=5000,
+        repo_url="r"
+    )
+    # Create the arbitrator agent
+    arb_agent = Agent(address="INACTIVE_ARB", karma=60)
+    # Register the arbitrator with a timestamp older than the deadline
+    old_time = datetime.now(timezone.utc) - timedelta(hours=ARBITRATOR_VOTE_DEADLINE_HOURS + 1)
+    arb_row = Arbitrator(address="INACTIVE_ARB", status="active", registered_at=old_time)
+    # Assign but no vote yet
+    assignment = DisputeArbitrator(bounty_id="b_inactive_arb", arbitrator_address="INACTIVE_ARB")
+
+    db_session.add_all([bounty, arb_agent, arb_row, assignment])
+    db_session.commit()
+
+    changes = check_inactive_arbitrators(db_session)
+    db_session.commit()
+
+    assert changes is True
+
+    # Assignment should be marked abstained
+    updated = db_session.query(DisputeArbitrator).filter(
+        DisputeArbitrator.bounty_id == "b_inactive_arb",
+        DisputeArbitrator.arbitrator_address == "INACTIVE_ARB"
+    ).first()
+    assert updated.vote == "abstained"
+    assert updated.voted_at is not None
+
+    # Karma should be reduced by 5
+    updated_agent = db_session.query(Agent).filter(Agent.address == "INACTIVE_ARB").first()
+    assert updated_agent.karma == 55  # 60 - 5
+
+
+def test_active_arbitrator_not_penalised(db_session):
+    """T024 - Arbitrators registered AFTER the cutoff should NOT be penalised yet."""
+    from datetime import datetime, timezone
+    from gateway.worker import check_inactive_arbitrators
+
+    bounty = Bounty(
+        bounty_id="b_active_arb",
+        app_id=998,
+        status="disputed",
+        creator="CREATOR_ACTIVE",
+        worker="WORKER_ACTIVE",
+        amount=5000,
+        repo_url="r"
+    )
+    arb_agent = Agent(address="ACTIVE_ARB", karma=60)
+    # Registered just now — well within the 48h window
+    arb_row = Arbitrator(address="ACTIVE_ARB", status="active", registered_at=datetime.now(timezone.utc))
+    assignment = DisputeArbitrator(bounty_id="b_active_arb", arbitrator_address="ACTIVE_ARB")
+
+    db_session.add_all([bounty, arb_agent, arb_row, assignment])
+    db_session.commit()
+
+    changes = check_inactive_arbitrators(db_session)
+
+    assert changes is False
+
+    updated_agent = db_session.query(Agent).filter(Agent.address == "ACTIVE_ARB").first()
+    assert updated_agent.karma == 60  # no penalty

@@ -25,6 +25,7 @@ from .supabase_migration import (
     Notification,
     Arbitrator,
     DisputeArbitrator,
+    WebhookDeliveryRecord,
     sync_engine,
     async_engine,
     engine,  # backward-compatible alias (async_engine)
@@ -47,6 +48,7 @@ __all__ = [
     "Notification",
     "Arbitrator",
     "DisputeArbitrator",
+    "WebhookDeliveryRecord",
     "engine",
     "sync_engine",
     "async_engine",
