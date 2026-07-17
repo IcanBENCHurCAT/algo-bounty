@@ -19,6 +19,7 @@ import re
 
 from fastapi import Request, Response, status
 from starlette.middleware.base import BaseHTTPMiddleware
+from gateway.auth import verify_jwt_token
 
 # ---------------------------------------------------------------------------
 # Rule definitions – (regex, limit, window_seconds, method_filter, special)
@@ -154,9 +155,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         auth_header = request.headers.get("authorization", "")
         if auth_header.startswith("Bearer "):
             token_part = auth_header[7:]
-            # A valid JWT has 3 base64url parts separated by dots.
-            if re.match(r"^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$", token_part):
-                return await call_next(request)
+            try:
+                if verify_jwt_token(token_part):
+                    return await call_next(request)
+            except Exception:
+                pass
 
         # -- 3. Handle SSE (connection-based) --------------------------------
         if special == "connections":

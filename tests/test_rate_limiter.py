@@ -71,9 +71,68 @@ def test_rate_limiter_middleware_bypass():
             assert res.status_code == 429
             assert "Rate limit exceeded" in res.json()["error"]
             
-            # Skip rate limiting with Bearer token
+            # Forged Bearer token now falls back to rate limit
             res = client.get("/api/v1/test-limiter", headers={"Authorization": "Bearer aaa.bbb.ccc"})
+            assert res.status_code == 429
+            assert "Rate limit exceeded" in res.json()["error"]
+
+def test_rate_limiter_valid_jwt_bypass():
+    app = FastAPI()
+    app.add_middleware(RateLimitMiddleware)
+
+    @app.get("/api/v1/test-limiter")
+    def test_route():
+        return {"status": "ok"}
+
+    client = TestClient(app)
+
+    from gateway.rate_limiter import _RULES_COMPILED
+    from gateway.auth import create_jwt_token
+    import re
+    strict_rule = (re.compile(r"^/api/v1/test-limiter$"), 0, 60, None, None)
+
+    _request_log.clear()
+
+    with patch("gateway.rate_limiter._RULES_COMPILED", [strict_rule]):
+        with patch.dict(os.environ, {"TESTING": "False"}):
+            # Without token, hits limit of 0 and gets 429
+            res = client.get("/api/v1/test-limiter")
+            assert res.status_code == 429
+
+            # With real token, bypasses limit of 0
+            real_token = create_jwt_token("TEST_ADDR")
+            res = client.get("/api/v1/test-limiter", headers={"Authorization": f"Bearer {real_token}"})
             assert res.status_code == 200
+
+def test_rate_limiter_expired_jwt_no_bypass():
+    app = FastAPI()
+    app.add_middleware(RateLimitMiddleware)
+
+    @app.get("/api/v1/test-limiter")
+    def test_route():
+        return {"status": "ok"}
+
+    client = TestClient(app)
+
+    from gateway.rate_limiter import _RULES_COMPILED
+    from gateway.auth import create_jwt_token
+    import re
+    strict_rule = (re.compile(r"^/api/v1/test-limiter$"), 0, 60, None, None)
+
+    _request_log.clear()
+
+    with patch("gateway.rate_limiter._RULES_COMPILED", [strict_rule]):
+        with patch.dict(os.environ, {"TESTING": "False"}):
+            # Mock time to create an already expired token
+            with patch("time.time", return_value=0):
+                # Token created with iat=0, exp=86400.
+                # To make it expired now (assuming now is > 86400), we just generate it,
+                # then use it without the time mock so jwt.decode uses real current time.
+                expired_token = create_jwt_token("TEST_ADDR")
+
+            res = client.get("/api/v1/test-limiter", headers={"Authorization": f"Bearer {expired_token}"})
+            assert res.status_code == 429
+            assert "Rate limit exceeded" in res.json()["error"]
 
 def test_rate_limiter_sse_connections():
     app = FastAPI()
