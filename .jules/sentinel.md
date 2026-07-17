@@ -1,0 +1,4 @@
+## 2026-07-16 - [Fix] Remove Unused resolve_did_public_key
+**Vulnerability:** Server-Side Request Forgery (SSRF) in `gateway/crypto.py` `resolve_did_public_key`. The function accepted an arbitrary `did:web:` URI and fetched its `.well-known/did.json` document without validating if the destination domain or IP resolved to an internal, private network (e.g., `127.0.0.1`, `169.254.169.254`).
+**Learning:** Functions that parse user-provided URLs/DIDs and make outbound HTTP requests must implement robust domain and IP whitelisting or local-address blocking to prevent SSRF, even if the scheme is hardcoded to `https`. Unused code is a liability.
+**Prevention:** Remove dead/unused code to reduce attack surface. For active code, use libraries like `advocate` or implement strict IP checking (reject RFC 1918, RFC 4193, RFC 6890 addresses) before dispatching the `httpx` request.
