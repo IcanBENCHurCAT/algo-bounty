@@ -286,7 +286,7 @@ def compile_escrow_contract(program_type: str = "approval") -> str:
 
         result = subprocess.run(
             [algokit_cmd, 'compile', 'python', str(contract_path), '--out-dir', str(base_dir / 'artifacts'), '--output-teal', '--template-var', 'DISPUTE_TIMEOUT=300', '--template-var', 'CLAIM_TIMEOUT=120'],
-            capture_output=True, text=True, timeout=30,
+            capture_output=True, text=True, timeout=30, shell=False
         )
         if result.returncode == 0:
             stdout_str = getattr(result, "stdout", "")
