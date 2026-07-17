@@ -163,6 +163,7 @@ Before implementing features, consult the corresponding design document:
 - **Python**: Follow PEP 8. Use type hints. Use `ruff` for linting.
 - **Frontend**: Use functional components and hooks. Follow the Next.js App Router conventions.
 - **Security**: Never hardcode secrets. Use environment variables. Verify all blockchain interactions.
+- **UX Audits & Simulations**: When executing proxy user experience tests, always run actual Playwright scripts against the running dashboard and gateway services to capture real screenshots. Generating synthetic mockup images using AI image generation tools (e.g. `generate_image`, Stable Diffusion, Flux, or DALL-E) is strictly forbidden.
 
 ---
 

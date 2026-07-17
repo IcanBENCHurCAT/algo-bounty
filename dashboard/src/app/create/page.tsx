@@ -61,7 +61,7 @@ const labelStyle: React.CSSProperties = {
   fontWeight: 600,
   textTransform: 'uppercase',
   letterSpacing: '0.07em',
-  color: '#64748b',
+  color: 'var(--color-text-secondary)',
 }
 
 const inputStyle: React.CSSProperties = {
@@ -69,7 +69,7 @@ const inputStyle: React.CSSProperties = {
   borderRadius: '0.625rem',
   background: 'rgba(255,255,255,0.04)',
   border: '1px solid rgba(255,255,255,0.1)',
-  color: '#e2e8f0',
+  color: 'var(--color-text-primary)',
   fontSize: '0.9375rem',
   outline: 'none',
   width: '100%',
@@ -180,10 +180,10 @@ export default function CreateBountyPage() {
           }}
         >
           <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔐</div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#f1f5f9', marginBottom: '0.75rem' }}>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--color-text-primary)', marginBottom: '0.75rem' }}>
             Connect Your Wallet
           </h1>
-          <p style={{ color: '#64748b', marginBottom: '1.5rem' }}>
+          <p style={{ color: 'var(--color-text-secondary)', marginBottom: '1.5rem' }}>
             You need a connected wallet to create a bounty.
           </p>
           <Link href="/">
@@ -210,24 +210,24 @@ export default function CreateBountyPage() {
     >
       {/* Header */}
       <div>
-        <nav style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', color: '#475569', marginBottom: '1.25rem' }}>
-          <Link href="/" style={{ color: '#6366f1' }}>Marketplace</Link>
+        <nav style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', color: 'var(--color-text-muted)', marginBottom: '1.25rem' }}>
+          <Link href="/" style={{ color: 'var(--color-accent)' }}>Marketplace</Link>
           <span>/</span>
           <span>Create Bounty</span>
         </nav>
-        <h1 style={{ margin: 0, fontSize: 'clamp(1.5rem, 4vw, 2rem)', fontWeight: 900, color: '#f1f5f9' }}>
+        <h1 style={{ margin: 0, fontSize: 'clamp(1.5rem, 4vw, 2rem)', fontWeight: 900, color: 'var(--color-text-primary)' }}>
           Create Bounty
         </h1>
-        <p style={{ margin: '0.5rem 0 0', color: '#64748b' }}>
+        <p style={{ margin: '0.5rem 0 0', color: 'var(--color-text-secondary)' }}>
           Post a task and escrow the reward on Algorand.{' '}
-          <span style={{ color: '#818cf8' }}>★ Your karma: {karma}</span>
+          <span style={{ color: 'var(--color-accent-2)' }}>★ Your karma: {karma}</span>
         </p>
       </div>
 
       <form onSubmit={(e) => void handleSubmit(e)} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
         {/* Bounty Details */}
         <div style={sectionStyle}>
-          <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#f1f5f9' }}>Bounty Details</h2>
+          <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--color-text-primary)' }}>Bounty Details</h2>
 
           <div style={fieldStyle}>
             <label htmlFor="description" style={labelStyle}>Description *</label>
@@ -239,7 +239,7 @@ export default function CreateBountyPage() {
               onChange={(e) => set('description', e.target.value)}
               style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.6 }}
             />
-            {errors.description && <span style={{ color: '#ef4444', fontSize: '0.8rem' }}>{errors.description}</span>}
+            {errors.description && <span style={{ color: 'var(--color-danger)', fontSize: '0.8rem' }}>{errors.description}</span>}
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
@@ -256,11 +256,11 @@ export default function CreateBountyPage() {
                   onChange={(e) => set('amountAlgo', e.target.value)}
                   style={{ ...inputStyle, paddingRight: '4rem' }}
                 />
-                <span style={{ position: 'absolute', right: '0.875rem', top: '50%', transform: 'translateY(-50%)', color: '#475569', fontSize: '0.875rem', pointerEvents: 'none' }}>
+                <span style={{ position: 'absolute', right: '0.875rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)', fontSize: '0.875rem', pointerEvents: 'none' }}>
                   ALGO
                 </span>
               </div>
-              {errors.amountAlgo && <span style={{ color: '#ef4444', fontSize: '0.8rem' }}>{errors.amountAlgo}</span>}
+              {errors.amountAlgo && <span style={{ color: 'var(--color-danger)', fontSize: '0.8rem' }}>{errors.amountAlgo}</span>}
             </div>
 
             <div style={fieldStyle}>
@@ -292,8 +292,8 @@ export default function CreateBountyPage() {
                 onChange={(e) => set('deadlineRounds', e.target.value)}
                 style={inputStyle}
               />
-              {errors.deadlineRounds && <span style={{ color: '#ef4444', fontSize: '0.8rem' }}>{errors.deadlineRounds}</span>}
-              <span style={{ fontSize: '0.75rem', color: '#475569' }}>
+              {errors.deadlineRounds && <span style={{ color: 'var(--color-danger)', fontSize: '0.8rem' }}>{errors.deadlineRounds}</span>}
+              <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
                 ~{Math.round(Number(form.deadlineRounds || 0) / 20_000 * 100) / 100} days
               </span>
             </div>
@@ -315,7 +315,7 @@ export default function CreateBountyPage() {
 
         {/* Repository */}
         <div style={sectionStyle}>
-          <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#f1f5f9' }}>Repository</h2>
+          <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--color-text-primary)' }}>Repository</h2>
 
           <div style={fieldStyle}>
             <label htmlFor="repo-url" style={labelStyle}>GitHub Repository URL *</label>
@@ -327,7 +327,7 @@ export default function CreateBountyPage() {
               onChange={(e) => set('repoUrl', e.target.value)}
               style={inputStyle}
             />
-            {errors.repoUrl && <span style={{ color: '#ef4444', fontSize: '0.8rem' }}>{errors.repoUrl}</span>}
+            {errors.repoUrl && <span style={{ color: 'var(--color-danger)', fontSize: '0.8rem' }}>{errors.repoUrl}</span>}
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
@@ -374,10 +374,10 @@ export default function CreateBountyPage() {
         <div style={sectionStyle}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
             <div>
-              <h2 style={{ margin: '0 0 0.25rem', fontSize: '1rem', fontWeight: 700, color: '#f1f5f9' }}>
+              <h2 style={{ margin: '0 0 0.25rem', fontSize: '1rem', fontWeight: 700, color: 'var(--color-text-primary)' }}>
                 Human-in-the-Middle (HITM) Mode
               </h2>
-              <p style={{ margin: 0, fontSize: '0.875rem', color: '#475569' }}>
+              <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>
                 Require manual creator review before payout. Adds a review deadline.
               </p>
             </div>
@@ -391,7 +391,7 @@ export default function CreateBountyPage() {
                 width: '3rem',
                 height: '1.625rem',
                 borderRadius: '999px',
-                background: form.hitm ? '#6366f1' : 'rgba(255,255,255,0.1)',
+                background: form.hitm ? 'var(--color-accent)' : 'rgba(255,255,255,0.1)',
                 border: 'none',
                 cursor: 'pointer',
                 position: 'relative',
@@ -438,12 +438,12 @@ export default function CreateBountyPage() {
             background: 'rgba(99,102,241,0.06)',
             border: '1px solid rgba(99,102,241,0.15)',
             fontSize: '0.875rem',
-            color: '#818cf8',
+            color: 'var(--color-accent-2)',
           }}
         >
           <strong>Escrow amount:</strong>{' '}
           {form.amountAlgo ? `${form.amountAlgo} ALGO` : '—'}{' '}
-          <span style={{ color: '#475569' }}>
+          <span style={{ color: 'var(--color-text-muted)' }}>
             + ~0.002 ALGO network fees · Locked on-chain until completion
           </span>
         </div>

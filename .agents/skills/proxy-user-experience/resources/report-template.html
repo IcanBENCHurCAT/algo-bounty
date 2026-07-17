@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AlgoBounty UX Audit Report — {{REPORT_DATE}}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #070712;
+      --surface: rgba(12, 12, 28, 0.8);
+      --surface-2: rgba(255, 255, 255, 0.04);
+      --border: rgba(255, 255, 255, 0.07);
+      --border-2: rgba(255, 255, 255, 0.12);
+      --text-primary: #f1f5f9;
+      --text-secondary: #94a3b8;
+      --text-muted: #475569;
+      --accent: #6366f1;
+      --accent-2: #8b5cf6;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --info: #22d3ee;
+      --radius: 1rem;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text-primary);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      background-image:
+        radial-gradient(ellipse 80% 50% at 50% -10%, rgba(99,102,241,0.08), transparent),
+        linear-gradient(rgba(255,255,255,0.01) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.01) 1px, transparent 1px);
+      background-size: 100% 100%, 40px 40px, 40px 40px;
+    }
+
+    .container { max-width: 1200px; margin: 0 auto; padding: 2rem 1.5rem; }
+
+    /* Header */
+    .report-header {
+      text-align: center;
+      padding: 3rem 0;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 3rem;
+    }
+    .report-header h1 {
+      font-size: 2.25rem;
+      font-weight: 800;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 0.5rem;
+    }
+    .report-header .subtitle { color: var(--text-secondary); font-size: 1.125rem; }
+    .report-header .meta { color: var(--text-muted); font-size: 0.875rem; margin-top: 1rem; }
+
+    /* Score badges */
+    .score-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 1rem;
+      margin: 2rem 0;
+    }
+    .score-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem;
+      text-align: center;
+    }
+    .score-card .score-value {
+      font-size: 2rem;
+      font-weight: 800;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .score-card .score-label {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-top: 0.25rem;
+    }
+    .score-card.critical .score-value { color: var(--danger); }
+    .score-card.major .score-value { color: var(--warning); }
+    .score-card.minor .score-value { color: var(--info); }
+    .score-card.pass .score-value { color: var(--success); }
+
+    /* Persona card */
+    .persona-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      margin: 2rem 0;
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 1.5rem;
+      align-items: center;
+    }
+    .persona-avatar {
+      width: 64px; height: 64px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.5rem; font-weight: 700;
+    }
+    .persona-info h3 { font-size: 1.125rem; font-weight: 700; }
+    .persona-traits {
+      display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.5rem;
+    }
+    .trait-badge {
+      padding: 0.2rem 0.6rem;
+      border-radius: 9999px;
+      font-size: 0.6875rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .trait-badge.web3 { background: rgba(99,102,241,0.15); color: var(--accent); border: 1px solid rgba(99,102,241,0.3); }
+    .trait-badge.device { background: rgba(34,211,238,0.1); color: var(--info); border: 1px solid rgba(34,211,238,0.25); }
+    .trait-badge.wallet { background: rgba(16,185,129,0.1); color: var(--success); border: 1px solid rgba(16,185,129,0.25); }
+
+    /* Section */
+    .section { margin: 3rem 0; }
+    .section h2 {
+      font-size: 1.5rem; font-weight: 700;
+      margin-bottom: 1.5rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* Step card */
+    .step-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 1.5rem;
+      overflow: hidden;
+    }
+    .step-header {
+      padding: 1rem 1.25rem;
+      display: flex; align-items: center; gap: 0.75rem;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface-2);
+    }
+    .step-number {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: white;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.75rem; font-weight: 700;
+      flex-shrink: 0;
+    }
+    .step-title { font-weight: 600; font-size: 0.9375rem; }
+    .step-timing {
+      margin-left: auto;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+    .step-body { padding: 1.25rem; }
+    .step-screenshot {
+      width: 100%;
+      border-radius: 0.5rem;
+      border: 1px solid var(--border);
+      margin-bottom: 1rem;
+    }
+    .inner-monologue {
+      background: rgba(99,102,241,0.06);
+      border-left: 3px solid var(--accent);
+      padding: 0.75rem 1rem;
+      border-radius: 0 0.5rem 0.5rem 0;
+      font-style: italic;
+      color: var(--text-secondary);
+      font-size: 0.875rem;
+      line-height: 1.7;
+      margin-top: 1rem;
+    }
+    .inner-monologue::before {
+      content: '💭 ';
+      font-style: normal;
+    }
+
+    /* Findings table */
+    .findings-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      font-size: 0.875rem;
+    }
+    .findings-table th {
+      text-align: left;
+      padding: 0.75rem 1rem;
+      background: var(--surface-2);
+      border-bottom: 1px solid var(--border-2);
+      color: var(--text-secondary);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .findings-table td {
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    .severity-badge {
+      display: inline-block;
+      padding: 0.15rem 0.5rem;
+      border-radius: 9999px;
+      font-size: 0.6875rem;
+      font-weight: 700;
+    }
+    .severity-badge.s1 { background: rgba(239,68,68,0.15); color: var(--danger); }
+    .severity-badge.s2 { background: rgba(245,158,11,0.15); color: var(--warning); }
+    .severity-badge.s3 { background: rgba(34,211,238,0.1); color: var(--info); }
+    .severity-badge.s4 { background: rgba(16,185,129,0.1); color: var(--success); }
+    .severity-badge.s5 { background: var(--surface-2); color: var(--text-muted); }
+
+    /* Heuristic radar (placeholder — actual chart injected by report generator) */
+    .radar-container {
+      display: flex; justify-content: center;
+      padding: 2rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+
+    /* Footer */
+    .report-footer {
+      text-align: center;
+      padding: 2rem 0;
+      margin-top: 3rem;
+      border-top: 1px solid var(--border);
+      color: var(--text-muted);
+      font-size: 0.8125rem;
+    }
+
+    code {
+      font-family: 'JetBrains Mono', monospace;
+      background: var(--surface-2);
+      padding: 0.1rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.8125rem;
+    }
+
+    /* Actor labels */
+    .actor-badge {
+      display: inline-flex; align-items: center; gap: 0.3rem;
+      padding: 0.15rem 0.5rem;
+      border-radius: 9999px;
+      font-size: 0.6875rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .actor-badge.creator { background: rgba(139,92,246,0.15); color: var(--accent-2); }
+    .actor-badge.worker { background: rgba(16,185,129,0.15); color: var(--success); }
+    .actor-badge.arbitrator { background: rgba(245,158,11,0.15); color: var(--warning); }
+    .actor-badge.observer { background: var(--surface-2); color: var(--text-muted); }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <!-- ═══ HEADER ═══ -->
+  <header class="report-header">
+    <h1>UX Audit Report</h1>
+    <p class="subtitle">{{PERSONA_NAME}} — {{FLOW_DESCRIPTION}}</p>
+    <p class="meta">Generated {{REPORT_DATE}} · Target: {{TARGET_URL}} · Duration: {{TOTAL_DURATION}}</p>
+  </header>
+
+  <!-- ═══ SCORE SUMMARY ═══ -->
+  <div class="score-grid">
+    <div class="score-card critical">
+      <div class="score-value">{{COUNT_CRITICAL}}</div>
+      <div class="score-label">Critical</div>
+    </div>
+    <div class="score-card major">
+      <div class="score-value">{{COUNT_MAJOR}}</div>
+      <div class="score-label">Major</div>
+    </div>
+    <div class="score-card minor">
+      <div class="score-value">{{COUNT_MINOR}}</div>
+      <div class="score-label">Minor</div>
+    </div>
+    <div class="score-card pass">
+      <div class="score-value">{{COUNT_PASS}}</div>
+      <div class="score-label">Passed</div>
+    </div>
+  </div>
+
+  <!-- ═══ PERSONA ═══ -->
+  <div class="persona-card">
+    <div class="persona-avatar">{{PERSONA_INITIALS}}</div>
+    <div class="persona-info">
+      <h3>{{PERSONA_NAME}}</h3>
+      <p style="color: var(--text-secondary); font-size: 0.875rem;">{{PERSONA_GOAL}}</p>
+      <div class="persona-traits">
+        <span class="trait-badge web3">{{WEB3_LITERACY}}</span>
+        <span class="trait-badge device">{{DEVICE}}</span>
+        <span class="trait-badge wallet">{{WALLET_PREF}}</span>
+        <!-- {{ACTOR_BADGE}} -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ JOURNEY STEPS ═══ -->
+  <div class="section">
+    <h2>User Journey</h2>
+    <!-- {{STEP_CARDS}} -->
+    <!--
+    Template for each step:
+    <div class="step-card">
+      <div class="step-header">
+        <div class="step-number">1</div>
+        <div class="step-title">Navigate to Marketplace</div>
+        <div class="step-timing">1.2s</div>
+      </div>
+      <div class="step-body">
+        <img class="step-screenshot" src="screenshots/step_01.png" alt="Marketplace page">
+        <div class="inner-monologue">
+          What the persona was thinking at this moment...
+        </div>
+      </div>
+    </div>
+    -->
+  </div>
+
+  <!-- ═══ FINDINGS ═══ -->
+  <div class="section">
+    <h2>Findings</h2>
+    <table class="findings-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Severity</th>
+          <th>Heuristic</th>
+          <th>Location</th>
+          <th>Finding</th>
+          <th>Actor</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- {{FINDINGS_ROWS}} -->
+        <!--
+        Template:
+        <tr>
+          <td><code>UX-001</code></td>
+          <td><span class="severity-badge s1">S1</span></td>
+          <td>H5</td>
+          <td><code>/create</code></td>
+          <td>No minimum amount validation on bounty creation form</td>
+          <td><span class="actor-badge creator">Creator</span></td>
+        </tr>
+        -->
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ═══ HEURISTIC SCORES ═══ -->
+  <div class="section">
+    <h2>Heuristic Scores</h2>
+    <div class="radar-container">
+      <!-- {{RADAR_CHART}} — inject SVG or canvas chart here -->
+      <p style="color: var(--text-muted);">Radar chart placeholder — populated by report generator</p>
+    </div>
+  </div>
+
+  <!-- ═══ FOOTER ═══ -->
+  <footer class="report-footer">
+    <p>Generated by <strong>proxy-user-experience</strong> · AlgoBounty UX Skill Pack</p>
+    <p>Personas powered by <strong>algo-bounty-user-experience</strong> · Design system: <strong>algo-bounty-style</strong></p>
+  </footer>
+
+</div>
+</body>
+</html>
