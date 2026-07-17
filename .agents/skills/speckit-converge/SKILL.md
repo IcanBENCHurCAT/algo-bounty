@@ -94,7 +94,10 @@ skip constitution checks gracefully rather than failing.
 
 ### 1. Initialize Convergence Context
 
-Run `.specify/scripts/powershell/check-prerequisites.ps1 -Json -RequireTasks -IncludeTasks` once from repo root and parse JSON for FEATURE_DIR and AVAILABLE_DOCS. Derive absolute paths:
+Run the appropriate prerequisite check script for your operating system from repo root once and parse the JSON output (fields: FEATURE_DIR, AVAILABLE_DOCS):
+- **Windows/PowerShell**: `.specify/scripts/powershell/check-prerequisites.ps1 -Json -RequireTasks -IncludeTasks`
+- **Linux/macOS/Bash**: `.specify/scripts/bash/check-prerequisites.sh --json --require-tasks --include-tasks`
+Derive absolute paths:
 
 - SPEC = FEATURE_DIR/spec.md
 - PLAN = FEATURE_DIR/plan.md

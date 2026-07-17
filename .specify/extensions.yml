@@ -1,0 +1,33 @@
+# Spec-Kit Extension Hooks Configuration
+# Paved-path automation for the SDD cycle
+
+hooks:
+  before_specify:
+    - name: "Git Sync & Fetch"
+      description: "Ensure the local repository is synced with origin main before specifying features"
+      command: "git fetch origin && git checkout main && git pull origin main"
+      enabled: true
+      optional: true
+      prompt: "Would you like to fetch and align with the latest origin main?"
+
+  before_implement:
+    - name: "Configuration Pre-Check"
+      description: "Verify that the local environment config is correct before implementing tasks"
+      command: "python -c \"import os; from gateway.config import settings; print('Config OK: Network =', settings.ALGORAND_NETWORK)\""
+      enabled: true
+      optional: false
+
+  after_implement:
+    - name: "Automated Verification Test Suite"
+      description: "Run the full pytest suite to verify implementation correctness"
+      command: "python -m pytest tests/ -v"
+      enabled: true
+      optional: false
+
+  after_converge:
+    - name: "Git Status Check"
+      description: "Summarize pending changes after convergence checks"
+      command: "git status"
+      enabled: true
+      optional: true
+      prompt: "Show current git status?"
