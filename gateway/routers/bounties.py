@@ -11,7 +11,8 @@ from ..dependencies import get_db
 from ..github import post_github_comment_and_labels, extract_bounty_ids
 from ..schemas import (
     BountyCreate, BountyClaim, WorkSubmit,
-    WorkApprove, WorkReject, DisputeCreate
+    WorkApprove, WorkReject, DisputeCreate,
+    FeeBreakdown, FeeBreakdownDisplay,
 )
 from ..broker import broker
 from ..algod_client import (
@@ -24,8 +25,23 @@ router = APIRouter(prefix="/api/v1/bounties", tags=["bounties"])
 sandbox_active = is_sandbox()
 
 from pydantic import BaseModel
+
 class TxnGenResponse(BaseModel):
     unsigned_txn: str
+
+class FeeFormatResponse(BaseModel):
+    """Format an integer ALGO amount for display (whole number or 2 decimals)."""
+    microalgo: int
+    def display(self) -> str:
+        algo = self.microalgo / 1_000_000
+        if algo == int(algo):
+            return f"{int(algo)} ALGO"
+        return f"{algo:.2f} ALGO"
+
+class ApproveTxnResponse(BaseModel):
+    unsigned_txn: str
+    fee_breakdown: FeeBreakdown
+    fee_breakdown_display: FeeBreakdownDisplay
 
 @router.get("", summary="List all bounties", description="Retrieve a list of bounties with optional filtering by status, repository, amount, karma requirement, and HITM mode.")
 def list_bounties(
@@ -236,7 +252,7 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
         "onchain": onchain,
     }
 
-@router.post("/{bounty_id}/claim/txn", response_model=TxnGenResponse, summary="Generate unsigned claim transaction")
+@router.post("/{bounty_id}/claim/txn", response_model=ApproveTxnResponse, summary="Generate unsigned claim transaction with fee breakdown")
 async def get_claim_txn(
     bounty_id: str,
     db: Session = Depends(get_db),
@@ -283,7 +299,40 @@ async def get_claim_txn(
     import algosdk.encoding as encoding
     txn_b64 = encoding.msgpack_encode(claim_txn)
     
-    return {"unsigned_txn": txn_b64}
+    # Fee breakdown (FR-002, FR-004, FR-010)
+    escrow_amount = b.amount
+    fee = (escrow_amount * 2) // 100 // 2  # 1% (developer royalty + platform treasury)
+    mediator_fee = (escrow_amount * 25) // 10000 if b.is_hitm else 0
+    claimant_payout = escrow_amount - fee - fee - mediator_fee
+
+    fee_breakdown = FeeBreakdown(
+        escrow_amount=escrow_amount,
+        developer_royalty=fee,
+        platform_treasury=fee,
+        mediator_fee=mediator_fee,
+        claimant_payout=claimant_payout,
+    )
+
+    # Display strings (FR-010)
+    def _fmt(microalgo: int) -> str:
+        algo = microalgo / 1_000_000
+        if algo == int(algo):
+            return f"{int(algo)} ALGO"
+        return f"{algo:.2f} ALGO"
+
+    fee_display = FeeBreakdownDisplay(
+        total=_fmt(escrow_amount),
+        developer_royalty=_fmt(fee),
+        platform_treasury=_fmt(fee),
+        mediator_fee=_fmt(mediator_fee),
+        claimant_payout=_fmt(claimant_payout),
+    )
+
+    return ApproveTxnResponse(
+        unsigned_txn=txn_b64,
+        fee_breakdown=fee_breakdown,
+        fee_breakdown_display=fee_display,
+    )
 
 @router.post("/{bounty_id}/claim", summary="Claim a bounty", description="Allows a worker to claim an open bounty. Validates karma requirements and processes on-chain claim if a signed transaction is provided.")
 async def claim_bounty(
@@ -425,7 +474,7 @@ async def submit_work(
 
     return {"bounty_id": bounty_id, "status": "submitted", "tx_id": tx_id}
 
-@router.post("/{bounty_id}/approve/txn", response_model=TxnGenResponse, summary="Generate unsigned approve transaction")
+@router.post("/{bounty_id}/approve/txn", response_model=ApproveTxnResponse, summary="Generate unsigned approve transaction with fee breakdown")
 async def get_approve_txn(
     bounty_id: str,
     db: Session = Depends(get_db),
@@ -473,7 +522,42 @@ async def get_approve_txn(
     import algosdk.encoding as encoding
     txn_b64 = encoding.msgpack_encode(approve_txn)
     
-    return {"unsigned_txn": txn_b64}
+
+    # Fee breakdown (FR-002, FR-004, FR-010)
+    # Same integer-division formula as the on-chain contract.
+    escrow_amount = b.amount
+    fee = (escrow_amount * 2) // 100 // 2  # 1% (developer royalty + platform treasury)
+    mediator_fee = (escrow_amount * 25) // 10000 if b.is_hitm else 0
+    claimant_payout = escrow_amount - fee - fee - mediator_fee
+
+    fee_breakdown = FeeBreakdown(
+        escrow_amount=escrow_amount,
+        developer_royalty=fee,
+        platform_treasury=fee,
+        mediator_fee=mediator_fee,
+        claimant_payout=claimant_payout,
+    )
+
+    # Display strings (FR-010: whole numbers for integer ALGO, 2 decimals otherwise)
+    def _fmt(microalgo: int) -> str:
+        algo = microalgo / 1_000_000
+        if algo == int(algo):
+            return f"{int(algo)} ALGO"
+        return f"{algo:.2f} ALGO"
+
+    fee_display = FeeBreakdownDisplay(
+        total=_fmt(escrow_amount),
+        developer_royalty=_fmt(fee),
+        platform_treasury=_fmt(fee),
+        mediator_fee=_fmt(mediator_fee),
+        claimant_payout=_fmt(claimant_payout),
+    )
+
+    return ApproveTxnResponse(
+        unsigned_txn=txn_b64,
+        fee_breakdown=fee_breakdown,
+        fee_breakdown_display=fee_display,
+    )
 
 @router.post("/{bounty_id}/approve", summary="Approve submitted work", description="Allows the creator to approve the submitted work, closing the bounty and releasing funds. Awards +10 karma to worker and +5 to creator.")
 async def approve_work(

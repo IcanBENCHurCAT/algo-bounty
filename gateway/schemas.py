@@ -46,3 +46,20 @@ class WorkReject(BaseModel):
 class DisputeCreate(BaseModel):
     reason: str
     signed_txn: Optional[str] = None
+
+# ─── Fee Breakdown Schemas (FR-002, FR-004) ──────────────────────────────
+
+class FeeBreakdown(BaseModel):
+    """Exact integer-division fee amounts matching the on-chain contract."""
+    escrow_amount: int  # microALGO
+    developer_royalty: int  # 1%: escrow * 2 // 100 // 2
+    platform_treasury: int  # 1%: escrow * 2 // 100 // 2
+    mediator_fee: int  # 0.25%: escrow * 25 // 10000 (only if HITM)
+    claimant_payout: int  # escrow - royalty - treasury - mediator
+class FeeBreakdownDisplay(BaseModel):
+    """Human-readable display strings for the frontend modal."""
+    total: str
+    developer_royalty: str
+    platform_treasury: str
+    mediator_fee: str
+    claimant_payout: str
