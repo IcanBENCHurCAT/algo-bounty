@@ -351,7 +351,7 @@
         "tags": [
           "bounties"
         ],
-        "summary": "Generate unsigned claim transaction",
+        "summary": "Generate unsigned claim transaction with fee breakdown",
         "operationId": "get_claim_txn_api_v1_bounties__bounty_id__claim_txn_post",
         "security": [
           {
@@ -375,7 +375,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TxnGenResponse"
+                  "$ref": "#/components/schemas/ApproveTxnResponse"
                 }
               }
             }
@@ -510,7 +510,7 @@
         "tags": [
           "bounties"
         ],
-        "summary": "Generate unsigned approve transaction",
+        "summary": "Generate unsigned approve transaction with fee breakdown",
         "operationId": "get_approve_txn_api_v1_bounties__bounty_id__approve_txn_post",
         "security": [
           {
@@ -534,7 +534,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TxnGenResponse"
+                  "$ref": "#/components/schemas/ApproveTxnResponse"
                 }
               }
             }
@@ -1189,6 +1189,27 @@
   },
   "components": {
     "schemas": {
+      "ApproveTxnResponse": {
+        "properties": {
+          "unsigned_txn": {
+            "type": "string",
+            "title": "Unsigned Txn"
+          },
+          "fee_breakdown": {
+            "$ref": "#/components/schemas/FeeBreakdown"
+          },
+          "fee_breakdown_display": {
+            "$ref": "#/components/schemas/FeeBreakdownDisplay"
+          }
+        },
+        "type": "object",
+        "required": [
+          "unsigned_txn",
+          "fee_breakdown",
+          "fee_breakdown_display"
+        ],
+        "title": "ApproveTxnResponse"
+      },
       "AuthRequest": {
         "properties": {
           "address": {
@@ -1349,6 +1370,74 @@
         ],
         "title": "DisputeCreate"
       },
+      "FeeBreakdown": {
+        "properties": {
+          "escrow_amount": {
+            "type": "integer",
+            "title": "Escrow Amount"
+          },
+          "developer_royalty": {
+            "type": "integer",
+            "title": "Developer Royalty"
+          },
+          "platform_treasury": {
+            "type": "integer",
+            "title": "Platform Treasury"
+          },
+          "mediator_fee": {
+            "type": "integer",
+            "title": "Mediator Fee"
+          },
+          "claimant_payout": {
+            "type": "integer",
+            "title": "Claimant Payout"
+          }
+        },
+        "type": "object",
+        "required": [
+          "escrow_amount",
+          "developer_royalty",
+          "platform_treasury",
+          "mediator_fee",
+          "claimant_payout"
+        ],
+        "title": "FeeBreakdown",
+        "description": "Exact integer-division fee amounts matching the on-chain contract."
+      },
+      "FeeBreakdownDisplay": {
+        "properties": {
+          "total": {
+            "type": "string",
+            "title": "Total"
+          },
+          "developer_royalty": {
+            "type": "string",
+            "title": "Developer Royalty"
+          },
+          "platform_treasury": {
+            "type": "string",
+            "title": "Platform Treasury"
+          },
+          "mediator_fee": {
+            "type": "string",
+            "title": "Mediator Fee"
+          },
+          "claimant_payout": {
+            "type": "string",
+            "title": "Claimant Payout"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "developer_royalty",
+          "platform_treasury",
+          "mediator_fee",
+          "claimant_payout"
+        ],
+        "title": "FeeBreakdownDisplay",
+        "description": "Human-readable display strings for the frontend modal."
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -1401,19 +1490,6 @@
           "token"
         ],
         "title": "OIDCVerifyRequest"
-      },
-      "TxnGenResponse": {
-        "properties": {
-          "unsigned_txn": {
-            "type": "string",
-            "title": "Unsigned Txn"
-          }
-        },
-        "type": "object",
-        "required": [
-          "unsigned_txn"
-        ],
-        "title": "TxnGenResponse"
       },
       "ValidationError": {
         "properties": {
