@@ -22,6 +22,8 @@ import { StatusBadge, Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card'
 import { FullPageSpinner } from '@/components/ui/Spinner'
+import { Modal } from '@/components/ui/Modal'
+import { FeeBreakdownTable } from '@/components/ui/FeeBreakdownTable'
 import { AlgoBountyError } from '@/types'
 
 function formatAlgo(micro: number) {
@@ -492,148 +494,74 @@ export default function BountyDetailPage() {
         </div>
       )}
 
-      {/* Approval Confirmation Modal (FR-001, FR-002, FR-005) */}
+      {/* Approval Confirmation Modal (FR-001, FR-002, FR-005, FR-009) */}
       {showApprovalModal && approvalTxn && bounty && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.7)', padding: '1rem' }}>
-          <div style={{ background: '#0f172a', border: '1px solid rgba(99,102,241,0.3)', borderRadius: '1rem', maxWidth: '480px', width: '100%', padding: '1.5rem', color: '#e2e8f0' }}>
-            <h3 style={{ margin: '0 0 0.75rem 0', fontSize: '1.25rem', fontWeight: 600 }}>✅ Approve &amp; Release</h3>
-            <p style={{ color: '#94a3b8', fontSize: '0.875rem', margin: '0 0 1rem 0' }}>
-              Review the fee breakdown before signing. This action will release escrowed funds.
-            </p>
-
-            {/* Fee breakdown table */}
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9375rem', marginBottom: '1.25rem' }}>
-              <thead>
-                <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', textAlign: 'left' }}>
-                  <th style={{ padding: '0.5rem 0.75rem 0.5rem 0', color: '#94a3b8', fontWeight: 500 }}>Item</th>
-                  <th style={{ padding: '0.5rem 0 0.5rem 0.75rem', color: '#94a3b8', fontWeight: 500, textAlign: 'right' }}>Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                  <td style={{ padding: '0.625rem 0.75rem 0.625rem 0' }}>Total Released</td>
-                  <td style={{ padding: '0.625rem 0 0.625rem 0.75rem', textAlign: 'right', fontWeight: 600 }}>{approvalTxn.fee_breakdown_display.total}</td>
-                </tr>
-                <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                  <td style={{ padding: '0.625rem 0.75rem 0.625rem 0', color: '#6ee7b7' }}>Developer Royalty (1%)</td>
-                  <td style={{ padding: '0.625rem 0 0.625rem 0.75rem', textAlign: 'right', color: '#6ee7b7' }}>{approvalTxn.fee_breakdown_display.developer_royalty}</td>
-                </tr>
-                <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                  <td style={{ padding: '0.625rem 0.75rem 0.625rem 0', color: '#94a3b8' }}>Platform Treasury (1%)</td>
-                  <td style={{ padding: '0.625rem 0 0.625rem 0.75rem', textAlign: 'right', color: '#94a3b8' }}>{approvalTxn.fee_breakdown_display.platform_treasury}</td>
-                </tr>
-                {bounty.hitm && approvalTxn.fee_breakdown.mediator_fee > 0 && (
-                  <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                    <td style={{ padding: '0.625rem 0.75rem 0.625rem 0', color: '#94a3b8' }}>Mediator Fee (0.25%)</td>
-                    <td style={{ padding: '0.625rem 0 0.625rem 0.75rem', textAlign: 'right', color: '#94a3b8' }}>{approvalTxn.fee_breakdown_display.mediator_fee}</td>
-                  </tr>
-                )}
-                {bounty.hitm && approvalTxn.fee_breakdown.mediator_fee === 0 && (
-                  <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                    <td style={{ padding: '0.625rem 0.75rem 0.625rem 0', color: '#64748b' }}>Mediator Fee (0.25%)</td>
-                    <td style={{ padding: '0.625rem 0 0.625rem 0.75rem', textAlign: 'right', color: '#64748b' }}>0 ALGO</td>
-                  </tr>
-                )}
-                {!bounty.hitm && (
-                  <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                    <td style={{ padding: '0.625rem 0.75rem 0.625rem 0', color: '#64748b' }}>Mediator Fee (0.25%)</td>
-                    <td style={{ padding: '0.625rem 0 0.625rem 0.75rem', textAlign: 'right', color: '#64748b' }}><i>Not applicable</i></td>
-                  </tr>
-                )}
-                <tr>
-                  <td style={{ padding: '0.625rem 0.75rem 0.625rem 0', fontWeight: 600 }}>Claimant Payout</td>
-                  <td style={{ padding: '0.625rem 0 0.625rem 0.75rem', textAlign: 'right', fontWeight: 700, fontSize: '1.0625rem' }}>{approvalTxn.fee_breakdown_display.claimant_payout}</td>
-                </tr>
-              </tbody>
-            </table>
-
-            {/* Actions */}
-            <div style={{ display: 'flex', gap: '0.75rem' }}>
-              <Button variant="secondary" style={{ flex: 1 }} onClick={handleCancelApprove}>
-                Cancel
-              </Button>
-              <Button
-                id="confirm-approve-btn"
-                style={{ flex: 1 }}
-                onClick={handleConfirmApprove}
-                loading={actionLoading}
-              >
-                Confirm &amp; Sign
-              </Button>
-            </div>
+        <Modal
+          open={showApprovalModal}
+          onClose={handleCancelApprove}
+          titleId="approve-modal-title"
+        >
+          <h3 id="approve-modal-title" style={{ margin: '0 0 0.75rem 0', fontSize: '1.25rem', fontWeight: 600 }}>
+            ✅ Approve &amp; Release
+          </h3>
+          <p id="approve-modal-desc" style={{ color: '#94a3b8', fontSize: '0.875rem', margin: '0 0 1rem 0' }}>
+            Review the fee breakdown before signing. This action will release escrowed funds.
+          </p>
+          <FeeBreakdownTable
+            fee={approvalTxn.fee_breakdown}
+            display={approvalTxn.fee_breakdown_display}
+            hitm={bounty.hitm}
+            label="Fee breakdown for approval"
+          />
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <Button variant="secondary" style={{ flex: 1, minWidth: '120px' }} onClick={handleCancelApprove}>
+              Cancel
+            </Button>
+            <Button
+              id="confirm-approve-btn"
+              style={{ flex: 1, minWidth: '120px' }}
+              onClick={handleConfirmApprove}
+              loading={actionLoading}
+            >
+              Confirm &amp; Sign
+            </Button>
           </div>
-        </div>
+        </Modal>
       )}
 
-      {/* Claim Confirmation Modal (FR-002, FR-005) */}
+      {/* Claim Confirmation Modal (FR-002, FR-005, FR-009) */}
       {showClaimModal && claimTxn && bounty && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.7)', padding: '1rem' }}>
-          <div style={{ background: '#0f172a', border: '1px solid rgba(99,102,241,0.3)', borderRadius: '1rem', maxWidth: '480px', width: '100%', padding: '1.5rem', color: '#e2e8f0' }}>
-            <h3 style={{ margin: '0 0 0.75rem 0', fontSize: '1.25rem', fontWeight: 600 }}>🤝 Claim Bounty</h3>
-            <p style={{ color: '#94a3b8', fontSize: '0.875rem', margin: '0 0 1rem 0' }}>
-              Review the fee breakdown before signing. You will be committing escrow funds to the contract.
-            </p>
-
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9375rem', marginBottom: '1.25rem' }}>
-              <thead>
-                <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', textAlign: 'left' }}>
-                  <th style={{ padding: '0.5rem 0.75rem 0.5rem 0', color: '#94a3b8', fontWeight: 500 }}>Item</th>
-                  <th style={{ padding: '0.5rem 0 0.5rem 0.75rem', color: '#94a3b8', fontWeight: 500, textAlign: 'right' }}>Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                  <td style={{ padding: '0.625rem 0.75rem 0.625rem 0' }}>Total Escrow</td>
-                  <td style={{ padding: '0.625rem 0 0.625rem 0.75rem', textAlign: 'right', fontWeight: 600 }}>{claimTxn.fee_breakdown_display.total}</td>
-                </tr>
-                <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                  <td style={{ padding: '0.625rem 0.75rem 0.625rem 0', color: '#6ee7b7' }}>Developer Royalty (1%)</td>
-                  <td style={{ padding: '0.625rem 0 0.625rem 0.75rem', textAlign: 'right', color: '#6ee7b7' }}>{claimTxn.fee_breakdown_display.developer_royalty}</td>
-                </tr>
-                <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                  <td style={{ padding: '0.625rem 0.75rem 0.625rem 0', color: '#94a3b8' }}>Platform Treasury (1%)</td>
-                  <td style={{ padding: '0.625rem 0 0.625rem 0.75rem', textAlign: 'right', color: '#94a3b8' }}>{claimTxn.fee_breakdown_display.platform_treasury}</td>
-                </tr>
-                {bounty.hitm && claimTxn.fee_breakdown.mediator_fee > 0 && (
-                  <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                    <td style={{ padding: '0.625rem 0.75rem 0.625rem 0', color: '#94a3b8' }}>Mediator Fee (0.25%)</td>
-                    <td style={{ padding: '0.625rem 0 0.625rem 0.75rem', textAlign: 'right', color: '#94a3b8' }}>{claimTxn.fee_breakdown_display.mediator_fee}</td>
-                  </tr>
-                )}
-                {bounty.hitm && claimTxn.fee_breakdown.mediator_fee === 0 && (
-                  <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                    <td style={{ padding: '0.625rem 0.75rem 0.625rem 0', color: '#64748b' }}>Mediator Fee (0.25%)</td>
-                    <td style={{ padding: '0.625rem 0 0.625rem 0.75rem', textAlign: 'right', color: '#64748b' }}>0 ALGO</td>
-                  </tr>
-                )}
-                {!bounty.hitm && (
-                  <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                    <td style={{ padding: '0.625rem 0.75rem 0.625rem 0', color: '#64748b' }}>Mediator Fee (0.25%)</td>
-                    <td style={{ padding: '0.625rem 0 0.625rem 0.75rem', textAlign: 'right', color: '#64748b' }}><i>Not applicable</i></td>
-                  </tr>
-                )}
-                <tr>
-                  <td style={{ padding: '0.625rem 0.75rem 0.625rem 0', fontWeight: 600 }}>Worker Payout</td>
-                  <td style={{ padding: '0.625rem 0 0.625rem 0.75rem', textAlign: 'right', fontWeight: 700, fontSize: '1.0625rem' }}>{claimTxn.fee_breakdown_display.claimant_payout}</td>
-                </tr>
-              </tbody>
-            </table>
-
-            <div style={{ display: 'flex', gap: '0.75rem' }}>
-              <Button variant="secondary" style={{ flex: 1 }} onClick={handleCancelClaim}>
-                Cancel
-              </Button>
-              <Button
-                id="confirm-claim-btn"
-                style={{ flex: 1 }}
-                onClick={handleConfirmClaim}
-                loading={actionLoading}
-              >
-                Confirm &amp; Sign
-              </Button>
-            </div>
+        <Modal
+          open={showClaimModal}
+          onClose={handleCancelClaim}
+          titleId="claim-modal-title"
+        >
+          <h3 id="claim-modal-title" style={{ margin: '0 0 0.75rem 0', fontSize: '1.25rem', fontWeight: 600 }}>
+            🤝 Claim Bounty
+          </h3>
+          <p id="claim-modal-desc" style={{ color: '#94a3b8', fontSize: '0.875rem', margin: '0 0 1rem 0' }}>
+            Review the fee breakdown before signing. You will be committing escrow funds to the contract.
+          </p>
+          <FeeBreakdownTable
+            fee={claimTxn.fee_breakdown}
+            display={claimTxn.fee_breakdown_display}
+            hitm={bounty.hitm}
+            label="Fee breakdown for claim"
+          />
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <Button variant="secondary" style={{ flex: 1, minWidth: '120px' }} onClick={handleCancelClaim}>
+              Cancel
+            </Button>
+            <Button
+              id="confirm-claim-btn"
+              style={{ flex: 1, minWidth: '120px' }}
+              onClick={handleConfirmClaim}
+              loading={actionLoading}
+            >
+              Confirm &amp; Sign
+            </Button>
           </div>
-        </div>
+        </Modal>
       )}
 
       {!connected && (
