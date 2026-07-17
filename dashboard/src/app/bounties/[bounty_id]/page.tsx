@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { useAuth } from '@/hooks/useAuth'
 import { useToast } from '@/providers'
 import { useEvents } from '@/hooks/useEvents'
-import type { Bounty, EscrowState, SseEvent } from '@/types'
+import type { Bounty, EscrowState, SseEvent, TxnGenWithBreakdown } from '@/types'
 import {
   getBounty,
   getClaimTxn,
@@ -22,6 +22,8 @@ import { StatusBadge, Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card'
 import { FullPageSpinner } from '@/components/ui/Spinner'
+import { Modal } from '@/components/ui/Modal'
+import { FeeBreakdownTable } from '@/components/ui/FeeBreakdownTable'
 import { AlgoBountyError } from '@/types'
 
 function formatAlgo(micro: number) {
@@ -48,6 +50,10 @@ export default function BountyDetailPage() {
   const [prUrl, setPrUrl] = useState('')
   const [disputeReason, setDisputeReason] = useState('')
   const [showDisputeForm, setShowDisputeForm] = useState(false)
+  const [showApprovalModal, setShowApprovalModal] = useState(false)
+  const [approvalTxn, setApprovalTxn] = useState<TxnGenWithBreakdown | null>(null)
+  const [showClaimModal, setShowClaimModal] = useState(false)
+  const [claimTxn, setClaimTxn] = useState<TxnGenWithBreakdown | null>(null)
 
   const fetchBounty = useCallback(async () => {
     try {
@@ -97,16 +103,36 @@ export default function BountyDetailPage() {
     if (!jwt) return
     setActionLoading(true)
     try {
-      const { unsigned_txn } = await getClaimTxn(bountyId, jwt)
-      const signedTxn = await signTransaction(unsigned_txn)
+      const data = await getClaimTxn(bountyId, jwt)
+      setClaimTxn(data)
+      setShowClaimModal(true)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to prepare claim')
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleConfirmClaim = async () => {
+    if (!claimTxn || !jwt) return
+    try {
+      setActionLoading(true)
+      const signedTxn = await signTransaction(claimTxn.unsigned_txn)
       await claimBounty(bountyId, signedTxn, jwt)
       toast.success('Bounty claimed! You are now the worker.')
+      setShowClaimModal(false)
+      setClaimTxn(null)
       void fetchBounty()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to claim bounty')
     } finally {
       setActionLoading(false)
     }
+  }
+
+  const handleCancelClaim = () => {
+    setShowClaimModal(false)
+    setClaimTxn(null)
   }
 
   const handleSubmit = async () => {
@@ -127,16 +153,36 @@ export default function BountyDetailPage() {
     if (!jwt) return
     setActionLoading(true)
     try {
-      const { unsigned_txn } = await getApproveTxn(bountyId, jwt)
-      const signedTxn = await signTransaction(unsigned_txn)
+      const data = await getApproveTxn(bountyId, jwt)
+      setApprovalTxn(data)
+      setShowApprovalModal(true)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to prepare approval')
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleConfirmApprove = async () => {
+    if (!approvalTxn || !jwt) return
+    try {
+      setActionLoading(true)
+      const signedTxn = await signTransaction(approvalTxn.unsigned_txn)
       await approveWork(bountyId, signedTxn, jwt)
       toast.success('Work approved! Funds released to worker. ✅')
+      setShowApprovalModal(false)
+      setApprovalTxn(null)
       void fetchBounty()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to approve work')
     } finally {
       setActionLoading(false)
     }
+  }
+
+  const handleCancelApprove = () => {
+    setShowApprovalModal(false)
+    setApprovalTxn(null)
   }
 
   const handleReject = async () => {
@@ -446,6 +492,76 @@ export default function BountyDetailPage() {
             </div>
           )}
         </div>
+      )}
+
+      {/* Approval Confirmation Modal (FR-001, FR-002, FR-005, FR-009) */}
+      {showApprovalModal && approvalTxn && bounty && (
+        <Modal
+          open={showApprovalModal}
+          onClose={handleCancelApprove}
+          titleId="approve-modal-title"
+        >
+          <h3 id="approve-modal-title" style={{ margin: '0 0 0.75rem 0', fontSize: '1.25rem', fontWeight: 600 }}>
+            ✅ Approve &amp; Release
+          </h3>
+          <p id="approve-modal-desc" style={{ color: '#94a3b8', fontSize: '0.875rem', margin: '0 0 1rem 0' }}>
+            Review the fee breakdown before signing. This action will release escrowed funds.
+          </p>
+          <FeeBreakdownTable
+            fee={approvalTxn.fee_breakdown}
+            display={approvalTxn.fee_breakdown_display}
+            hitm={bounty.hitm}
+            label="Fee breakdown for approval"
+          />
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <Button variant="secondary" style={{ flex: 1, minWidth: '120px' }} onClick={handleCancelApprove}>
+              Cancel
+            </Button>
+            <Button
+              id="confirm-approve-btn"
+              style={{ flex: 1, minWidth: '120px' }}
+              onClick={handleConfirmApprove}
+              loading={actionLoading}
+            >
+              Confirm &amp; Sign
+            </Button>
+          </div>
+        </Modal>
+      )}
+
+      {/* Claim Confirmation Modal (FR-002, FR-005, FR-009) */}
+      {showClaimModal && claimTxn && bounty && (
+        <Modal
+          open={showClaimModal}
+          onClose={handleCancelClaim}
+          titleId="claim-modal-title"
+        >
+          <h3 id="claim-modal-title" style={{ margin: '0 0 0.75rem 0', fontSize: '1.25rem', fontWeight: 600 }}>
+            🤝 Claim Bounty
+          </h3>
+          <p id="claim-modal-desc" style={{ color: '#94a3b8', fontSize: '0.875rem', margin: '0 0 1rem 0' }}>
+            Review the fee breakdown before signing. You will be committing escrow funds to the contract.
+          </p>
+          <FeeBreakdownTable
+            fee={claimTxn.fee_breakdown}
+            display={claimTxn.fee_breakdown_display}
+            hitm={bounty.hitm}
+            label="Fee breakdown for claim"
+          />
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <Button variant="secondary" style={{ flex: 1, minWidth: '120px' }} onClick={handleCancelClaim}>
+              Cancel
+            </Button>
+            <Button
+              id="confirm-claim-btn"
+              style={{ flex: 1, minWidth: '120px' }}
+              onClick={handleConfirmClaim}
+              loading={actionLoading}
+            >
+              Confirm &amp; Sign
+            </Button>
+          </div>
+        </Modal>
       )}
 
       {!connected && (
