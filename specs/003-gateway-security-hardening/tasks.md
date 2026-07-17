@@ -78,8 +78,8 @@
 
 ### Implementation for User Story 3
 
-- [ ] T012 [US3] Add `shell=False` parameter to the `subprocess.run()` call on line 287-290 of the `compile_escrow_contract()` function in `gateway/algod_client.py`
-- [ ] T013 [US3] Run `python -m pytest tests/test_algod_client.py -v` and verify all algod client tests pass
+- [x] T012 [US3] Add `shell=False` parameter to the `subprocess.run()` call on line 287-290 of the `compile_escrow_contract()` function in `gateway/algod_client.py`
+- [x] T013 [US3] Run `python -m pytest tests/test_algod_client.py -v` and verify all algod client tests pass
 
 **Checkpoint**: All three security hardening stories are now complete.
 
