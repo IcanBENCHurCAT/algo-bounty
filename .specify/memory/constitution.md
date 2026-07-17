@@ -33,10 +33,19 @@ This document defines the prescriptive architectural rules, engineering standard
 4.1. All application methods MUST use Algorand ABI specifications, with arguments and return types declared and kept in sync with on-chain logic.
 4.2. The Web3 frontend dashboard and off-chain services MUST consume typed client bindings or generated interfaces derived directly from the contract's ABI definition instead of using manual transaction payload construction.
 
-### 5. Transparent Governance and Upgrades
-5.1. Only the platform administrator, a multi-sig account, or an on-chain DAO voting contract specified during contract deployment (the platform `mediator` or platform owner key) can upgrade applications or adjust critical platform parameters (e.g., fee rates, treasury destination).
-5.2. **Upgrade Path**: When upgrading contracts, migration scripts and deprecation strategies (such as freezing old contracts or migrating user boxes) MUST be defined in specs and plans prior to execution. Proxy application patterns or explicit application ID registry routers should be preferred.
-5.3. *OPEN QUESTION*: Who controls upgrades? Is there a designated multi-sig admin address, or will this be shifted to a token-governed DAO contract?
+### 5. Transparent Governance, Upgrades, and Platform Fee Sharing
+5.1. **Deployment Architecture Roadmap**: The deployment lifecycle proceeds across three stages:
+   - **Stage 1 (Local Dev)**: Operates against sandbox environments and local SQLite databases.
+   - **Stage 2 (Staging/Beta)**: Deployed to testnet networks and serverless cloud runners (e.g., GCP Cloud Run) with Postgres.
+   - **Stage 3 (Production/Scale)**: Orchestrated container environments (e.g., Kubernetes) with high-availability Postgres clusters.
+5.2. Only the platform administrator account, an authorized multi-sig account, or an on-chain DAO voting contract specified during contract deployment (the platform `mediator` or platform owner key) can upgrade applications or adjust critical platform parameters (e.g., fee rates, treasury destinations).
+5.3. **Bounty Fee Collection and Treasury Distribution**:
+   - The platform collects a `2%` fee upon successful payout distributions.
+   - Collected fees MUST be programmatically split:
+     - **Developer Royalty**: `50%` of collected fees (i.e., `1%` of total payout) MUST be sent directly to the creator's wallet address (or a designated royalty account) as compensation for platform stewardship.
+     - **Platform Treasury**: `50%` of collected fees (i.e., `1%` of total payout) MUST be sent to the platform treasury account to self-fund system maintenance and application improvements.
+5.4. **Upgrade Path**: When upgrading contracts, migration scripts and deprecation strategies (such as freezing old contracts or migrating user boxes) MUST be defined in specs and plans prior to execution. Proxy application patterns or explicit application ID registry routers should be preferred.
+5.5. **DAO Governance Evolution**: As the platform transitions to production (Stage 3), upgrades, mediator keys, and the Platform Treasury allocation MUST be managed by a DAO-governed voting model. The Developer Royalty allocation remains permanently assigned to the original creator/steward account.
 
 ### 6. Least-Privilege Wallet and Key Management
 6.1. The Web3 frontend application MUST display clear, legible transaction details (assets, application calls, exact fees, and final effects) to the user *before* requesting a wallet signature. Hidden side effects are strictly prohibited.
