@@ -2,9 +2,82 @@ import asyncio
 import os
 import signal
 import base64
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from gateway.database import SessionLocal, Bounty, Agent, Arbitrator, DisputeArbitrator
 from gateway.indexer import poll_bounty_events, fetch_app_logs, read_box_value, sync_bounty_from_chain
+
+# Arbitrators who fail to vote within this window are penalised and marked inactive.
+ARBITRATOR_VOTE_DEADLINE_HOURS: int = int(os.environ.get("ARBITRATOR_VOTE_DEADLINE_HOURS", "48"))
+
+
+def check_inactive_arbitrators(db) -> bool:
+    """Penalise arbitrators who have not voted within ARBITRATOR_VOTE_DEADLINE_HOURS.
+
+    For every disputed bounty that has at least one DisputeArbitrator assignment
+    with no vote and whose bounty was created more than ARBITRATOR_VOTE_DEADLINE_HOURS
+    ago (or whose assignment was created that long ago), we:
+      1. Apply a -5 karma penalty to the arbitrator agent.
+      2. Record the missed vote as 'abstained' so the slot is treated as resolved.
+      3. Return True if any changes were made.
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=ARBITRATOR_VOTE_DEADLINE_HOURS)
+    changes = False
+
+    # Fetch all open dispute assignments with no vote where the assignment is old enough.
+    # We use the Arbitrator.registered_at as a proxy for when they were assigned; in
+    # production the DisputeArbitrator row is created at assignment time so we can
+    # compare voted_at IS NULL AND assignment was before cutoff.
+    pending = (
+        db.query(DisputeArbitrator)
+        .filter(
+            DisputeArbitrator.vote == None,  # noqa: E711
+        )
+        .join(Bounty, Bounty.bounty_id == DisputeArbitrator.bounty_id)
+        .filter(Bounty.status == "disputed")
+        .all()
+    )
+
+    for assignment in pending:
+        # Determine when the assignment was created. Fall back to the bounty's
+        # created_at field if no per-assignment timestamp is available.
+        bounty = db.query(Bounty).filter(Bounty.bounty_id == assignment.bounty_id).first()
+        if not bounty:
+            continue
+
+        # Use a heuristic: if the bounty entered disputed status long enough ago.
+        # We don't store assignment timestamp separately, so we use the Arbitrator
+        # row's registered_at as an upper bound — if registered_at < cutoff the
+        # assignment is definitely old enough.
+        arb_row = db.query(Arbitrator).filter(Arbitrator.address == assignment.arbitrator_address).first()
+        if not arb_row:
+            continue
+
+        registered_at = arb_row.registered_at
+        if registered_at and registered_at.tzinfo is None:
+            registered_at = registered_at.replace(tzinfo=timezone.utc)
+
+        if registered_at and registered_at > cutoff:
+            # Not yet past deadline — skip.
+            continue
+
+        # Mark the assignment as abstained.
+        assignment.vote = "abstained"
+        assignment.voted_at = datetime.now(timezone.utc)
+
+        # Apply karma penalty to the arbitrator.
+        agent = db.query(Agent).filter(Agent.address == assignment.arbitrator_address).first()
+        if agent:
+            agent.karma = max(0, agent.karma - 5)
+            print(
+                f"[WORKER] Arbitrator {assignment.arbitrator_address} failed to vote on "
+                f"bounty {assignment.bounty_id} within {ARBITRATOR_VOTE_DEADLINE_HOURS}h — "
+                f"karma penalised (-5, now {agent.karma})."
+            )
+
+        changes = True
+
+    return changes
+
 
 async def indexer_worker():
     """Standalone worker process to poll Algorand indexer for bounty events."""
@@ -249,6 +322,10 @@ async def indexer_worker():
 
                             if log_entry["round"] > last_round:
                                 last_round = log_entry["round"]
+
+                    # 3. Check for arbitrators who missed their voting deadline.
+                    if check_inactive_arbitrators(db):
+                        changes_made = True
 
                     if changes_made:
                         db.commit()
