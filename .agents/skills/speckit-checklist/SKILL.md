@@ -75,9 +75,11 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 ## Execution Steps
 
-1. **Setup**: Run `.specify/scripts/powershell/check-prerequisites.ps1 -Json` from repo root and parse JSON for FEATURE_DIR and AVAILABLE_DOCS list.
-   - All file paths must be absolute.
-   - For single quotes in args like "I'm Groot", use escape syntax: e.g 'I'\''m Groot' (or double-quote if possible: "I'm Groot").
+1. **Setup**: Run the appropriate prerequisite check script for your operating system from repo root and parse the JSON output (fields: FEATURE_DIR, AVAILABLE_DOCS):
+   - **Windows/PowerShell**: `.specify/scripts/powershell/check-prerequisites.ps1 -Json`
+   - **Linux/macOS/Bash**: `.specify/scripts/bash/check-prerequisites.sh --json`
+   All file paths must be absolute.
+   For single quotes in args like "I'm Groot", use escape syntax: e.g 'I'\''m Groot' (or double-quote if possible: "I'm Groot").
 
 2. **IF EXISTS**: Load `.specify/memory/constitution.md` for project principles and governance constraints.
 
