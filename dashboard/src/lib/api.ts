@@ -11,6 +11,7 @@ import type {
   CreateBountyPayload,
   CreateBountyResponse,
   ApiError,
+  TxnGenWithBreakdown,
 } from '@/types'
 import { AlgoBountyError } from '@/types'
 
@@ -115,8 +116,8 @@ export async function createBounty(
 export async function getClaimTxn(
   bountyId: string,
   token: string,
-): Promise<{ unsigned_txn: string }> {
-  return apiFetch<{ unsigned_txn: string }>(
+): Promise<TxnGenWithBreakdown> {
+  return apiFetch<TxnGenWithBreakdown>(
     `/api/v1/bounties/${bountyId}/claim/txn`,
     { method: 'POST' },
     token,
@@ -150,8 +151,8 @@ export async function submitWork(
 export async function getApproveTxn(
   bountyId: string,
   token: string,
-): Promise<{ unsigned_txn: string }> {
-  return apiFetch<{ unsigned_txn: string }>(
+): Promise<TxnGenWithBreakdown> {
+  return apiFetch<TxnGenWithBreakdown>(
     `/api/v1/bounties/${bountyId}/approve/txn`,
     { method: 'POST' },
     token,

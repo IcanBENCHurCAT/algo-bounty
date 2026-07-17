@@ -140,6 +140,36 @@ class EscrowContract(ARC4Contract):
                 fee=0,
             ).submit()
 
+    def _send_fee_split(
+        self,
+        primary_recipient: Account,
+        escrow_amount: UInt64,
+        asset_id: UInt64,
+        mediator_addr: Account,
+    ) -> UInt64:
+        """Split the 2% platform fee 50/50 between royalty and treasury,
+        pay the 0.25% mediator fee, and return the remaining balance.
+
+        - 1% of escrow_amount -> Creator royalty (deduped if primary == creator)
+        - 1% of escrow_amount  -> Treasury
+        - 0.25% of escrow_amount -> Mediator
+        """
+        fee_platform = escrow_amount * 2 // 100  # 2% total platform fee
+        fee_creator = fee_platform // 2          # 1% royalty
+        fee_treasury = fee_platform - fee_creator  # 1% treasury
+        fee_mediator = escrow_amount * 25 // 10000  # 0.25%
+
+        # Dedup royalty when primary recipient is the creator
+        is_creator = self.creator_address.value == primary_recipient
+
+        if not is_creator:
+            self._send_payout(self.creator_address.value, fee_creator, asset_id)
+
+        self._send_payout(self.treasury_address.value, fee_treasury, asset_id)
+        self._send_payout(mediator_addr, fee_mediator, asset_id)
+
+        return escrow_amount - fee_creator - fee_treasury - fee_mediator
+
     @arc4.abimethod(create="require")
     def deploy(self) -> None:
         pass
@@ -303,13 +333,11 @@ class EscrowContract(ARC4Contract):
         self.payout_type.value = Bytes(PAYOUT)
         self.state_box.value = UInt64(CLOSED)
 
-        # 2% treasury, 0.25% mediator, remainder to worker
-        fee_treasury = escrow_amount * 2 // 100
-        fee_mediator = escrow_amount * 25 // 10000
-        remaining_amount = escrow_amount - fee_treasury - fee_mediator
-
-        self._send_payout(self.treasury_address.value, fee_treasury, asset_id)
-        self._send_payout(Account(self.mediator_data.value.address.bytes), fee_mediator, asset_id)
+        # Split platform fee: 1% royalty (creator) + 1% treasury, 0.25% mediator
+        remaining_amount = self._send_fee_split(
+            self._get_agent_address(), escrow_amount, asset_id,
+            Account(self.mediator_data.value.address.bytes),
+        )
         self._send_payout(self._get_agent_address(), remaining_amount, asset_id)
 
         log(Bytes(b"work_approved"))
@@ -458,7 +486,6 @@ class EscrowContract(ARC4Contract):
         asset_id = self._get_asset_id()
         self._verify_escrow_balance(asset_id, escrow_amount)
 
-        fee_treasury = escrow_amount * 2 // 100
         fee_arbitration = escrow_amount * 5 // 10000
 
         v1 = self.arbitrator_1_vote.value
@@ -475,32 +502,63 @@ class EscrowContract(ARC4Contract):
 
         fee_per_arbitrator = fee_arbitration // voted_count
         actual_arbitration_payout = fee_per_arbitrator * voted_count
-        remaining_amount = escrow_amount - fee_treasury - actual_arbitration_payout
 
-        # Pay Treasury
-        self._send_payout(self.treasury_address.value, fee_treasury, asset_id)
-
-        # Pay voting arbitrators
-        if v1 != UInt64(0):
-            self._send_payout(self.arbitrator_1.value, fee_per_arbitrator, asset_id)
-        if v2 != UInt64(0):
-            self._send_payout(self.arbitrator_2.value, fee_per_arbitrator, asset_id)
-        if v3 != UInt64(0):
-            self._send_payout(self.arbitrator_3.value, fee_per_arbitrator, asset_id)
-
+        # Pay platform fee split (royalty + treasury + mediator) then arbitrators
         if consensus_option == UInt64(1):
+            remaining_amount = self._send_fee_split(
+                self._get_agent_address(), escrow_amount, asset_id,
+                Account(self.mediator_data.value.address.bytes),
+            )
+            remaining_amount = remaining_amount - actual_arbitration_payout
             self.payout_type.value = Bytes(PAYOUT)
             self.state_box.value = UInt64(CLOSED)
+
+            # Pay voting arbitrators
+            if v1 != UInt64(0):
+                self._send_payout(self.arbitrator_1.value, fee_per_arbitrator, asset_id)
+            if v2 != UInt64(0):
+                self._send_payout(self.arbitrator_2.value, fee_per_arbitrator, asset_id)
+            if v3 != UInt64(0):
+                self._send_payout(self.arbitrator_3.value, fee_per_arbitrator, asset_id)
+
             self._send_payout(self._get_agent_address(), remaining_amount, asset_id)
             log(Bytes(b"dispute_resolved_agent_win"))
         elif consensus_option == UInt64(2):
+            remaining_amount = self._send_fee_split(
+                self.creator_address.value, escrow_amount, asset_id,
+                Account(self.mediator_data.value.address.bytes),
+            )
+            remaining_amount = remaining_amount - actual_arbitration_payout
             self.payout_type.value = Bytes(REFUND)
             self.state_box.value = UInt64(CLOSED)
+
+            # Pay voting arbitrators
+            if v1 != UInt64(0):
+                self._send_payout(self.arbitrator_1.value, fee_per_arbitrator, asset_id)
+            if v2 != UInt64(0):
+                self._send_payout(self.arbitrator_2.value, fee_per_arbitrator, asset_id)
+            if v3 != UInt64(0):
+                self._send_payout(self.arbitrator_3.value, fee_per_arbitrator, asset_id)
+
             self._send_payout(self.creator_address.value, remaining_amount, asset_id)
             log(Bytes(b"dispute_resolved_creator_win"))
         else:
+            remaining_amount = self._send_fee_split(
+                self.creator_address.value, escrow_amount, asset_id,
+                Account(self.mediator_data.value.address.bytes),
+            )
+            remaining_amount = remaining_amount - actual_arbitration_payout
             self.payout_type.value = Bytes(SPLIT)
             self.state_box.value = UInt64(CLOSED)
+
+            # Pay voting arbitrators
+            if v1 != UInt64(0):
+                self._send_payout(self.arbitrator_1.value, fee_per_arbitrator, asset_id)
+            if v2 != UInt64(0):
+                self._send_payout(self.arbitrator_2.value, fee_per_arbitrator, asset_id)
+            if v3 != UInt64(0):
+                self._send_payout(self.arbitrator_3.value, fee_per_arbitrator, asset_id)
+
             half_amount = remaining_amount // 2
             self._send_payout(self.creator_address.value, half_amount, asset_id)
             self._send_payout(self._get_agent_address(), half_amount, asset_id)
@@ -525,22 +583,22 @@ class EscrowContract(ARC4Contract):
         asset_id = self._get_asset_id()
         self._verify_escrow_balance(asset_id, escrow_amount)
 
-        fee_treasury = escrow_amount * 2 // 100
-        fee_mediator = escrow_amount * 25 // 10000
-        remaining_amount = escrow_amount - fee_treasury - fee_mediator
-
         if resolution == Bytes(b"agent_win"):
             self.payout_type.value = Bytes(PAYOUT)
             self.state_box.value = UInt64(CLOSED)
-            self._send_payout(self.treasury_address.value, fee_treasury, asset_id)
-            self._send_payout(Account(self.mediator_data.value.address.bytes), fee_mediator, asset_id)
+            remaining_amount = self._send_fee_split(
+                self._get_agent_address(), escrow_amount, asset_id,
+                Account(self.mediator_data.value.address.bytes),
+            )
             self._send_payout(self._get_agent_address(), remaining_amount, asset_id)
             log(Bytes(b"dispute_resolved_agent_win"))
         else:
             self.payout_type.value = Bytes(REFUND)
             self.state_box.value = UInt64(CLOSED)
-            self._send_payout(self.treasury_address.value, fee_treasury, asset_id)
-            self._send_payout(Account(self.mediator_data.value.address.bytes), fee_mediator, asset_id)
+            remaining_amount = self._send_fee_split(
+                self.creator_address.value, escrow_amount, asset_id,
+                Account(self.mediator_data.value.address.bytes),
+            )
             self._send_payout(self.creator_address.value, remaining_amount, asset_id)
             log(Bytes(b"dispute_resolved_creator_win"))
 
@@ -562,13 +620,11 @@ class EscrowContract(ARC4Contract):
         asset_id = self._get_asset_id()
         self._verify_escrow_balance(asset_id, escrow_amount)
 
-        fee_treasury = escrow_amount * 2 // 100
-        fee_mediator = escrow_amount * 25 // 10000
-        remaining_amount = escrow_amount - fee_treasury - fee_mediator
-
-        self._send_payout(self.treasury_address.value, fee_treasury, asset_id)
-        self._send_payout(Account(self.mediator_data.value.address.bytes), fee_mediator, asset_id)
-        self._send_payout(self.creator_address.value, remaining_amount, asset_id)
+        self._send_fee_split(
+            self.creator_address.value, escrow_amount, asset_id,
+            Account(self.mediator_data.value.address.bytes),
+        )
+        self._send_payout(self.creator_address.value, escrow_amount, asset_id)
 
         log(Bytes(b"dispute_auto_resolved_creator_win"))
 
@@ -587,17 +643,15 @@ class EscrowContract(ARC4Contract):
         asset_id = self._get_asset_id()
         self._verify_escrow_balance(asset_id, escrow_amount)
 
-        # 2% treasury, 0.25% mediator, remainder split
-        fee_treasury = escrow_amount * 2 // 100
-        fee_mediator = escrow_amount * 25 // 10000
-        remaining_amount = escrow_amount - fee_treasury - fee_mediator
-        half_amount = remaining_amount // 2
-
         self.payout_type.value = Bytes(SPLIT)
         self.state_box.value = UInt64(CLOSED)
 
-        self._send_payout(self.treasury_address.value, fee_treasury, asset_id)
-        self._send_payout(Account(self.mediator_data.value.address.bytes), fee_mediator, asset_id)
+        # Split platform fee; remainder split between creator and agent
+        remaining_amount = self._send_fee_split(
+            self.creator_address.value, escrow_amount, asset_id,
+            Account(self.mediator_data.value.address.bytes),
+        )
+        half_amount = remaining_amount // 2
         self._send_payout(self.creator_address.value, half_amount, asset_id)
         self._send_payout(self._get_agent_address(), half_amount, asset_id)
 
@@ -621,12 +675,11 @@ class EscrowContract(ARC4Contract):
         self.payout_type.value = Bytes(PAYOUT)
         self.state_box.value = UInt64(CLOSED)
 
-        fee_treasury = escrow_amount * 2 // 100
-        fee_mediator = escrow_amount * 25 // 10000
-        remaining_amount = escrow_amount - fee_treasury - fee_mediator
-
-        self._send_payout(self.treasury_address.value, fee_treasury, asset_id)
-        self._send_payout(Account(self.mediator_data.value.address.bytes), fee_mediator, asset_id)
+        # Split platform fee; remainder to agent
+        remaining_amount = self._send_fee_split(
+            self._get_agent_address(), escrow_amount, asset_id,
+            Account(self.mediator_data.value.address.bytes),
+        )
         self._send_payout(self._get_agent_address(), remaining_amount, asset_id)
 
         log(Bytes(b"auto_released_hitm"))
@@ -648,12 +701,11 @@ class EscrowContract(ARC4Contract):
         self.payout_type.value = Bytes(REFUND)
         self.state_box.value = UInt64(CLOSED)
 
-        fee_treasury = escrow_amount * 2 // 100
-        fee_mediator = escrow_amount * 25 // 10000
-        remaining_amount = escrow_amount - fee_treasury - fee_mediator
-
-        self._send_payout(self.treasury_address.value, fee_treasury, asset_id)
-        self._send_payout(Account(self.mediator_data.value.address.bytes), fee_mediator, asset_id)
+        # Split platform fee; remainder to creator (deduped)
+        remaining_amount = self._send_fee_split(
+            self.creator_address.value, escrow_amount, asset_id,
+            Account(self.mediator_data.value.address.bytes),
+        )
         self._send_payout(self.creator_address.value, remaining_amount, asset_id)
 
         log(Bytes(b"abandoned_refunded_creator"))

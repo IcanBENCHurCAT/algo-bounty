@@ -190,3 +190,27 @@ export interface CreateBountyResponse {
   app_id: number
   signed_txid: string
 }
+
+// ─── Fee Breakdown (FR-002, FR-004, FR-010) ─────────────────────────────────
+
+export interface FeeBreakdown {
+  escrow_amount: number
+  developer_royalty: number
+  platform_treasury: number
+  mediator_fee: number
+  claimant_payout: number
+}
+
+export interface FeeBreakdownDisplay {
+  total: string
+  developer_royalty: string
+  platform_treasury: string
+  mediator_fee: string
+  claimant_payout: string
+}
+
+export interface TxnGenWithBreakdown {
+  unsigned_txn: string
+  fee_breakdown: FeeBreakdown
+  fee_breakdown_display: FeeBreakdownDisplay
+}

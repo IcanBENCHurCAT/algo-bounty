@@ -1,3 +1,9 @@
 {
-  "feature_directory": "specs/003-gateway-security-hardening"
+  "features": [
+    {"feature_number": "004", "short_name": "jwt-rate-limiter-validation", "feature_directory": "specs/004-jwt-rate-limiter-validation"},
+    {"feature_number": "005", "short_name": "error-response-redaction", "feature_directory": "specs/005-error-response-redaction"},
+    {"feature_number": "006", "short_name": "fee-split-payouts", "feature_directory": "specs/006-fee-split-payouts"},
+    {"feature_number": "007", "short_name": "fee-split-ux", "feature_directory": "specs/007-fee-split-ux"}
+  ],
+  "feature_directory": "specs/007-fee-split-ux"
 }
