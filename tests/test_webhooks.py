@@ -17,7 +17,8 @@ def test_verify_webhook_signature():
     assert verify_webhook_signature(payload, signature, "wrong_secret") is False
 
 def test_github_webhook_endpoint_invalid_sig(client):
-    with patch.dict("os.environ", {"GITHUB_WEBHOOK_SECRET": "secret", "NODE_ENV": "production"}):
+    import os
+    with patch.dict(os.environ, {"GITHUB_WEBHOOK_SECRET": "secret", "NODE_ENV": "production"}):
         res = client.post("/webhooks/github",
                           content=b"payload",
                           headers={"X-GitHub-Event": "issues", "X-Hub-Signature-256": "sha256=invalid"})

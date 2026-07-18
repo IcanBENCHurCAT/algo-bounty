@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import React, { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
@@ -235,8 +235,8 @@ export default function BountyDetailPage() {
       }}
     >
       {/* Breadcrumb */}
-      <nav style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', color: '#475569' }}>
-        <Link href="/" style={{ color: '#6366f1' }}>Marketplace</Link>
+      <nav style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>
+        <Link href="/" style={{ color: 'var(--color-accent)' }}>Marketplace</Link>
         <span>/</span>
         <span style={{ fontFamily: 'monospace', fontSize: '0.8125rem' }}>{bountyId}</span>
       </nav>
@@ -248,7 +248,7 @@ export default function BountyDetailPage() {
             <StatusBadge status={bounty.status} />
             {bounty.treasury_altered && <Badge variant="altered">CUSTOM PAYOUT</Badge>}
           </div>
-          <span style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#475569', padding: '0.25rem 0.5rem', background: 'rgba(255,255,255,0.04)', borderRadius: '0.375rem' }}>
+          <span style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: 'var(--color-text-muted)', padding: '0.25rem 0.5rem', background: 'rgba(255,255,255,0.04)', borderRadius: '0.375rem' }}>
             {bounty.bounty_id}
           </span>
         </div>
@@ -257,7 +257,7 @@ export default function BountyDetailPage() {
             margin: '0 0 1.5rem',
             fontSize: 'clamp(1.25rem, 3vw, 1.75rem)',
             fontWeight: 800,
-            color: '#f1f5f9',
+            color: 'var(--color-text-primary)',
             lineHeight: 1.35,
           }}
         >
@@ -272,15 +272,15 @@ export default function BountyDetailPage() {
           }}
         >
           {[
-            { label: 'Reward', value: <span style={{ color: '#22d3ee', fontWeight: 800, fontSize: '1.25rem' }}>{formatAlgo(bounty.amount)}</span> },
+            { label: 'Reward', value: <span style={{ color: 'var(--color-info)', fontWeight: 800, fontSize: '1.25rem' }}>{formatAlgo(bounty.amount)}</span> },
             { label: 'Status', value: <StatusBadge status={bounty.status} /> },
-            { label: 'HITM', value: bounty.hitm ? <Badge variant="hitm">Enabled</Badge> : <span style={{ color: '#475569' }}>Disabled</span> },
-            { label: 'Karma Required', value: <span style={{ color: '#818cf8' }}>★ {bounty.karma_required}</span> },
-            { label: 'Created', value: <span style={{ color: '#64748b', fontSize: '0.875rem' }}>{formatDate(bounty.created_at)}</span> },
-            bounty.deadline_rounds_remaining != null && { label: 'Rounds Left', value: <span style={{ color: '#f59e0b' }}>{bounty.deadline_rounds_remaining.toLocaleString()}</span> },
+            { label: 'HITM', value: bounty.hitm ? <Badge variant="hitm">Enabled</Badge> : <span style={{ color: 'var(--color-text-muted)' }}>Disabled</span> },
+            { label: 'Karma Required', value: <span style={{ color: 'var(--color-accent-2)' }}>★ {bounty.karma_required}</span> },
+            { label: 'Created', value: <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.875rem' }}>{formatDate(bounty.created_at)}</span> },
+            bounty.deadline_rounds_remaining != null && { label: 'Rounds Left', value: <span style={{ color: 'var(--color-warning)' }}>{bounty.deadline_rounds_remaining.toLocaleString()}</span> },
           ].filter(Boolean).map((item) => item && (
             <div key={item.label}>
-              <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#475569', fontWeight: 600, marginBottom: '0.375rem' }}>{item.label}</div>
+              <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-muted)', fontWeight: 600, marginBottom: '0.375rem' }}>{item.label}</div>
               <div>{item.value}</div>
             </div>
           ))}
@@ -290,15 +290,15 @@ export default function BountyDetailPage() {
       {/* Creator / Worker */}
       <div style={{ ...sectionStyle, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
         <div>
-          <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#475569', fontWeight: 600, marginBottom: '0.5rem' }}>Creator</div>
-          <Link href={`/agents/${bounty.creator}`} style={{ fontFamily: 'monospace', fontSize: '0.875rem', color: '#6366f1' }}>
+          <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-muted)', fontWeight: 600, marginBottom: '0.5rem' }}>Creator</div>
+          <Link href={`/agents/${bounty.creator}`} style={{ fontFamily: 'monospace', fontSize: '0.875rem', color: 'var(--color-accent)' }}>
             {bounty.creator?.slice(0, 12)}…{bounty.creator?.slice(-6)}
           </Link>
         </div>
         {bounty.worker && (
           <div>
-            <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#475569', fontWeight: 600, marginBottom: '0.5rem' }}>Worker</div>
-            <Link href={`/agents/${bounty.worker}`} style={{ fontFamily: 'monospace', fontSize: '0.875rem', color: '#10b981' }}>
+            <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-muted)', fontWeight: 600, marginBottom: '0.5rem' }}>Worker</div>
+            <Link href={`/agents/${bounty.worker}`} style={{ fontFamily: 'monospace', fontSize: '0.875rem', color: 'var(--color-success)' }}>
               {bounty.worker?.slice(0, 12)}…{bounty.worker?.slice(-6)}
             </Link>
           </div>
@@ -310,8 +310,8 @@ export default function BountyDetailPage() {
         <div style={sectionStyle}>
           {bounty.repo_url && (
             <div style={{ marginBottom: '1rem' }}>
-              <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#475569', fontWeight: 600, marginBottom: '0.5rem' }}>Repository</div>
-              <a href={bounty.repo_url} target="_blank" rel="noopener noreferrer" style={{ color: '#6366f1', fontSize: '0.9375rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-muted)', fontWeight: 600, marginBottom: '0.5rem' }}>Repository</div>
+              <a href={bounty.repo_url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-accent)', fontSize: '0.9375rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/></svg>
                 {bounty.repo_url.replace('https://', '')}
               </a>
@@ -319,7 +319,7 @@ export default function BountyDetailPage() {
           )}
           {bounty.repo_labels && bounty.repo_labels.length > 0 && (
             <div style={{ marginBottom: '1rem' }}>
-              <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#475569', fontWeight: 600, marginBottom: '0.5rem' }}>Labels</div>
+              <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-muted)', fontWeight: 600, marginBottom: '0.5rem' }}>Labels</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem' }}>
                 {bounty.repo_labels.map((l) => <Badge key={l}>{l}</Badge>)}
               </div>
@@ -327,7 +327,7 @@ export default function BountyDetailPage() {
           )}
           {bounty.tags && bounty.tags.length > 0 && (
             <div>
-              <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#475569', fontWeight: 600, marginBottom: '0.5rem' }}>Tags</div>
+              <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-muted)', fontWeight: 600, marginBottom: '0.5rem' }}>Tags</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem' }}>
                 {bounty.tags.map((t) => <Badge key={t} variant="default">{t}</Badge>)}
               </div>
@@ -339,25 +339,25 @@ export default function BountyDetailPage() {
       {/* Escrow panel */}
       {bounty.app_id && (
         <div style={sectionStyle}>
-          <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#475569', fontWeight: 600, marginBottom: '0.75rem' }}>Escrow Contract</div>
+          <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-muted)', fontWeight: 600, marginBottom: '0.75rem' }}>Escrow Contract</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.5rem', alignItems: 'center' }}>
             <div>
-              <div style={{ fontSize: '0.75rem', color: '#475569', marginBottom: '0.25rem' }}>App ID</div>
-              <span style={{ fontFamily: 'monospace', color: '#818cf8', fontWeight: 600 }}>#{bounty.app_id}</span>
+              <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '0.25rem' }}>App ID</div>
+              <span style={{ fontFamily: 'monospace', color: 'var(--color-accent-2)', fontWeight: 600 }}>#{bounty.app_id}</span>
             </div>
             {escrow && (
               <>
                 <div>
-                  <div style={{ fontSize: '0.75rem', color: '#475569', marginBottom: '0.25rem' }}>On-chain State</div>
-                  <span style={{ fontFamily: 'monospace', color: '#22d3ee', fontSize: '0.875rem' }}>{escrow.state}</span>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '0.25rem' }}>On-chain State</div>
+                  <span style={{ fontFamily: 'monospace', color: 'var(--color-info)', fontSize: '0.875rem' }}>{escrow.state}</span>
                 </div>
                 <div>
-                  <div style={{ fontSize: '0.75rem', color: '#475569', marginBottom: '0.25rem' }}>Balance</div>
-                  <span style={{ color: '#22d3ee', fontWeight: 700 }}>{formatAlgo(escrow.balance)}</span>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '0.25rem' }}>Balance</div>
+                  <span style={{ color: 'var(--color-info)', fontWeight: 700 }}>{formatAlgo(escrow.balance)}</span>
                 </div>
                 {escrow.payout_type && (
                   <div>
-                    <div style={{ fontSize: '0.75rem', color: '#475569', marginBottom: '0.25rem' }}>Payout Type</div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '0.25rem' }}>Payout Type</div>
                     <Badge>{escrow.payout_type}</Badge>
                   </div>
                 )}
@@ -370,7 +370,7 @@ export default function BountyDetailPage() {
       {/* Action panel */}
       {connected && (
         <div style={{ ...sectionStyle, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#f1f5f9' }}>Actions</h3>
+          <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--color-text-primary)' }}>Actions</h3>
 
           {/* Claim */}
           {canClaim && (
@@ -393,7 +393,7 @@ export default function BountyDetailPage() {
                   borderRadius: '0.625rem',
                   background: 'rgba(255,255,255,0.04)',
                   border: '1px solid rgba(255,255,255,0.1)',
-                  color: '#e2e8f0',
+                  color: 'var(--color-text-primary)',
                   fontSize: '0.9375rem',
                   fontFamily: 'monospace',
                   outline: 'none',
@@ -459,7 +459,7 @@ export default function BountyDetailPage() {
                   borderRadius: '0.625rem',
                   background: 'rgba(255,255,255,0.04)',
                   border: '1px solid rgba(239,68,68,0.3)',
-                  color: '#e2e8f0',
+                  color: 'var(--color-text-primary)',
                   fontSize: '0.9375rem',
                   resize: 'vertical',
                   fontFamily: 'inherit',
@@ -475,19 +475,19 @@ export default function BountyDetailPage() {
           )}
 
           {bounty.status === 'disputed' && (
-            <div style={{ padding: '1rem', borderRadius: '0.75rem', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', color: '#fca5a5', fontSize: '0.9375rem' }}>
+            <div style={{ padding: '1rem', borderRadius: '0.75rem', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', color: 'var(--color-danger)', fontSize: '0.9375rem' }}>
               ⚖️ This bounty is under dispute. A mediator will resolve it within 30 days.
             </div>
           )}
 
           {(bounty.status === 'approved' || bounty.status === 'closed') && (
-            <div style={{ padding: '1rem', borderRadius: '0.75rem', background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)', color: '#6ee7b7', fontSize: '0.9375rem', textAlign: 'center' }}>
+            <div style={{ padding: '1rem', borderRadius: '0.75rem', background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)', color: 'var(--color-success)', fontSize: '0.9375rem', textAlign: 'center' }}>
               ✅ Completed — funds have been released
             </div>
           )}
 
           {bounty.status === 'refunded' && (
-            <div style={{ padding: '1rem', borderRadius: '0.75rem', background: 'rgba(148,163,184,0.08)', border: '1px solid rgba(148,163,184,0.15)', color: '#94a3b8', fontSize: '0.9375rem', textAlign: 'center' }}>
+            <div style={{ padding: '1rem', borderRadius: '0.75rem', background: 'rgba(148,163,184,0.08)', border: '1px solid rgba(148,163,184,0.15)', color: 'var(--color-text-secondary)', fontSize: '0.9375rem', textAlign: 'center' }}>
               Bounty was refunded to creator
             </div>
           )}
@@ -504,7 +504,7 @@ export default function BountyDetailPage() {
           <h3 id="approve-modal-title" style={{ margin: '0 0 0.75rem 0', fontSize: '1.25rem', fontWeight: 600 }}>
             ✅ Approve &amp; Release
           </h3>
-          <p id="approve-modal-desc" style={{ color: '#94a3b8', fontSize: '0.875rem', margin: '0 0 1rem 0' }}>
+          <p id="approve-modal-desc" style={{ color: 'var(--color-text-secondary)', fontSize: '0.875rem', margin: '0 0 1rem 0' }}>
             Review the fee breakdown before signing. This action will release escrowed funds.
           </p>
           <FeeBreakdownTable
@@ -539,7 +539,7 @@ export default function BountyDetailPage() {
           <h3 id="claim-modal-title" style={{ margin: '0 0 0.75rem 0', fontSize: '1.25rem', fontWeight: 600 }}>
             🤝 Claim Bounty
           </h3>
-          <p id="claim-modal-desc" style={{ color: '#94a3b8', fontSize: '0.875rem', margin: '0 0 1rem 0' }}>
+          <p id="claim-modal-desc" style={{ color: 'var(--color-text-secondary)', fontSize: '0.875rem', margin: '0 0 1rem 0' }}>
             Review the fee breakdown before signing. You will be committing escrow funds to the contract.
           </p>
           <FeeBreakdownTable
@@ -572,7 +572,7 @@ export default function BountyDetailPage() {
             background: 'rgba(99,102,241,0.06)',
             border: '1px solid rgba(99,102,241,0.15)',
             borderRadius: '1rem',
-            color: '#818cf8',
+            color: 'var(--color-accent-2)',
             fontSize: '0.9375rem',
           }}
         >

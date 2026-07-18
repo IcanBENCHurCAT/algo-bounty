@@ -53,9 +53,10 @@ def test_get_current_user_invalid_session():
     assert "Invalid session" in excinfo.value.detail
 
 def test_secret_key_missing_error():
+    import os
     import sys
     from importlib import reload
-    with patch.dict("os.environ", {"SECRET_KEY": ""}):
+    with patch.dict(os.environ, {"SECRET_KEY": ""}):
         with pytest.raises(RuntimeError) as excinfo:
             import gateway.auth
             reload(gateway.auth)

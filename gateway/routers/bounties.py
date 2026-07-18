@@ -145,6 +145,10 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
     else:
         app_id = body.app_id
 
+    if sandbox_active and app_id is None:
+        import random
+        app_id = random.randint(10000000, 99999999)
+
     if not sandbox_active:
         if not body.signed_txn:
             raise HTTPException(status_code=400, detail="signed_txn is required for on-chain deployment")
@@ -273,8 +277,21 @@ async def get_claim_txn(
     if not worker or worker.karma < b.karma_requirement:
         raise HTTPException(status_code=403, detail=f"Insufficient karma. Required: {b.karma_requirement}")
 
-    client = get_algod_client()
-    params = client.suggested_params()
+    try:
+        client = get_algod_client()
+        params = client.suggested_params()
+    except Exception:
+        if settings.ALGORAND_NETWORK == "sandbox":
+            from algosdk.transaction import SuggestedParams
+            params = SuggestedParams(
+                fee=1000,
+                first=1,
+                last=1000,
+                gh="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                flat_fee=True
+            )
+        else:
+            raise
     params.fee = 1000
     params.flat_fee = True
 
@@ -490,8 +507,21 @@ async def get_approve_txn(
     if b.status != "submitted":
         raise HTTPException(status_code=400, detail="Bounty has no work submitted to approve")
 
-    client = get_algod_client()
-    params = client.suggested_params()
+    try:
+        client = get_algod_client()
+        params = client.suggested_params()
+    except Exception:
+        if settings.ALGORAND_NETWORK == "sandbox":
+            from algosdk.transaction import SuggestedParams
+            params = SuggestedParams(
+                fee=1000,
+                first=1,
+                last=1000,
+                gh="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                flat_fee=True
+            )
+        else:
+            raise
     params.fee = 3000  # 2 inner payment transfers + 1 outer call = 3 fees
     params.flat_fee = True
 

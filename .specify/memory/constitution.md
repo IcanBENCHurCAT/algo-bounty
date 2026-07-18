@@ -1,3 +1,18 @@
+<!--
+SYNC IMPACT REPORT:
+- Version change: 2.0.0 -> 2.1.0
+- Ratification Date: 2026-07-16
+- Last Amended Date: 2026-07-18
+- Modified Sections:
+  - Section 5.3 (Bounty Fee Collection and Treasury Distribution) updated with Mediator Fee Safety Net rules.
+- Added rules:
+  - HITM mode: mediator fee redirected to worker.
+  - Auto mode (undisputed): mediator fee redirected to worker.
+  - Auto mode (disputed): mediator fee split among active mediators.
+  - UI mirror requirement: UI must mirror these dynamic calculations.
+- Templates requiring updates:
+  - plan-template.md (updated)
+-->
 # AlgoBounty Project Constitution
 
 ## Overview
@@ -40,10 +55,15 @@ This document defines the prescriptive architectural rules, engineering standard
    - **Stage 3 (Production/Scale)**: Orchestrated container environments (e.g., Kubernetes) with high-availability Postgres clusters.
 5.2. Only the platform administrator account, an authorized multi-sig account, or an on-chain DAO voting contract specified during contract deployment (the platform `mediator` or platform owner key) can upgrade applications or adjust critical platform parameters (e.g., fee rates, treasury destinations).
 5.3. **Bounty Fee Collection and Treasury Distribution**:
-   - The platform collects a `2%` fee upon successful payout distributions.
-   - Collected fees MUST be programmatically split:
-     - **Developer Royalty**: `50%` of collected fees (i.e., `1%` of total payout) MUST be sent directly to the creator's wallet address (or a designated royalty account) as compensation for platform stewardship.
-     - **Platform Treasury**: `50%` of collected fees (i.e., `1%` of total payout) MUST be sent to the platform treasury account to self-fund system maintenance and application improvements.
+   - The platform collects a `2%` platform fee and a `0.25%` mediator fee upon successful payout distributions.
+   - Collected fees MUST be programmatically split and distributed according to the following safety nets:
+     - **Developer Royalty**: `1%` of the total payout (50% of the platform fee) MUST be sent directly to the creator's wallet address (or a designated royalty account) as compensation for platform stewardship.
+     - **Platform Treasury**: `1%` of the total payout (50% of the platform fee) MUST be sent to the platform treasury account to self-fund system maintenance.
+     - **Mediator Fee Safety Net**: The `0.25%` mediator fee allocation is dynamically distributed depending on the bounty's review mode and dispute status:
+       - **HITM Mode**: If the bounty is created in Human-in-the-Middle (HITM) mode, no mediator can ever be involved in dispute resolution. The `0.25%` fee allocation MUST NOT be sent to a mediator; instead, it MUST be programmatically redirected to the worker (claimant) to maximize payout.
+       - **Auto Mode (No Dispute)**: If the bounty is in Auto mode (no HITM) and is completed/approved without a dispute being raised, the `0.25%` fee allocation MUST be programmatically redirected to the worker (claimant).
+       - **Auto Mode (Disputed)**: If the bounty is in Auto mode and enters a dispute requiring mediation, the `0.25%` mediator fee MUST be distributed evenly among the active mediators who participate in resolving the dispute.
+     - **UI Mirroring**: The frontend dashboard UI MUST mirror this exact dynamic fee calculation in its real-time fee breakdown display, showing `0 ALGO` mediator fee and corresponding increased claimant payout under HITM or undisputed Auto modes, and only displaying the active `0.25%` mediator fee allocation when mediation is explicitly active or expected during a dispute.
 5.4. **Upgrade Path**: When upgrading contracts, migration scripts and deprecation strategies (such as freezing old contracts or migrating user boxes) MUST be defined in specs and plans prior to execution. Proxy application patterns or explicit application ID registry routers should be preferred.
 5.5. **DAO Governance Evolution**: As the platform transitions to production (Stage 3), upgrades, mediator keys, and the Platform Treasury allocation MUST be managed by a DAO-governed voting model. The Developer Royalty allocation remains permanently assigned to the original creator/steward account.
 
@@ -112,5 +132,5 @@ Agents and human contributors MUST use this checklist to validate new specs/plan
 - [ ] Are any high-risk deployment tasks gated behind human verification? (Rule 9.3)
 
 ---
-**Version**: 2.0.0 | **Ratified**: 2026-07-16 | **Last Amended**: 2026-07-16
-**Superseded rules**: 1.0.0 core principles were reorganized and integrated directly into Section I and Section II above.
+**Version**: 2.1.0 | **Ratified**: 2026-07-16 | **Last Amended**: 2026-07-18
+**Superseded rules**: 2.0.0 core principles were updated with mediator fee safety net logic in Section 5.3.

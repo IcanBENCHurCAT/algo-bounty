@@ -35,8 +35,8 @@ function AddressDisplay({ address }: { address: string }) {
         style={{
           fontFamily: 'monospace',
           fontSize: '0.9375rem',
-          color: '#a5b4fc',
-          background: 'rgba(99,102,241,0.08)',
+          color: 'var(--color-accent-2)',
+          background: 'var(--color-surface-2)',
           padding: '0.375rem 0.75rem',
           borderRadius: '0.5rem',
           letterSpacing: '0.02em',
@@ -50,7 +50,7 @@ function AddressDisplay({ address }: { address: string }) {
           background: 'none',
           border: '1px solid rgba(255,255,255,0.1)',
           borderRadius: '0.375rem',
-          color: copied ? '#10b981' : '#475569',
+          color: copied ? 'var(--color-success)' : 'var(--color-text-muted)',
           cursor: 'pointer',
           fontSize: '0.75rem',
           padding: '0.25rem 0.625rem',
@@ -94,12 +94,12 @@ function BountyRow({ bounty }: { bounty: Bounty }) {
           <StatusBadge status={bounty.status} />
           {bounty.treasury_altered && <Badge variant="altered">CUSTOM PAYOUT</Badge>}
         </div>
-        <span style={{ flex: 1, color: '#cbd5e1', fontSize: '0.9375rem', minWidth: '200px' }}>
+        <span style={{ flex: 1, color: 'var(--color-text-secondary)', fontSize: '0.9375rem', minWidth: '200px' }}>
           {bounty.description && bounty.description.length > 80
             ? bounty.description.slice(0, 80) + '…'
             : bounty.description}
         </span>
-        <span style={{ color: '#22d3ee', fontWeight: 700, fontSize: '0.9375rem', whiteSpace: 'nowrap' }}>
+        <span style={{ color: 'var(--color-info)', fontWeight: 700, fontSize: '0.9375rem', whiteSpace: 'nowrap' }}>
           {formatAlgo(bounty.amount)}
         </span>
       </div>
@@ -211,8 +211,8 @@ export default function AgentProfilePage() {
       }}
     >
       {/* Breadcrumb */}
-      <nav style={{ fontSize: '0.875rem', color: '#475569', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-        <Link href="/" style={{ color: '#6366f1' }}>Marketplace</Link>
+      <nav style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+        <Link href="/" style={{ color: 'var(--color-accent)' }}>Marketplace</Link>
         <span>/</span>
         <span>Agents</span>
         <span>/</span>
@@ -227,7 +227,7 @@ export default function AgentProfilePage() {
               margin: '0 0 0.5rem',
               fontSize: 'clamp(1.5rem, 4vw, 2rem)',
               fontWeight: 900,
-              color: '#f1f5f9',
+              color: 'var(--color-text-primary)',
             }}
           >
             Agent Profile
@@ -264,7 +264,7 @@ export default function AgentProfilePage() {
                 borderRadius: '0.5rem',
                 border: 'none',
                 background: tab === t ? 'rgba(99,102,241,0.15)' : 'transparent',
-                color: tab === t ? '#818cf8' : '#475569',
+                color: tab === t ? 'var(--color-accent)' : 'var(--color-text-muted)',
                 cursor: 'pointer',
                 fontSize: '0.875rem',
                 fontWeight: tab === t ? 700 : 400,
@@ -285,7 +285,7 @@ export default function AgentProfilePage() {
             {[...Array(3)].map((_, i) => <SkeletonCard key={i} height="3.5rem" />)}
           </div>
         ) : bountiesToDisplay.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '2rem', color: '#475569' }}>
+          <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)' }}>
             No bounties to display
           </div>
         ) : (
@@ -300,7 +300,7 @@ export default function AgentProfilePage() {
       {/* Account details */}
       {profile && (
       <div style={sectionStyle}>
-        <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#f1f5f9' }}>
+        <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--color-text-primary)' }}>
           Account
         </h2>
         <div
@@ -312,7 +312,7 @@ export default function AgentProfilePage() {
         >
           {profile?.novice_tier && (
             <div>
-              <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#475569', fontWeight: 600, marginBottom: '0.375rem' }}>
+              <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-muted)', fontWeight: 600, marginBottom: '0.375rem' }}>
                 Tier
               </div>
               <Badge variant="hitm">Novice ({profile.novice_count} remaining)</Badge>
@@ -320,38 +320,38 @@ export default function AgentProfilePage() {
           )}
           {profile && (
             <div>
-              <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#475569', fontWeight: 600, marginBottom: '0.375rem' }}>
+              <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-muted)', fontWeight: 600, marginBottom: '0.375rem' }}>
                 Reputation
               </div>
-              <span style={{ color: '#22d3ee', fontWeight: 700, fontSize: '1.125rem' }}>
+              <span style={{ color: 'var(--color-info)', fontWeight: 700, fontSize: '1.125rem' }}>
                 {(profile.reputation_score || 0).toFixed(1)}
               </span>
             </div>
           )}
           {completionRate !== null && (
             <div>
-              <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#475569', fontWeight: 600, marginBottom: '0.375rem' }}>
+              <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-muted)', fontWeight: 600, marginBottom: '0.375rem' }}>
                 Completion Rate
               </div>
-              <span style={{ color: completionRate >= 80 ? '#10b981' : '#f59e0b', fontWeight: 700, fontSize: '1.125rem' }}>
+              <span style={{ color: completionRate >= 80 ? 'var(--color-success)' : 'var(--color-warning)', fontWeight: 700, fontSize: '1.125rem' }}>
                 {completionRate}%
               </span>
             </div>
           )}
           {profile?.avg_review_time && (
             <div>
-              <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#475569', fontWeight: 600, marginBottom: '0.375rem' }}>
+              <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-muted)', fontWeight: 600, marginBottom: '0.375rem' }}>
                 Avg Review Time
               </div>
-              <span style={{ color: '#94a3b8', fontSize: '0.9375rem' }}>{profile.avg_review_time}</span>
+              <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.9375rem' }}>{profile.avg_review_time}</span>
             </div>
           )}
           {profile?.created_at && (
             <div>
-              <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#475569', fontWeight: 600, marginBottom: '0.375rem' }}>
+              <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-muted)', fontWeight: 600, marginBottom: '0.375rem' }}>
                 Member Since
               </div>
-              <span style={{ color: '#94a3b8', fontSize: '0.9375rem' }}>
+              <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.9375rem' }}>
                 {new Date(profile.created_at).toLocaleDateString()}
               </span>
             </div>
