@@ -48,10 +48,10 @@ export function FeeBreakdownTable({
     },
     {
       label: 'Mediator Fee (0.25%)',
-      amount: display.mediator_fee,
-      color: fee.mediator_fee > 0 ? '#94a3b8' : undefined,
+      amount: fee.mediator_fee === 0 ? '0 ALGO (Redirected)' : display.mediator_fee,
+      color: fee.mediator_fee === 0 ? 'var(--color-success)' : '#94a3b8',
       borderBottom: true,
-      variant: hitm ? (fee.mediator_fee > 0 ? 'active' : 'zero') : 'not-applicable',
+      variant: fee.mediator_fee === 0 ? 'zero' : 'active',
     },
     {
       label: 'Claimant Payout',

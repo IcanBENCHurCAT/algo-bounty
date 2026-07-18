@@ -39,17 +39,20 @@ function formatAlgoDisplay(microAlgo: number): string {
 }
 
 /**
- * Compute fee breakdown from escrow (microALGO) and HITM flag.
- * Mirrors the contract's exact integer-division logic.
+ * Compute fee breakdown from escrow (microALGO) and review mode.
+ * Mirrors the contract's exact dynamic redirection rules.
  */
 export function computeFeeBreakdown(
   escrowAmount: number,
   hitmEnabled: boolean,
+  isDispute: boolean = false,
 ): FeeBreakdown {
   const fee = Math.floor(Math.floor(escrowAmount * 2 / 100) / 2) // 1%
-  const mediator = hitmEnabled
-    ? Math.floor(escrowAmount * 25 / 10000)
-    : 0
+  const mediatorTotal = Math.floor(escrowAmount * 25 / 10000) // 0.25%
+  
+  // Mediator fee is redirected to worker if HITM is enabled or if no dispute is raised.
+  const mediator = (hitmEnabled || !isDispute) ? 0 : mediatorTotal
+
   return {
     escrow_amount: escrowAmount,
     developer_royalty: fee,
@@ -74,14 +77,15 @@ export function formatFeeDisplay(fee: FeeBreakdown): FeeBreakdownDisplay {
  * React hook: { breakdown, display } for any escrow amount.
  *
  * Usage:
- *   const { breakdown, display } = useFeeBreakdown(escrowAmount, hitmEnabled)
+ *   const { breakdown, display } = useFeeBreakdown(escrowAmount, hitmEnabled, isDispute)
  */
 export function useFeeBreakdown(
   escrowAmount: number,
   hitmEnabled: boolean,
+  isDispute: boolean = false,
 ): { breakdown: FeeBreakdown; display: FeeBreakdownDisplay } {
   return {
-    breakdown: computeFeeBreakdown(escrowAmount, hitmEnabled),
-    display: formatFeeDisplay(computeFeeBreakdown(escrowAmount, hitmEnabled)),
+    breakdown: computeFeeBreakdown(escrowAmount, hitmEnabled, isDispute),
+    display: formatFeeDisplay(computeFeeBreakdown(escrowAmount, hitmEnabled, isDispute)),
   }
 }

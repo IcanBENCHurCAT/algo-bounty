@@ -319,7 +319,8 @@ async def get_claim_txn(
     # Fee breakdown (FR-002, FR-004, FR-010)
     escrow_amount = b.amount
     fee = (escrow_amount * 2) // 100 // 2  # 1% (developer royalty + platform treasury)
-    mediator_fee = (escrow_amount * 25) // 10000 if b.is_hitm else 0
+    # Mediator Fee Safety Net (Constitution v2.1.0): always 0 unless active dispute
+    mediator_fee = 0
     claimant_payout = escrow_amount - fee - fee - mediator_fee
 
     fee_breakdown = FeeBreakdown(
@@ -557,7 +558,8 @@ async def get_approve_txn(
     # Same integer-division formula as the on-chain contract.
     escrow_amount = b.amount
     fee = (escrow_amount * 2) // 100 // 2  # 1% (developer royalty + platform treasury)
-    mediator_fee = (escrow_amount * 25) // 10000 if b.is_hitm else 0
+    # Mediator Fee Safety Net (Constitution v2.1.0): always 0 unless active dispute
+    mediator_fee = 0
     claimant_payout = escrow_amount - fee - fee - mediator_fee
 
     fee_breakdown = FeeBreakdown(
