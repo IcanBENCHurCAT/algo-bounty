@@ -99,7 +99,7 @@ def authenticate_actor(base_url: str, role: str, signing_key: nacl.signing.Signi
     challenge = resp.json()["challenge"]
 
     # Step 2: Sign the challenge bytes
-    message_bytes = challenge.encode("utf-8")
+    message_bytes = b"MX" + challenge.encode("utf-8")
     signed = signing_key.sign(message_bytes)
     signature_b64 = __import__("base64").b64encode(signed.signature).decode()
 
@@ -122,6 +122,9 @@ def authenticate_actor(base_url: str, role: str, signing_key: nacl.signing.Signi
 
 
 def main():
+    import sys
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description="AlgoBounty Wallet Factory")
     parser.add_argument("--actor", type=str, help="Print info for a specific actor role")
     parser.add_argument("--auth", type=str, metavar="BASE_URL",
@@ -132,7 +135,8 @@ def main():
     actors = get_all_actors()
 
     if args.auth:
-        print(f"Authenticating actors against {args.auth}...\n")
+        if not args.json:
+            print(f"Authenticating actors against {args.auth}...\n")
         results = {}
         for role, info in actors.items():
             if role == "OBSERVER":
@@ -147,7 +151,10 @@ def main():
                 "authenticated": jwt is not None,
             }
             status = "✓" if jwt else "✗"
-            print(f"  {status} {role}: {addr[:8]}...{addr[-4:]}")
+            if not args.json:
+                print(f"  {status} {role}: {addr[:8]}...{addr[-4:]}")
+            else:
+                print(f"  {status} {role}: {addr[:8]}...{addr[-4:]}", file=sys.stderr)
 
         if args.json:
             print(json.dumps(results, indent=2))

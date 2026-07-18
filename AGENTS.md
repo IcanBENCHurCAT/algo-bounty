@@ -190,6 +190,19 @@ Set the following environment variables in your `.env` file:
 - `GITHUB_INSTALLATION_ID`: The installation ID for the repository.
 - `GITHUB_WEBHOOK_SECRET`: The secret used to sign webhook payloads.
 
+## 8. Local E2E Verification & Sandbox Mocking Rules (CRITICAL FOR AGENTS)
+
+When running E2E tests or proxy user simulations against the local frontend/backend, follow these rules:
+
+1. **Client API Routing**: When running the Next.js dev server standalone, `NEXT_PUBLIC_API_URL` must be set in `dashboard/.env.local` (pointing to `http://localhost:8000`). If omitted, Next.js routes client API calls to its own server, resulting in 404s.
+2. **Deterministic Wallet Bypasses**: Bypassing Pera/Defly extension logins in Playwright requires mock hydration in `AuthProvider.tsx` via `window.localStorage` checks (e.g. `algobounty_connected === 'true'`). Always process E2E bypass states immediately on mount, before waiting for wallet provider initialization.
+3. **Transaction Signature Bypasses**: Bypassing on-chain transaction popups in Playwright can be achieved by returning `""` in the frontend `signTransaction` hook. The backend sandbox skips transaction broadcasting if the signature payload is blank/empty, which allows DB state updates to proceed without error.
+4. **Algorand Domain Separation Prefix**: Standard Algorand byte signature verification expects message payloads to be signed with a `b"MX"` prefix. All mock Python signers (like `wallet-factory.py`) must prepend `b"MX"` before signing to pass the backend challenge checks.
+5. **Sandbox Backend Resilience**:
+   - Assign a random 8-digit App ID to new open bounties created in sandbox mode to prevent downstream prep failures.
+   - Fall back to offline dummy SuggestedParams if the local Algorand node is offline or unreachable.
+6. **Inner Monologues Accuracy**: Always ensure step-by-step monologues and visual reports precisely reflect what is *actually* visible on the captured screenshots. Double-check navigation links (e.g., "Post Bounty" on the left), wallet selections, and user perspectives.
+
 ---
 
 *Keep this document updated as the project evolves.*

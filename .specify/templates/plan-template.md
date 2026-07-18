@@ -49,7 +49,7 @@
 - [ ] **OIDC Security**: Are GitHub Actions automated tests validated securely using GitHub JWKS OIDC tokens?
 - [ ] **Database Compatibility**: Do database operations support both production PostgreSQL (`postgresql+asyncpg://`) and local SQLite?
 - [ ] **Continuous Worker Setup**: Does the background worker/indexer run continuously in a non-throttled GCP Cloud Run environment?
-
+- [ ] **Mediator Fee Safety Net**: If the feature touches payouts, fees, or claims, does it implement the safety nets (refunding the 0.25% fee to the worker under HITM or undisputed Auto modes, and only splitting/paying mediators if a dispute is mediated in Auto mode)?
 
 ## Project Structure
 

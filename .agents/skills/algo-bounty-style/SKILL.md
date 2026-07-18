@@ -179,5 +179,6 @@ When auditing any page, check:
 | 2026-07-17 | System | Initial extraction from codebase |
 | 2026-07-17 | UX Researcher | Performed styling audit; added token leakage warning (hardcoded hex vs CSS variables) |
 | 2026-07-17 | UX Researcher | Resolved STYLE-001 by replacing hardcoded hexes with CSS variables across app components |
+| 2026-07-17 | UX Researcher | Added navigation layout and wallet dropdown positioning rules to synchronize mock monologues with actual screenshots |
 
 > **Note to `algo-bounty-user-experience`**: When you discover style inconsistencies, missing patterns, accessibility regressions, or new component patterns during UX audits, append findings to the relevant section above and update the Change Log. This keeps the design system in sync with reality.

@@ -12,8 +12,8 @@ This skill drives **Playwright** to simulate real users (defined by personas fro
 ## 1. Skill Dependencies
 
 This skill integrates and depends on two sibling skills. **Always load these first before executing**:
-- [algo-bounty-style](file:///c:/Users/Garret/.gemini/antigravity/scratch/algo-bounty/.agents/skills/algo-bounty-style/SKILL.md) — The living design system and design tokens guide.
-- [algo-bounty-user-experience](file:///c:/Users/Garret/.gemini/antigravity/scratch/algo-bounty/.agents/skills/algo-bounty-user-experience/SKILL.md) — The UX researcher and persona generator engine.
+- [algo-bounty-style](../algo-bounty-style/SKILL.md) — The living design system and design tokens guide.
+- [algo-bounty-user-experience](../algo-bounty-user-experience/SKILL.md) — The UX researcher and persona generator engine.
 
 ---
 
@@ -109,15 +109,15 @@ During execution, annotate each step with the persona's **inner monologue** gene
 
 ## 5. Report Generation
 
-Once execution completes, generate the two required report files under the artifacts directory (`C:\Users\Garret\.gemini\antigravity\brain\<conversation_id>/`):
+Once execution completes, generate the two required report files under the artifacts directory (`<appDataDir>\brain\<conversation_id>\`):
 
 ### 5.1 Visually Appealing HTML Report
-- **File Path**: `C:\Users\Garret\.gemini\antigravity\brain\<conversation_id>/ux_report_<persona_id>.html`
+- **File Path**: `<appDataDir>\brain\<conversation_id>\ux_report_<persona_id>.html`
 - **Source Template**: `.agents/skills/proxy-user-experience/resources/report-template.html`
 - **Format**: Injects captured screenshots, timing data, heuristic radar charts, and inner monologues into the interactive template.
 
 ### 5.2 Engineering Specs List
-- **File Path**: `C:\Users\Garret\.gemini\antigravity\brain\<conversation_id>/ux_engineering_specs_<persona_id>.md`
+- **File Path**: `<appDataDir>\brain\<conversation_id>\ux_engineering_specs_<persona_id>.md`
 - **Format**: Markdown with severity-ranked UX findings.
 - **Goal**: Ready to be consumed by `/speckit-specify` for system remediation.
 
@@ -129,3 +129,31 @@ If the Playwright run or the UX analysis uncovers visual discrepancies, accessib
 1. Load `algo-bounty-style` skill.
 2. Edit its `SKILL.md` file to update tokens, add component classes, or update WCAG status.
 3. Append a clear record to the `algo-bounty-style` Change Log.
+
+---
+
+## 7. E2E Sandbox and Local Testing Heuristics
+
+When running E2E simulation tests locally with Playwright and a fallback sandbox environment, always adhere to the following troubleshooting rules:
+
+### 7.1 Frontend API Configuration
+* **Port Mapping**: When running the Next.js frontend developer server standalone (`npm run dev`), make sure `NEXT_PUBLIC_API_URL` is defined in `dashboard/.env.local` (e.g. `NEXT_PUBLIC_API_URL=http://localhost:8000`). If missing, Next.js will intercept client API calls (such as `/api/v1/agents/me`) and return 404 (Not Found).
+
+### 7.2 Session & Signature Mocking
+* **Instant Session Hydration**: In `AuthProvider.tsx`, evaluate the E2E bypass flag (`window.localStorage.getItem('algobounty_connected') === 'true'`) at the very top of the connection `useEffect` hook, before checking if the wallet manager `isReady`. This prevents blocking in headless test contexts where real wallet extensions are unavailable.
+* **Blank Transaction Signatures**: When E2E mocking is active, have the frontend `signTransaction` return `""` (empty string). In sandbox mode, the backend accepts empty signature strings and skips transaction broadcasting, allowing updates to succeed database-side without node errors.
+* **Standard Algorand Bytes Signature Prefix**: Standard Algorand byte verification (used by the backend `verify_bytes` handler) prepends the message with a `"MX"` prefix for domain separation. Deterministic Python signers (like `wallet-factory.py`) must manually prefix the challenge bytes with `b"MX"` before signing to pass verify checks.
+
+### 7.3 Backend Sandbox Resiliency
+* **Mock Application IDs**: During bounty creation in sandbox mode, assign a random 8-digit application ID (e.g. via `random.randint`) when `app_id` is not supplied by the transaction, preventing subsequent `/claim/txn` and `/approve/txn` endpoints from failing on null values.
+* **Offline suggested_params Fallback**: Wrap `client.suggested_params()` in a try-except block that returns a mock `SuggestedParams` object if the local sandbox algod node is offline or unreachable, keeping backend preparation endpoints fully responsive.
+
+### 7.4 Multimodal Persona Simulation & Monologue Alignment
+* **Visual Understanding Requirement**: Instead of using static/hardcoded monologues in generation templates, future simulations must use a multimodal sub-agent (e.g. a visual model) loaded with the persona's JSON metadata (web3 literacy, technical level, attention span, wallet access).
+* **Objective Screenshot Evaluation**: The visual sub-agent must inspect each captured Playwright screenshot to generate objective 3rd-person observations, realistic emotional reactions (monologues), and UX timing diagnostics.
+* **Alignment Checklist**:
+  - Button labels (e.g. reference "Post Bounty" in the top-left rather than a speculative button on the right).
+  - Component positions and visibility states.
+  - Loading states (never describe scanning a QR code or spinning widgets unless they are visually captured in the screenshot).
+  - Archetype perspective alignment (e.g., Step 4 claim confirmation must be narrated from Bob the worker's perspective, not Alice the creator's).
+
