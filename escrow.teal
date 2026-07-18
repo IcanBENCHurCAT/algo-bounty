@@ -1,703 +1,3738 @@
-        fee_platform = escrow_amount * 2 // 100  # 2% total platform fee
-        fee_creator = fee_platform // 2          # 1% royalty
-        fee_treasury = fee_platform - fee_creator  # 1% treasury
-        fee_mediator = escrow_amount * 25 // 10000  # 0.25%
-
-        # Dedup royalty when primary recipient is the creator
-        is_creator = self.creator_address.value == primary_recipient
-
-        if not is_creator:
-            self._send_payout(self.creator_address.value, fee_creator, asset_id)
-
-        self._send_payout(self.treasury_address.value, fee_treasury, asset_id)
-        self._send_payout(mediator_addr, fee_mediator, asset_id)
-
-        return escrow_amount - fee_creator - fee_treasury - fee_mediator
-
-    @arc4.abimethod(create="require")
-    def deploy(self) -> None:
-        pass
-
-    @arc4.abimethod
-    def create_bounty(
-        self,
-        bounty_id: Bytes,
-        escrow_amount: UInt64,
-        is_hitm: UInt64,
-        asset_id: UInt64,
-        review_days: UInt64,
-        mediator: Account,
-        treasury: Account,
-    ) -> None:
-        assert Txn.type_enum == TransactionType.ApplicationCall
-        assert Txn.on_completion == OnCompleteAction.NoOp
-        assert Txn.rekey_to == Account(Bytes(32 * b"\x00"))
-
-        # SECURITY FIX: Prevent re-initialization
-        val, exists = self.state_box.maybe()
-        assert not exists, "Bounty already initialized"
-
-        # Validate inputs
-        assert bounty_id.length <= 64
-        assert escrow_amount > 0
-        assert is_hitm <= 1
-        assert asset_id >= 0
-
-        # OPT-IN ASA: If asset_id > 0, the app account must opt-in to it first.
-        if asset_id > 0:
-            itxn.AssetTransfer(
-                xfer_asset=asset_id,
-                asset_receiver=Global.current_application_address,
-                asset_amount=0,
-                fee=0,
-            ).submit()
-
-        # Initialize state
-        self.state_box.value = UInt64(OPEN)
-
-        # Initialize mediator data inside a single box
-        self.mediator_data.value = MediatorData(
-            address=arc4.Address(mediator),
-            bond_amount=arc4.UInt64(0),  # Will be populated when bonded
-            is_bonded=arc4.UInt64(0),
-            did_hash=arc4.StaticArray[arc4.Byte, typing.Literal[32]].from_bytes(Bytes(b"\x00" * 32))
-        )
-        self.treasury_address.value = treasury
-        self.escrow_amount.value = escrow_amount
-        self.bounty_id.value = bounty_id
-        self.creator_address.value = Txn.sender
-
-        if is_hitm > 0:
-            self.is_hitm.value = is_hitm
-        if asset_id > 0:
-            self.asset_id.value = asset_id
-        if review_days > 0:
-            self.review_days.value = review_days
-
-        log(Bytes(b"bounty_created"))
-        log(bounty_id)
-
-    @arc4.abimethod
-    def claim_bounty(self) -> None:
-        assert Txn.type_enum == TransactionType.ApplicationCall
-        assert Txn.on_completion == OnCompleteAction.NoOp
-        assert Txn.rekey_to == Account(Bytes(32 * b"\x00"))
-
-        assert self.state_box.value == OPEN
-        assert Txn.sender != self.creator_address.value, "Cannot claim your own bounty"
-        assert self._get_agent_address() == Account(Bytes(32 * b"\x00")), "Bounty already claimed"
-
-        # Validate that the claiming agent has opted in to the reward ASA (if asset bounty)
-        asset_id = self._get_asset_id()
-        if asset_id > 0:
-            balance, exists = op.AssetHoldingGet.asset_balance(Txn.sender, asset_id)
-            assert exists, "Claiming agent must opt-in to the asset first"
-
-        self.agent_address.value = Txn.sender
-        self.state_box.value = UInt64(CLAIMED)
-
-        # Set claim deadline
-        claim_timeout = TemplateVar[UInt64]("CLAIM_TIMEOUT")
-        self.claim_deadline.value = Global.latest_timestamp + claim_timeout
-        self.claim_timestamp.value = Global.latest_timestamp
-
-        log(Bytes(b"bounty_claimed"))
-
-    @arc4.abimethod
-    def submit_work(self, proof_url: Bytes, proof_data: Bytes) -> None:
-        assert Txn.type_enum == TransactionType.ApplicationCall
-        assert Txn.on_completion == OnCompleteAction.NoOp
-        assert Txn.rekey_to == Account(Bytes(32 * b"\x00"))
-
-        current = self.state_box.value
-
-        if current == CLAIMED:
-            assert Txn.sender == self.agent_address.value, "Only claiming agent can submit work"
-            assert proof_url.length > 0
-            assert proof_url.length <= MAX_URL_BYTES
-            assert proof_data.length > 0
-            assert proof_data.length <= MAX_PROOF_BYTES
-
-            self.proof_url.value = proof_url
-            self.proof_data.value = proof_data
-            self.state_box.value = UInt64(SUBMITTED)
-
-            # HITM: Set review deadline if enabled
-            is_hitm_val, hitm_exists = self.is_hitm.maybe()
-            if hitm_exists and is_hitm_val == 1:
-                review_days_val, days_exists = self.review_days.maybe()
-                days = review_days_val if days_exists else UInt64(0)
-                self.review_deadline.value = Global.latest_timestamp + days * 86400
-
-            log(Bytes(b"work_submitted"))
-
-        elif current == REJECTED:
-            agent_val, agent_exists = self.agent_address.maybe()
-            assert agent_exists and Txn.sender == agent_val, "Only claiming agent can submit work"
-
-            rej_val, rej_exists = self.rejection_count.maybe()
-            rejections = rej_val if rej_exists else UInt64(0)
-            assert rejections < MAX_REJECTIONS
-
-            assert proof_url.length > 0
-            assert proof_url.length <= MAX_URL_BYTES
-            assert proof_data.length > 0
-            assert proof_data.length <= MAX_PROOF_BYTES
-
-            self.proof_url.value = proof_url
-            self.proof_data.value = proof_data
-            self.rejection_count.value = rejections + 1
-            self.state_box.value = UInt64(SUBMITTED)
-
-            # HITM: Reset review deadline on revision if enabled
-            is_hitm_val, hitm_exists = self.is_hitm.maybe()
-            if hitm_exists and is_hitm_val == 1:
-                review_days_val, days_exists = self.review_days.maybe()
-                days = review_days_val if days_exists else UInt64(0)
-                self.review_deadline.value = Global.latest_timestamp + days * 86400
-
-            log(Bytes(b"work_revise_submitted"))
-
-        else:
-            assert False, "Invalid state for submit_work"
-
-    @arc4.abimethod
-    def approve_work(self) -> None:
-        assert Txn.type_enum == TransactionType.ApplicationCall
-        assert Txn.on_completion == OnCompleteAction.NoOp
-        assert Txn.rekey_to == Account(Bytes(32 * b"\x00"))
-
-        assert self.state_box.value == SUBMITTED
-        assert Txn.sender == self.creator_address.value, "Only creator can approve work"
-
-        escrow_amount = self.escrow_amount.value
-        asset_id = self._get_asset_id()
-        self._verify_escrow_balance(asset_id, escrow_amount)
-
-        self.payout_type.value = Bytes(PAYOUT)
-        self.state_box.value = UInt64(CLOSED)
-
-        # Split platform fee: 1% royalty (creator) + 1% treasury, 0.25% mediator
-        remaining_amount = self._send_fee_split(
-            self._get_agent_address(), escrow_amount, asset_id,
-            Account(self.mediator_data.value.address.bytes),
-        )
-        self._send_payout(self._get_agent_address(), remaining_amount, asset_id)
-
-        log(Bytes(b"work_approved"))
-
-    @arc4.abimethod
-    def reject_work(self, reason: Bytes) -> None:
-        assert Txn.type_enum == TransactionType.ApplicationCall
-        assert Txn.on_completion == OnCompleteAction.NoOp
-        assert Txn.rekey_to == Account(Bytes(32 * b"\x00"))
-
-        assert self.state_box.value == SUBMITTED
-        assert Txn.sender == self.creator_address.value, "Only creator can reject work"
-        assert self._get_rejection_count() < MAX_REJECTIONS
-
-        self.rejection_count.value = self._get_rejection_count() + 1
-        self.state_box.value = UInt64(REJECTED)
-
-        log(Bytes(b"work_rejected"))
-        log(reason)
-
-    @arc4.abimethod
-    def submit_dispute(self, reason: Bytes) -> None:
-        assert Txn.type_enum == TransactionType.ApplicationCall
-        assert Txn.on_completion == OnCompleteAction.NoOp
-        assert Txn.rekey_to == Account(Bytes(32 * b"\x00"))
-
-        state = self.state_box.value
-        assert state == SUBMITTED or state == REJECTED
-        assert Txn.sender == self.creator_address.value or Txn.sender == self._get_agent_address()
-        assert reason.length > 0
-        assert reason.length <= MAX_DISPUTE_REASON_BYTES
-
-        self.dispute_reason.value = reason
-        self.dispute_initiator.value = Txn.sender
-        self.state_box.value = UInt64(DISPUTED)
-        self.dispute_timestamp.value = Global.latest_timestamp
-
-        # Select 3 arbitrators (fallback to treasury if pool size is too small)
-        count = self._get_candidate_count()
-        treasury = self.treasury_address.value
-        creator = self.creator_address.value
-        worker = self._get_agent_address()
-
-        arb1 = treasury
-        arb2 = treasury
-        arb3 = treasury
-
-        if count > UInt64(0):
-            seed = op.sha256(Txn.tx_id + op.itob(Global.latest_timestamp))
-            start_idx = op.btoi(seed) % count
-
-            # Try to find arb1
-            idx = start_idx
-            found = False
-            searched = UInt64(0)
-            while searched < count and not found:
-                candidate = Box(Account, key=Bytes(b"cand_addr_") + op.itob(idx)).value
-                if candidate != creator and candidate != worker:
-                    arb1 = candidate
-                    found = True
-                idx = (idx + 1) % count
-                searched = searched + 1
-
-            # Try to find arb2
-            found = False
-            searched = UInt64(0)
-            while searched < count and not found:
-                candidate = Box(Account, key=Bytes(b"cand_addr_") + op.itob(idx)).value
-                if candidate != creator and candidate != worker and candidate != arb1:
-                    arb2 = candidate
-                    found = True
-                idx = (idx + 1) % count
-                searched = searched + 1
-
-            # Try to find arb3
-            found = False
-            searched = UInt64(0)
-            while searched < count and not found:
-                candidate = Box(Account, key=Bytes(b"cand_addr_") + op.itob(idx)).value
-                if candidate != creator and candidate != worker and candidate != arb1 and candidate != arb2:
-                    arb3 = candidate
-                    found = True
-                idx = (idx + 1) % count
-                searched = searched + 1
-
-        self.arbitrator_1.value = arb1
-        self.arbitrator_2.value = arb2
-        self.arbitrator_3.value = arb3
-
-        self.arbitrator_1_vote.value = UInt64(0)
-        self.arbitrator_2_vote.value = UInt64(0)
-        self.arbitrator_3_vote.value = UInt64(0)
-
-        log(Bytes(b"dispute_submitted"))
-        log(arb1.bytes)
-        log(arb2.bytes)
-        log(arb3.bytes)
-
-    @arc4.abimethod
-    def vote_dispute(self, vote_option: UInt64) -> None:
-        assert Txn.type_enum == TransactionType.ApplicationCall
-        assert Txn.on_completion == OnCompleteAction.NoOp
-        assert Txn.rekey_to == Account(Bytes(32 * b"\x00"))
-
-        assert self.state_box.value == DISPUTED, "Bounty is not disputed"
-        assert vote_option == UInt64(1) or vote_option == UInt64(2) or vote_option == UInt64(3), "Invalid vote option"
-
-        sender = Txn.sender
-        voted = False
-        if sender == self.arbitrator_1.value and self.arbitrator_1_vote.value == UInt64(0):
-            self.arbitrator_1_vote.value = vote_option
-            voted = True
-        elif sender == self.arbitrator_2.value and self.arbitrator_2_vote.value == UInt64(0):
-            self.arbitrator_2_vote.value = vote_option
-            voted = True
-        elif sender == self.arbitrator_3.value and self.arbitrator_3_vote.value == UInt64(0):
-            self.arbitrator_3_vote.value = vote_option
-            voted = True
-
-        assert voted, "Sender is not an assigned arbitrator with a pending vote"
-
-        log(Bytes(b"arbitrator_voted"))
-        log(sender.bytes)
-        log(op.itob(vote_option))
-
-        # Check consensus
-        v1 = self.arbitrator_1_vote.value
-        v2 = self.arbitrator_2_vote.value
-        v3 = self.arbitrator_3_vote.value
-
-        consensus_option = UInt64(0)
-        if v1 != UInt64(0) and v1 == v2:
-            consensus_option = v1
-        elif v1 != UInt64(0) and v1 == v3:
-            consensus_option = v1
-        elif v2 != UInt64(0) and v2 == v3:
-            consensus_option = v2
-        elif v1 != UInt64(0) and v2 != UInt64(0) and v3 != UInt64(0):
-            consensus_option = UInt64(3)
-
-        if consensus_option != UInt64(0):
-            self._execute_arbitration_payout(consensus_option)
-
-    def _execute_arbitration_payout(self, consensus_option: UInt64) -> None:
-        escrow_amount = self.escrow_amount.value
-        asset_id = self._get_asset_id()
-        self._verify_escrow_balance(asset_id, escrow_amount)
-
-        fee_arbitration = escrow_amount * 5 // 10000
-
-        v1 = self.arbitrator_1_vote.value
-        v2 = self.arbitrator_2_vote.value
-        v3 = self.arbitrator_3_vote.value
-
-        voted_count = UInt64(0)
-        if v1 != UInt64(0):
-            voted_count = voted_count + 1
-        if v2 != UInt64(0):
-            voted_count = voted_count + 1
-        if v3 != UInt64(0):
-            voted_count = voted_count + 1
-
-        fee_per_arbitrator = fee_arbitration // voted_count
-        actual_arbitration_payout = fee_per_arbitrator * voted_count
-
-        # Pay platform fee split (royalty + treasury + mediator) then arbitrators
-        if consensus_option == UInt64(1):
-            remaining_amount = self._send_fee_split(
-                self._get_agent_address(), escrow_amount, asset_id,
-                Account(self.mediator_data.value.address.bytes),
-            )
-            remaining_amount = remaining_amount - actual_arbitration_payout
-            self.payout_type.value = Bytes(PAYOUT)
-            self.state_box.value = UInt64(CLOSED)
-
-            # Pay voting arbitrators
-            if v1 != UInt64(0):
-                self._send_payout(self.arbitrator_1.value, fee_per_arbitrator, asset_id)
-            if v2 != UInt64(0):
-                self._send_payout(self.arbitrator_2.value, fee_per_arbitrator, asset_id)
-            if v3 != UInt64(0):
-                self._send_payout(self.arbitrator_3.value, fee_per_arbitrator, asset_id)
-
-            self._send_payout(self._get_agent_address(), remaining_amount, asset_id)
-            log(Bytes(b"dispute_resolved_agent_win"))
-        elif consensus_option == UInt64(2):
-            remaining_amount = self._send_fee_split(
-                self.creator_address.value, escrow_amount, asset_id,
-                Account(self.mediator_data.value.address.bytes),
-            )
-            remaining_amount = remaining_amount - actual_arbitration_payout
-            self.payout_type.value = Bytes(REFUND)
-            self.state_box.value = UInt64(CLOSED)
-
-            # Pay voting arbitrators
-            if v1 != UInt64(0):
-                self._send_payout(self.arbitrator_1.value, fee_per_arbitrator, asset_id)
-            if v2 != UInt64(0):
-                self._send_payout(self.arbitrator_2.value, fee_per_arbitrator, asset_id)
-            if v3 != UInt64(0):
-                self._send_payout(self.arbitrator_3.value, fee_per_arbitrator, asset_id)
-
-            self._send_payout(self.creator_address.value, remaining_amount, asset_id)
-            log(Bytes(b"dispute_resolved_creator_win"))
-        else:
-            remaining_amount = self._send_fee_split(
-                self.creator_address.value, escrow_amount, asset_id,
-                Account(self.mediator_data.value.address.bytes),
-            )
-            remaining_amount = remaining_amount - actual_arbitration_payout
-            self.payout_type.value = Bytes(SPLIT)
-            self.state_box.value = UInt64(CLOSED)
-
-            # Pay voting arbitrators
-            if v1 != UInt64(0):
-                self._send_payout(self.arbitrator_1.value, fee_per_arbitrator, asset_id)
-            if v2 != UInt64(0):
-                self._send_payout(self.arbitrator_2.value, fee_per_arbitrator, asset_id)
-            if v3 != UInt64(0):
-                self._send_payout(self.arbitrator_3.value, fee_per_arbitrator, asset_id)
-
-            half_amount = remaining_amount // 2
-            self._send_payout(self.creator_address.value, half_amount, asset_id)
-            self._send_payout(self._get_agent_address(), half_amount, asset_id)
-            log(Bytes(b"dispute_resolved_split"))
-
-    @arc4.abimethod
-    def resolve_dispute(self, resolution: Bytes, mediator_signature: Bytes) -> None:
-        assert Txn.type_enum == TransactionType.ApplicationCall
-        assert Txn.on_completion == OnCompleteAction.NoOp
-        assert Txn.rekey_to == Account(Bytes(32 * b"\x00"))
-
-        assert self.state_box.value == DISPUTED
-        assert resolution == Bytes(b"agent_win") or resolution == Bytes(b"creator_win")
-        assert mediator_signature.length > 0
-
-        # Cryptographically verify mediator signature
-        mediator_addr = self.mediator_data.value.address.bytes
-        message = op.itob(Global.current_application_id.id) + resolution
-        assert op.ed25519verify(message, mediator_signature, mediator_addr), "Invalid mediator signature"
-
-        escrow_amount = self.escrow_amount.value
-        asset_id = self._get_asset_id()
-        self._verify_escrow_balance(asset_id, escrow_amount)
-
-        if resolution == Bytes(b"agent_win"):
-            self.payout_type.value = Bytes(PAYOUT)
-            self.state_box.value = UInt64(CLOSED)
-            remaining_amount = self._send_fee_split(
-                self._get_agent_address(), escrow_amount, asset_id,
-                Account(self.mediator_data.value.address.bytes),
-            )
-            self._send_payout(self._get_agent_address(), remaining_amount, asset_id)
-            log(Bytes(b"dispute_resolved_agent_win"))
-        else:
-            self.payout_type.value = Bytes(REFUND)
-            self.state_box.value = UInt64(CLOSED)
-            remaining_amount = self._send_fee_split(
-                self.creator_address.value, escrow_amount, asset_id,
-                Account(self.mediator_data.value.address.bytes),
-            )
-            self._send_payout(self.creator_address.value, remaining_amount, asset_id)
-            log(Bytes(b"dispute_resolved_creator_win"))
-
-    @arc4.abimethod
-    def auto_resolve_creator_win(self) -> None:
-        assert Txn.type_enum == TransactionType.ApplicationCall
-        assert Txn.on_completion == OnCompleteAction.NoOp
-
-        assert self.state_box.value == DISPUTED
-
-        created_ts = self.dispute_timestamp.value
-        timeout = UInt64(14 * 24 * 60 * 60)  # 14 days
-        assert Global.latest_timestamp > created_ts + timeout
-
-        self.payout_type.value = Bytes(REFUND)
-        self.state_box.value = UInt64(CLOSED)
-
-        escrow_amount = self.escrow_amount.value
-        asset_id = self._get_asset_id()
-        self._verify_escrow_balance(asset_id, escrow_amount)
-
-        self._send_fee_split(
-            self.creator_address.value, escrow_amount, asset_id,
-            Account(self.mediator_data.value.address.bytes),
-        )
-        self._send_payout(self.creator_address.value, escrow_amount, asset_id)
-
-        log(Bytes(b"dispute_auto_resolved_creator_win"))
-
-    @arc4.abimethod
-    def timeout_dispute(self) -> None:
-        assert Txn.type_enum == TransactionType.ApplicationCall
-        assert Txn.on_completion == OnCompleteAction.NoOp
-
-        assert self.state_box.value == DISPUTED
-
-        dispute_ts = self.dispute_timestamp.value
-        dispute_timeout = TemplateVar[UInt64]("DISPUTE_TIMEOUT")
-        assert Global.latest_timestamp > dispute_ts + dispute_timeout, "Dispute timeout not yet reached"
-
-        escrow_amount = self.escrow_amount.value
-        asset_id = self._get_asset_id()
-        self._verify_escrow_balance(asset_id, escrow_amount)
-
-        self.payout_type.value = Bytes(SPLIT)
-        self.state_box.value = UInt64(CLOSED)
-
-        # Split platform fee; remainder split between creator and agent
-        remaining_amount = self._send_fee_split(
-            self.creator_address.value, escrow_amount, asset_id,
-            Account(self.mediator_data.value.address.bytes),
-        )
-        half_amount = remaining_amount // 2
-        self._send_payout(self.creator_address.value, half_amount, asset_id)
-        self._send_payout(self._get_agent_address(), half_amount, asset_id)
-
-        log(Bytes(b"dispute_timeout_split"))
-
-    @arc4.abimethod
-    def auto_release(self) -> None:
-        assert Txn.type_enum == TransactionType.ApplicationCall
-        assert Txn.on_completion == OnCompleteAction.NoOp
-
-        assert self.state_box.value == SUBMITTED
-        assert self._get_is_hitm() == 1
-
-        deadline = self.review_deadline.value
-        assert Global.latest_timestamp >= deadline
-
-        escrow_amount = self.escrow_amount.value
-        asset_id = self._get_asset_id()
-        self._verify_escrow_balance(asset_id, escrow_amount)
-
-        self.payout_type.value = Bytes(PAYOUT)
-        self.state_box.value = UInt64(CLOSED)
-
-        # Split platform fee; remainder to agent
-        remaining_amount = self._send_fee_split(
-            self._get_agent_address(), escrow_amount, asset_id,
-            Account(self.mediator_data.value.address.bytes),
-        )
-        self._send_payout(self._get_agent_address(), remaining_amount, asset_id)
-
-        log(Bytes(b"auto_released_hitm"))
-
-    @arc4.abimethod
-    def claim_abandoned(self) -> None:
-        assert Txn.type_enum == TransactionType.ApplicationCall
-        assert Txn.on_completion == OnCompleteAction.NoOp
-        assert Txn.rekey_to == Account(Bytes(32 * b"\x00"))
-
-        assert self.state_box.value == REJECTED
-        assert self._get_rejection_count() >= MAX_REJECTIONS
-        assert Txn.sender == self.creator_address.value
-
-        escrow_amount = self.escrow_amount.value
-        asset_id = self._get_asset_id()
-        self._verify_escrow_balance(asset_id, escrow_amount)
-
-        self.payout_type.value = Bytes(REFUND)
-        self.state_box.value = UInt64(CLOSED)
-
-        # Split platform fee; remainder to creator (deduped)
-        remaining_amount = self._send_fee_split(
-            self.creator_address.value, escrow_amount, asset_id,
-            Account(self.mediator_data.value.address.bytes),
-        )
-        self._send_payout(self.creator_address.value, remaining_amount, asset_id)
-
-        log(Bytes(b"abandoned_refunded_creator"))
-
-    @arc4.abimethod
-    def expire_claim(self) -> None:
-        assert Txn.type_enum == TransactionType.ApplicationCall
-        assert Txn.on_completion == OnCompleteAction.NoOp
-
-        assert self.state_box.value == CLAIMED
-
-        claim_deadline = self.claim_deadline.value
-        assert Global.latest_timestamp > claim_deadline, "Claim deadline not yet reached"
-
-        # Record claim expiry
-        self.state_box.value = UInt64(CLAIM_EXPIRED)
-        log(Bytes(b"claim_expired"))
-        log(self.bounty_id.value)
-        log(self._get_agent_address().bytes)
-        log(Bytes(b"karma_penalty_20"))
-
-        # SECURITY FIX: Revert agent address to zero address so someone else can claim
-        self.agent_address.value = Account(Bytes(32 * b"\x00"))
-
-        # Revert to OPEN so others can claim
-        self.state_box.value = UInt64(OPEN)
-        self.rejection_count.value = UInt64(0)
-
-        log(Bytes(b"bounty_reopened"))
-
-    @arc4.abimethod
-    def github_verify(self, pr_url: Bytes, test_hash: Bytes, oidc_token: Bytes) -> None:
-        assert Txn.type_enum == TransactionType.ApplicationCall
-        assert Txn.on_completion == OnCompleteAction.NoOp
-        assert Txn.rekey_to == Account(Bytes(32 * b"\x00"))
-
-        assert self.state_box.value == SUBMITTED
-
-        # Store GitHub verification data
-        self.proof_url.value = pr_url
-        self.github_status.value = Bytes(b"pending")
-
-        # Store test hash in proof_data
-        self.proof_data.value = test_hash
-
-        # Store OIDC token
-        self.oidc_token.value = oidc_token
-
-        log(Bytes(b"github_verified"))
-        log(self.bounty_id.value)
-        log(Bytes(b"pending"))
-
-    @arc4.abimethod
-    def set_github_status(self, status: Bytes) -> None:
-        assert Txn.type_enum == TransactionType.ApplicationCall
-        assert Txn.on_completion == OnCompleteAction.NoOp
-        assert Txn.rekey_to == Account(Bytes(32 * b"\x00"))
-
-        assert status == Bytes(b"pass") or status == Bytes(b"fail") or status == Bytes(b"pending")
-
-        self.github_status.value = status
-
-        log(Bytes(b"github_status_updated"))
-        log(status)
-
-    @arc4.abimethod
-    def get_bounty_info(self) -> None:
-        assert Txn.type_enum == TransactionType.ApplicationCall
-        assert Txn.on_completion == OnCompleteAction.NoOp
-
-        log(Bytes(b"bounty_info"))
-        log(op.itob(self.state_box.value))
-        log(self.bounty_id.value)
-        log(op.itob(self.escrow_amount.value))
-        log(self.creator_address.value.bytes)
-        log(self.agent_address.value.bytes)
-        log(op.itob(self.rejection_count.value))
-
-    @arc4.abimethod
-    def register_arbitrator(self, address: Account) -> None:
-        assert Txn.type_enum == TransactionType.ApplicationCall
-        assert Txn.on_completion == OnCompleteAction.NoOp
-        assert Txn.rekey_to == Account(Bytes(32 * b"\x00"))
-
-        assert Txn.sender == address, "Sender must match address to register"
-
-        # Check if already registered
-        key_idx = Bytes(b"cand_idx_") + address.bytes
-        dummy, exists = op.Box.get(key_idx)
-        assert not exists, "Arbitrator already registered"
-
-        count = self._get_candidate_count()
-
-        # Write to pool
-        Box(Account, key=Bytes(b"cand_addr_") + op.itob(count)).value = address
-        Box(UInt64, key=key_idx).value = count
-
-        # Increment count
-        self.candidate_count.value = count + 1
-
-        log(Bytes(b"arbitrator_registered"))
-        log(address.bytes)
-
-    @arc4.abimethod
-    def deregister_arbitrator(self, address: Account) -> None:
-        assert Txn.type_enum == TransactionType.ApplicationCall
-        assert Txn.on_completion == OnCompleteAction.NoOp
-        assert Txn.rekey_to == Account(Bytes(32 * b"\x00"))
-
-        assert Txn.sender == address, "Sender must match address to deregister"
-
-        # Check if registered
-        key_idx = Bytes(b"cand_idx_") + address.bytes
-        dummy, exists = op.Box.get(key_idx)
-        assert exists, "Arbitrator not registered"
-
-        idx_box = Box(UInt64, key=key_idx)
-        count = self._get_candidate_count()
-        remove_idx = idx_box.value
-        last_idx = count - 1
-
-        if remove_idx != last_idx:
-            # Swap with last element
-            last_addr = Box(Account, key=Bytes(b"cand_addr_") + op.itob(last_idx)).value
-            Box(Account, key=Bytes(b"cand_addr_") + op.itob(remove_idx)).value = last_addr
-            Box(UInt64, key=Bytes(b"cand_idx_") + last_addr.bytes).value = remove_idx
-
-        # Delete last element box and reverse mapping index box
-        key_addr = Bytes(b"cand_addr_") + op.itob(last_idx)
-        assert op.Box.delete(key_addr), "Failed to delete address box"
-        assert op.Box.delete(key_idx), "Failed to delete index box"
-
-        self.candidate_count.value = last_idx
-
-        log(Bytes(b"arbitrator_deregistered"))
-        log(address.bytes)
-
-    @arc4.abimethod(allow_actions=["DeleteApplication"])
-    def delete_bounty(self) -> None:
-        assert Txn.sender == self.creator_address.value, "Only creator can delete application"
-        assert self.state_box.value == CLOSED, "Bounty must be fully closed/paid out before deletion"
-
-        # Sweep all remaining ALGO and close out the contract account
-        app_balance, exists = op.AcctParamsGet.acct_balance(Global.current_application_address)
-        if exists and app_balance > 0:
-            itxn.Payment(
-                receiver=self.creator_address.value,
-                amount=UInt64(0),
-                fee=0,
-                close_remainder_to=self.creator_address.value
-            ).submit()
+#pragma version 11
+#pragma typetrack false
+
+// algopy.arc4.ARC4Contract.approval_program() -> uint64:
+main:
+    intcblock 1 0 2 6 86400 TMPL_CLAIM_TIMEOUT TMPL_DISPUTE_TIMEOUT
+    bytecblock "state" "creator_address" "payout_type" 0x0000000000000000000000000000000000000000000000000000000000000000 "mediator_data" "escrow_amount" "asset_id" "rejection_count" 0x63616e645f616464725f "agent_address" "proof_url" "proof_data" "bounty_id" "candidate_count" "arbitrator_1" "arbitrator_2" "arbitrator_3" "arbitrator_1_vote" "arbitrator_2_vote" "arbitrator_3_vote" "is_hitm" 0x5041594f5554 0x524546554e44 "github_status" "treasury_address" "review_days" "review_deadline" "dispute_timestamp" 0x70656e64696e67 0x63616e645f6964785f "claim_deadline" "dispute_reason" 0x646973707574655f7265736f6c7665645f6167656e745f77696e 0x646973707574655f7265736f6c7665645f63726561746f725f77696e 0x53504c4954 "oidc_token"
+    // escrow.py:46
+    // class EscrowContract(ARC4Contract):
+    pushbytes 0x1ff0d7d2 // method "delete_bounty()void"
+    txna ApplicationArgs 0
+    match main_delete_bounty_route@4
+
+main_switch_case_next@5:
+    // escrow.py:46
+    // class EscrowContract(ARC4Contract):
+    txn OnCompletion
+    !
+    assert
+    txn ApplicationID
+    bz main_create_NoOp@26
+    pushbytess 0x282f1770 0x4bc867a6 0x2509937c 0x40c3067f 0x779ec63e 0xe05bc935 0x7b3579ab 0xb7402152 0xfe6ce102 0x955fcc81 0xaae04b2c 0x84f0ae27 0x8b76b26c 0xda791704 0x117ef4d9 0x7f589cc2 0x5a1ba6bb 0xfdd89900 // method "create_bounty(byte[],uint64,uint64,uint64,uint64,address,address)void", method "claim_bounty()void", method "submit_work(byte[],byte[])void", method "approve_work()void", method "reject_work(byte[])void", method "submit_dispute(byte[])void", method "vote_dispute(uint64)void", method "resolve_dispute(byte[],byte[])void", method "auto_resolve_creator_win()void", method "timeout_dispute()void", method "auto_release()void", method "claim_abandoned()void", method "expire_claim()void", method "github_verify(byte[],byte[],byte[])void", method "set_github_status(byte[])void", method "get_bounty_info()void", method "register_arbitrator(address)void", method "deregister_arbitrator(address)void"
+    txna ApplicationArgs 0
+    match create_bounty claim_bounty submit_work approve_work reject_work submit_dispute vote_dispute resolve_dispute auto_resolve_creator_win timeout_dispute auto_release claim_abandoned expire_claim github_verify set_github_status get_bounty_info register_arbitrator deregister_arbitrator
+    err
+
+main_create_NoOp@26:
+    // escrow.py:46
+    // class EscrowContract(ARC4Contract):
+    pushbytes 0x739b0889 // method "deploy()void"
+    txna ApplicationArgs 0
+    match main_deploy_route@27
+    err
+
+main_deploy_route@27:
+    // escrow.py:173
+    // @arc4.abimethod(create="require")
+    intc_0 // 1
+    return
+
+main_delete_bounty_route@4:
+    // escrow.py:846
+    // @arc4.abimethod(allow_actions=["DeleteApplication"])
+    txn OnCompletion
+    pushint 5 // DeleteApplication
+    ==
+    txn ApplicationID
+    &&
+    assert
+    b delete_bounty
+
+
+// escrow.EscrowContract.create_bounty[routing]() -> void:
+create_bounty:
+    // escrow.py:177
+    // @arc4.abimethod
+    txna ApplicationArgs 1
+    dup
+    intc_1 // 0
+    extract_uint16 // on error: invalid array length header
+    intc_2 // 2
+    +
+    dig 1
+    len
+    ==
+    assert // invalid number of bytes for arc4.dynamic_array<arc4.uint8>
+    extract 2 0
+    dup
+    txna ApplicationArgs 2
+    dup
+    len
+    pushint 8
+    ==
+    assert // invalid number of bytes for arc4.uint64
+    btoi
+    dup
+    cover 3
+    txna ApplicationArgs 3
+    dup
+    len
+    pushint 8
+    ==
+    assert // invalid number of bytes for arc4.uint64
+    btoi
+    dup
+    cover 5
+    txna ApplicationArgs 4
+    dup
+    len
+    pushint 8
+    ==
+    assert // invalid number of bytes for arc4.uint64
+    btoi
+    dup
+    cover 6
+    txna ApplicationArgs 5
+    dup
+    len
+    pushint 8
+    ==
+    assert // invalid number of bytes for arc4.uint64
+    btoi
+    cover 6
+    txna ApplicationArgs 6
+    dup
+    cover 5
+    len
+    pushint 32
+    ==
+    assert // invalid number of bytes for arc4.static_array<arc4.uint8, 32>
+    txna ApplicationArgs 7
+    dup
+    cover 5
+    len
+    pushint 32
+    ==
+    assert // invalid number of bytes for arc4.static_array<arc4.uint8, 32>
+    // escrow.py:188
+    // assert Txn.type_enum == TransactionType.ApplicationCall
+    txn TypeEnum
+    intc_3 // appl
+    ==
+    assert
+    // escrow.py:189
+    // assert Txn.on_completion == OnCompleteAction.NoOp
+    txn OnCompletion
+    !
+    assert
+    // escrow.py:190
+    // assert Txn.rekey_to == Account(Bytes(32 * b"\x00"))
+    txn RekeyTo
+    bytec_3 // 0x0000000000000000000000000000000000000000000000000000000000000000
+    ==
+    assert
+    // escrow.py:192-193
+    // # SECURITY FIX: Prevent re-initialization
+    // val, exists = self.state_box.maybe()
+    bytec_0 // "state"
+    box_len
+    bury 1
+    // escrow.py:194
+    // assert not exists, "Bounty already initialized"
+    !
+    assert // Bounty already initialized
+    // escrow.py:196-197
+    // # Validate inputs
+    // assert bounty_id.length <= 64
+    uncover 3
+    len
+    pushint 64
+    <=
+    assert
+    // escrow.py:198
+    // assert escrow_amount > 0
+    uncover 2
+    assert
+    // escrow.py:199
+    // assert is_hitm <= 1
+    swap
+    intc_0 // 1
+    <=
+    assert
+    // escrow.py:202-203
+    // # OPT-IN ASA: If asset_id > 0, the app account must opt-in to it first.
+    // if asset_id > 0:
+    bz create_bounty_after_if_else@4
+    // escrow.py:204-209
+    // itxn.AssetTransfer(
+    //     xfer_asset=asset_id,
+    //     asset_receiver=Global.current_application_address,
+    //     asset_amount=0,
+    //     fee=0,
+    // ).submit()
+    itxn_begin
+    // escrow.py:206
+    // asset_receiver=Global.current_application_address,
+    global CurrentApplicationAddress
+    // escrow.py:207
+    // asset_amount=0,
+    intc_1 // 0
+    itxn_field AssetAmount
+    itxn_field AssetReceiver
+    dig 5
+    itxn_field XferAsset
+    // escrow.py:204
+    // itxn.AssetTransfer(
+    pushint 4 // axfer
+    itxn_field TypeEnum
+    // escrow.py:208
+    // fee=0,
+    intc_1 // 0
+    itxn_field Fee
+    // escrow.py:204-209
+    // itxn.AssetTransfer(
+    //     xfer_asset=asset_id,
+    //     asset_receiver=Global.current_application_address,
+    //     asset_amount=0,
+    //     fee=0,
+    // ).submit()
+    itxn_submit
+
+create_bounty_after_if_else@4:
+    // escrow.py:211-212
+    // # Initialize state
+    // self.state_box.value = UInt64(OPEN)
+    intc_1 // 0
+    itob
+    bytec_0 // "state"
+    dig 1
+    box_put
+    // escrow.py:214-220
+    // # Initialize mediator data inside a single box
+    // self.mediator_data.value = MediatorData(
+    //     address=arc4.Address(mediator),
+    //     bond_amount=arc4.UInt64(0),  # Will be populated when bonded
+    //     is_bonded=arc4.UInt64(0),
+    //     did_hash=arc4.StaticArray[arc4.Byte, typing.Literal[32]].from_bytes(Bytes(b"\x00" * 32))
+    // )
+    uncover 2
+    dig 1
+    concat
+    swap
+    concat
+    // escrow.py:219
+    // did_hash=arc4.StaticArray[arc4.Byte, typing.Literal[32]].from_bytes(Bytes(b"\x00" * 32))
+    bytec_3 // 0x0000000000000000000000000000000000000000000000000000000000000000
+    // escrow.py:214-220
+    // # Initialize mediator data inside a single box
+    // self.mediator_data.value = MediatorData(
+    //     address=arc4.Address(mediator),
+    //     bond_amount=arc4.UInt64(0),  # Will be populated when bonded
+    //     is_bonded=arc4.UInt64(0),
+    //     did_hash=arc4.StaticArray[arc4.Byte, typing.Literal[32]].from_bytes(Bytes(b"\x00" * 32))
+    // )
+    concat
+    // escrow.py:214-215
+    // # Initialize mediator data inside a single box
+    // self.mediator_data.value = MediatorData(
+    bytec 4 // "mediator_data"
+    // escrow.py:214-220
+    // # Initialize mediator data inside a single box
+    // self.mediator_data.value = MediatorData(
+    //     address=arc4.Address(mediator),
+    //     bond_amount=arc4.UInt64(0),  # Will be populated when bonded
+    //     is_bonded=arc4.UInt64(0),
+    //     did_hash=arc4.StaticArray[arc4.Byte, typing.Literal[32]].from_bytes(Bytes(b"\x00" * 32))
+    // )
+    swap
+    box_put
+    // escrow.py:221
+    // self.treasury_address.value = treasury
+    bytec 24 // "treasury_address"
+    swap
+    box_put
+    // escrow.py:222
+    // self.escrow_amount.value = escrow_amount
+    swap
+    itob
+    bytec 5 // "escrow_amount"
+    swap
+    box_put
+    // escrow.py:223
+    // self.bounty_id.value = bounty_id
+    bytec 12 // "bounty_id"
+    box_del
+    pop
+    bytec 12 // "bounty_id"
+    dig 1
+    box_put
+    // escrow.py:224
+    // self.creator_address.value = Txn.sender
+    bytec_1 // "creator_address"
+    txn Sender
+    box_put
+    // escrow.py:226
+    // if is_hitm > 0:
+    dig 3
+    bz create_bounty_after_if_else@6
+    // escrow.py:227
+    // self.is_hitm.value = is_hitm
+    dig 3
+    itob
+    bytec 20 // "is_hitm"
+    swap
+    box_put
+
+create_bounty_after_if_else@6:
+    // escrow.py:228
+    // if asset_id > 0:
+    dig 2
+    bz create_bounty_after_if_else@8
+    // escrow.py:229
+    // self.asset_id.value = asset_id
+    dig 2
+    itob
+    bytec 6 // "asset_id"
+    swap
+    box_put
+
+create_bounty_after_if_else@8:
+    // escrow.py:230
+    // if review_days > 0:
+    dig 1
+    bz create_bounty_after_if_else@10
+    // escrow.py:231
+    // self.review_days.value = review_days
+    dig 1
+    itob
+    bytec 25 // "review_days"
+    swap
+    box_put
+
+create_bounty_after_if_else@10:
+    // escrow.py:233
+    // log(Bytes(b"bounty_created"))
+    pushbytes 0x626f756e74795f63726561746564
+    log
+    // escrow.py:234
+    // log(bounty_id)
+    log
+    // escrow.py:177
+    // @arc4.abimethod
+    intc_0 // 1
+    return
+
+
+// escrow.EscrowContract.claim_bounty[routing]() -> void:
+claim_bounty:
+    // escrow.py:238
+    // assert Txn.type_enum == TransactionType.ApplicationCall
+    txn TypeEnum
+    intc_3 // appl
+    ==
+    assert
+    // escrow.py:239
+    // assert Txn.on_completion == OnCompleteAction.NoOp
+    txn OnCompletion
+    !
+    assert
+    // escrow.py:240
+    // assert Txn.rekey_to == Account(Bytes(32 * b"\x00"))
+    txn RekeyTo
+    bytec_3 // 0x0000000000000000000000000000000000000000000000000000000000000000
+    ==
+    assert
+    // escrow.py:242
+    // assert self.state_box.value == OPEN
+    bytec_0 // "state"
+    box_get
+    assert // check self.state_box exists
+    btoi
+    !
+    assert
+    // escrow.py:243
+    // assert Txn.sender != self.creator_address.value, "Cannot claim your own bounty"
+    txn Sender
+    bytec_1 // "creator_address"
+    box_get
+    assert // check self.creator_address exists
+    !=
+    assert // Cannot claim your own bounty
+    // escrow.py:244
+    // assert self._get_agent_address() == Account(Bytes(32 * b"\x00")), "Bounty already claimed"
+    callsub _get_agent_address
+    bytec_3 // 0x0000000000000000000000000000000000000000000000000000000000000000
+    ==
+    assert // Bounty already claimed
+    // escrow.py:83
+    // val, exists = self.asset_id.maybe()
+    bytec 6 // "asset_id"
+    box_get
+    swap
+    btoi
+    // escrow.py:84
+    // return val if exists else UInt64(0)
+    intc_1 // 0
+    swap
+    uncover 2
+    select
+    dup
+    // escrow.py:248
+    // if asset_id > 0:
+    bz claim_bounty_after_if_else@3
+    // escrow.py:249
+    // balance, exists = op.AssetHoldingGet.asset_balance(Txn.sender, asset_id)
+    txn Sender
+    dig 1
+    asset_holding_get AssetBalance
+    bury 1
+    // escrow.py:250
+    // assert exists, "Claiming agent must opt-in to the asset first"
+    assert // Claiming agent must opt-in to the asset first
+
+claim_bounty_after_if_else@3:
+    // escrow.py:252
+    // self.agent_address.value = Txn.sender
+    bytec 9 // "agent_address"
+    txn Sender
+    box_put
+    // escrow.py:253
+    // self.state_box.value = UInt64(CLAIMED)
+    intc_0 // 1
+    itob
+    bytec_0 // "state"
+    swap
+    box_put
+    // escrow.py:257
+    // self.claim_deadline.value = Global.latest_timestamp + claim_timeout
+    global LatestTimestamp
+    // escrow.py:255-256
+    // # Set claim deadline
+    // claim_timeout = TemplateVar[UInt64]("CLAIM_TIMEOUT")
+    intc 5 // TMPL_CLAIM_TIMEOUT
+    // escrow.py:257
+    // self.claim_deadline.value = Global.latest_timestamp + claim_timeout
+    +
+    itob
+    bytec 30 // "claim_deadline"
+    swap
+    box_put
+    // escrow.py:258
+    // self.claim_timestamp.value = Global.latest_timestamp
+    global LatestTimestamp
+    itob
+    pushbytes "claim_timestamp"
+    swap
+    box_put
+    // escrow.py:260
+    // log(Bytes(b"bounty_claimed"))
+    pushbytes 0x626f756e74795f636c61696d6564
+    log
+    // escrow.py:236
+    // @arc4.abimethod
+    intc_0 // 1
+    return
+
+
+// escrow.EscrowContract.submit_work[routing]() -> void:
+submit_work:
+    intc_1 // 0
+    pushbytes ""
+    // escrow.py:262
+    // @arc4.abimethod
+    txna ApplicationArgs 1
+    dup
+    intc_1 // 0
+    extract_uint16 // on error: invalid array length header
+    intc_2 // 2
+    +
+    dig 1
+    len
+    ==
+    assert // invalid number of bytes for arc4.dynamic_array<arc4.uint8>
+    extract 2 0
+    txna ApplicationArgs 2
+    dup
+    intc_1 // 0
+    extract_uint16 // on error: invalid array length header
+    intc_2 // 2
+    +
+    dig 1
+    len
+    ==
+    assert // invalid number of bytes for arc4.dynamic_array<arc4.uint8>
+    extract 2 0
+    swap
+    // escrow.py:264
+    // assert Txn.type_enum == TransactionType.ApplicationCall
+    txn TypeEnum
+    intc_3 // appl
+    ==
+    assert
+    // escrow.py:265
+    // assert Txn.on_completion == OnCompleteAction.NoOp
+    txn OnCompletion
+    !
+    assert
+    // escrow.py:266
+    // assert Txn.rekey_to == Account(Bytes(32 * b"\x00"))
+    txn RekeyTo
+    bytec_3 // 0x0000000000000000000000000000000000000000000000000000000000000000
+    ==
+    assert
+    // escrow.py:268
+    // current = self.state_box.value
+    bytec_0 // "state"
+    box_get
+    assert // check self.state_box exists
+    btoi
+    dup
+    // escrow.py:270
+    // if current == CLAIMED:
+    intc_0 // 1
+    ==
+    bz submit_work_else_body@6
+    pop
+    // escrow.py:271
+    // assert Txn.sender == self.agent_address.value, "Only claiming agent can submit work"
+    txn Sender
+    bytec 9 // "agent_address"
+    box_get
+    assert // check self.agent_address exists
+    ==
+    assert // Only claiming agent can submit work
+    // escrow.py:272
+    // assert proof_url.length > 0
+    dup
+    len
+    dup
+    assert
+    // escrow.py:273
+    // assert proof_url.length <= MAX_URL_BYTES
+    pushint 512
+    <=
+    assert
+    // escrow.py:274
+    // assert proof_data.length > 0
+    swap
+    dup
+    len
+    dup
+    assert
+    // escrow.py:275
+    // assert proof_data.length <= MAX_PROOF_BYTES
+    pushint 2048
+    <=
+    assert
+    // escrow.py:277
+    // self.proof_url.value = proof_url
+    bytec 10 // "proof_url"
+    box_del
+    pop
+    bytec 10 // "proof_url"
+    uncover 2
+    box_put
+    // escrow.py:278
+    // self.proof_data.value = proof_data
+    bytec 11 // "proof_data"
+    box_del
+    pop
+    bytec 11 // "proof_data"
+    swap
+    box_put
+    // escrow.py:279
+    // self.state_box.value = UInt64(SUBMITTED)
+    intc_2 // 2
+    itob
+    bytec_0 // "state"
+    swap
+    box_put
+    // escrow.py:281-282
+    // # HITM: Set review deadline if enabled
+    // is_hitm_val, hitm_exists = self.is_hitm.maybe()
+    bytec 20 // "is_hitm"
+    box_get
+    swap
+    btoi
+    bury 2
+    // escrow.py:283
+    // if hitm_exists and is_hitm_val == 1:
+    bz submit_work_after_if_else@5
+    dup
+    intc_0 // 1
+    ==
+    bz submit_work_after_if_else@5
+    // escrow.py:284
+    // review_days_val, days_exists = self.review_days.maybe()
+    bytec 25 // "review_days"
+    box_get
+    swap
+    btoi
+    // escrow.py:285
+    // days = review_days_val if days_exists else UInt64(0)
+    intc_1 // 0
+    swap
+    uncover 2
+    select
+    // escrow.py:286
+    // self.review_deadline.value = Global.latest_timestamp + days * 86400
+    global LatestTimestamp
+    swap
+    intc 4 // 86400
+    *
+    +
+    itob
+    bytec 26 // "review_deadline"
+    swap
+    box_put
+
+submit_work_after_if_else@5:
+    // escrow.py:288
+    // log(Bytes(b"work_submitted"))
+    pushbytes 0x776f726b5f7375626d6974746564
+    log
+
+submit_work_after_if_else@17:
+    // escrow.py:262
+    // @arc4.abimethod
+    intc_0 // 1
+    return
+
+submit_work_else_body@6:
+    // escrow.py:290
+    // elif current == REJECTED:
+    pushint 3
+    ==
+    assert // Invalid state for submit_work
+    // escrow.py:291
+    // agent_val, agent_exists = self.agent_address.maybe()
+    bytec 9 // "agent_address"
+    box_get
+    swap
+    bury 5
+    // escrow.py:292
+    // assert agent_exists and Txn.sender == agent_val, "Only claiming agent can submit work"
+    bz submit_work_bool_false@10
+    txn Sender
+    dig 4
+    ==
+    bz submit_work_bool_false@10
+    intc_0 // 1
+
+submit_work_bool_merge@11:
+    // escrow.py:292
+    // assert agent_exists and Txn.sender == agent_val, "Only claiming agent can submit work"
+    assert // Only claiming agent can submit work
+    // escrow.py:294
+    // rej_val, rej_exists = self.rejection_count.maybe()
+    bytec 7 // "rejection_count"
+    box_get
+    swap
+    btoi
+    // escrow.py:295
+    // rejections = rej_val if rej_exists else UInt64(0)
+    intc_1 // 0
+    swap
+    uncover 2
+    select
+    // escrow.py:296
+    // assert rejections < MAX_REJECTIONS
+    dup
+    pushint 3
+    <
+    assert
+    // escrow.py:298
+    // assert proof_url.length > 0
+    swap
+    dup
+    len
+    dup
+    assert
+    // escrow.py:299
+    // assert proof_url.length <= MAX_URL_BYTES
+    pushint 512
+    <=
+    assert
+    // escrow.py:300
+    // assert proof_data.length > 0
+    uncover 2
+    dup
+    len
+    dup
+    assert
+    // escrow.py:301
+    // assert proof_data.length <= MAX_PROOF_BYTES
+    pushint 2048
+    <=
+    assert
+    // escrow.py:303
+    // self.proof_url.value = proof_url
+    bytec 10 // "proof_url"
+    box_del
+    pop
+    bytec 10 // "proof_url"
+    uncover 2
+    box_put
+    // escrow.py:304
+    // self.proof_data.value = proof_data
+    bytec 11 // "proof_data"
+    box_del
+    pop
+    bytec 11 // "proof_data"
+    swap
+    box_put
+    // escrow.py:305
+    // self.rejection_count.value = rejections + 1
+    intc_0 // 1
+    +
+    itob
+    bytec 7 // "rejection_count"
+    swap
+    box_put
+    // escrow.py:306
+    // self.state_box.value = UInt64(SUBMITTED)
+    intc_2 // 2
+    itob
+    bytec_0 // "state"
+    swap
+    box_put
+    // escrow.py:308-309
+    // # HITM: Reset review deadline on revision if enabled
+    // is_hitm_val, hitm_exists = self.is_hitm.maybe()
+    bytec 20 // "is_hitm"
+    box_get
+    swap
+    btoi
+    bury 2
+    // escrow.py:310
+    // if hitm_exists and is_hitm_val == 1:
+    bz submit_work_after_if_else@14
+    dup
+    intc_0 // 1
+    ==
+    bz submit_work_after_if_else@14
+    // escrow.py:311
+    // review_days_val, days_exists = self.review_days.maybe()
+    bytec 25 // "review_days"
+    box_get
+    swap
+    btoi
+    // escrow.py:312
+    // days = review_days_val if days_exists else UInt64(0)
+    intc_1 // 0
+    swap
+    uncover 2
+    select
+    // escrow.py:313
+    // self.review_deadline.value = Global.latest_timestamp + days * 86400
+    global LatestTimestamp
+    swap
+    intc 4 // 86400
+    *
+    +
+    itob
+    bytec 26 // "review_deadline"
+    swap
+    box_put
+
+submit_work_after_if_else@14:
+    // escrow.py:315
+    // log(Bytes(b"work_revise_submitted"))
+    pushbytes 0x776f726b5f7265766973655f7375626d6974746564
+    log
+    b submit_work_after_if_else@17
+
+submit_work_bool_false@10:
+    intc_1 // 0
+    b submit_work_bool_merge@11
+
+
+// escrow.EscrowContract.approve_work[routing]() -> void:
+approve_work:
+    // escrow.py:322
+    // assert Txn.type_enum == TransactionType.ApplicationCall
+    txn TypeEnum
+    intc_3 // appl
+    ==
+    assert
+    // escrow.py:323
+    // assert Txn.on_completion == OnCompleteAction.NoOp
+    txn OnCompletion
+    !
+    assert
+    // escrow.py:324
+    // assert Txn.rekey_to == Account(Bytes(32 * b"\x00"))
+    txn RekeyTo
+    bytec_3 // 0x0000000000000000000000000000000000000000000000000000000000000000
+    ==
+    assert
+    // escrow.py:326
+    // assert self.state_box.value == SUBMITTED
+    bytec_0 // "state"
+    box_get
+    assert // check self.state_box exists
+    btoi
+    intc_2 // 2
+    ==
+    assert
+    // escrow.py:327
+    // assert Txn.sender == self.creator_address.value, "Only creator can approve work"
+    txn Sender
+    bytec_1 // "creator_address"
+    box_get
+    assert // check self.creator_address exists
+    ==
+    assert // Only creator can approve work
+    // escrow.py:329
+    // escrow_amount = self.escrow_amount.value
+    bytec 5 // "escrow_amount"
+    box_get
+    assert // check self.escrow_amount exists
+    btoi
+    // escrow.py:83
+    // val, exists = self.asset_id.maybe()
+    bytec 6 // "asset_id"
+    box_get
+    swap
+    btoi
+    // escrow.py:84
+    // return val if exists else UInt64(0)
+    intc_1 // 0
+    swap
+    uncover 2
+    select
+    // escrow.py:331
+    // self._verify_escrow_balance(asset_id, escrow_amount)
+    dup
+    dig 2
+    callsub _verify_escrow_balance
+    // escrow.py:333
+    // self.payout_type.value = Bytes(PAYOUT)
+    bytec_2 // "payout_type"
+    box_del
+    pop
+    bytec_2 // "payout_type"
+    bytec 21 // 0x5041594f5554
+    box_put
+    // escrow.py:334
+    // self.state_box.value = UInt64(CLOSED)
+    pushint 5
+    itob
+    bytec_0 // "state"
+    swap
+    box_put
+    // escrow.py:338
+    // self._get_agent_address(), escrow_amount, asset_id,
+    callsub _get_agent_address
+    // escrow.py:339
+    // Account(self.mediator_data.value.address.bytes),
+    bytec 4 // "mediator_data"
+    box_get
+    assert // check self.mediator_data exists
+    extract 0 32
+    dup
+    len
+    pushint 32
+    ==
+    assert // Address length is 32 bytes
+    // escrow.py:336-340
+    // # Split platform fee: 1% royalty (creator) + 1% treasury, 0.25% mediator
+    // remaining_amount = self._send_fee_split(
+    //     self._get_agent_address(), escrow_amount, asset_id,
+    //     Account(self.mediator_data.value.address.bytes),
+    // )
+    swap
+    uncover 3
+    dig 3
+    uncover 3
+    callsub _send_fee_split
+    // escrow.py:341
+    // self._send_payout(self._get_agent_address(), remaining_amount, asset_id)
+    callsub _get_agent_address
+    swap
+    uncover 2
+    callsub _send_payout
+    // escrow.py:343
+    // log(Bytes(b"work_approved"))
+    pushbytes 0x776f726b5f617070726f766564
+    log
+    // escrow.py:320
+    // @arc4.abimethod
+    intc_0 // 1
+    return
+
+
+// escrow.EscrowContract.reject_work[routing]() -> void:
+reject_work:
+    // escrow.py:345
+    // @arc4.abimethod
+    txna ApplicationArgs 1
+    dup
+    intc_1 // 0
+    extract_uint16 // on error: invalid array length header
+    intc_2 // 2
+    +
+    dig 1
+    len
+    ==
+    assert // invalid number of bytes for arc4.dynamic_array<arc4.uint8>
+    extract 2 0
+    // escrow.py:347
+    // assert Txn.type_enum == TransactionType.ApplicationCall
+    txn TypeEnum
+    intc_3 // appl
+    ==
+    assert
+    // escrow.py:348
+    // assert Txn.on_completion == OnCompleteAction.NoOp
+    txn OnCompletion
+    !
+    assert
+    // escrow.py:349
+    // assert Txn.rekey_to == Account(Bytes(32 * b"\x00"))
+    txn RekeyTo
+    bytec_3 // 0x0000000000000000000000000000000000000000000000000000000000000000
+    ==
+    assert
+    // escrow.py:351
+    // assert self.state_box.value == SUBMITTED
+    bytec_0 // "state"
+    box_get
+    assert // check self.state_box exists
+    btoi
+    intc_2 // 2
+    ==
+    assert
+    // escrow.py:352
+    // assert Txn.sender == self.creator_address.value, "Only creator can reject work"
+    txn Sender
+    bytec_1 // "creator_address"
+    box_get
+    assert // check self.creator_address exists
+    ==
+    assert // Only creator can reject work
+    // escrow.py:99
+    // val, exists = self.rejection_count.maybe()
+    bytec 7 // "rejection_count"
+    box_get
+    swap
+    btoi
+    // escrow.py:100
+    // return val if exists else UInt64(0)
+    intc_1 // 0
+    swap
+    uncover 2
+    select
+    // escrow.py:353
+    // assert self._get_rejection_count() < MAX_REJECTIONS
+    dup
+    pushint 3
+    <
+    assert
+    // escrow.py:355
+    // self.rejection_count.value = self._get_rejection_count() + 1
+    intc_0 // 1
+    +
+    itob
+    bytec 7 // "rejection_count"
+    swap
+    box_put
+    // escrow.py:356
+    // self.state_box.value = UInt64(REJECTED)
+    pushint 3
+    itob
+    bytec_0 // "state"
+    swap
+    box_put
+    // escrow.py:358
+    // log(Bytes(b"work_rejected"))
+    pushbytes 0x776f726b5f72656a6563746564
+    log
+    // escrow.py:359
+    // log(reason)
+    log
+    // escrow.py:345
+    // @arc4.abimethod
+    intc_0 // 1
+    return
+
+
+// escrow.EscrowContract.submit_dispute[routing]() -> void:
+submit_dispute:
+    intc_1 // 0
+    dupn 5
+    pushbytes ""
+    dupn 3
+    // escrow.py:361
+    // @arc4.abimethod
+    txna ApplicationArgs 1
+    dup
+    intc_1 // 0
+    extract_uint16 // on error: invalid array length header
+    intc_2 // 2
+    +
+    dig 1
+    len
+    ==
+    assert // invalid number of bytes for arc4.dynamic_array<arc4.uint8>
+    extract 2 0
+    // escrow.py:363
+    // assert Txn.type_enum == TransactionType.ApplicationCall
+    txn TypeEnum
+    intc_3 // appl
+    ==
+    assert
+    // escrow.py:364
+    // assert Txn.on_completion == OnCompleteAction.NoOp
+    txn OnCompletion
+    !
+    assert
+    // escrow.py:365
+    // assert Txn.rekey_to == Account(Bytes(32 * b"\x00"))
+    txn RekeyTo
+    bytec_3 // 0x0000000000000000000000000000000000000000000000000000000000000000
+    ==
+    assert
+    // escrow.py:367
+    // state = self.state_box.value
+    bytec_0 // "state"
+    box_get
+    assert // check self.state_box exists
+    btoi
+    dup
+    cover 2
+    // escrow.py:368
+    // assert state == SUBMITTED or state == REJECTED
+    intc_2 // 2
+    ==
+    bnz submit_dispute_bool_true@3
+    dig 1
+    pushint 3
+    ==
+    bz submit_dispute_bool_false@4
+
+submit_dispute_bool_true@3:
+    intc_0 // 1
+
+submit_dispute_bool_merge@5:
+    // escrow.py:368
+    // assert state == SUBMITTED or state == REJECTED
+    assert
+    // escrow.py:369
+    // assert Txn.sender == self.creator_address.value or Txn.sender == self._get_agent_address()
+    txn Sender
+    bytec_1 // "creator_address"
+    box_get
+    assert // check self.creator_address exists
+    ==
+    bnz submit_dispute_bool_true@7
+    txn Sender
+    callsub _get_agent_address
+    ==
+    bz submit_dispute_bool_false@8
+
+submit_dispute_bool_true@7:
+    intc_0 // 1
+
+submit_dispute_bool_merge@9:
+    // escrow.py:369
+    // assert Txn.sender == self.creator_address.value or Txn.sender == self._get_agent_address()
+    assert
+    // escrow.py:370
+    // assert reason.length > 0
+    dup
+    len
+    dup
+    assert
+    // escrow.py:371
+    // assert reason.length <= MAX_DISPUTE_REASON_BYTES
+    pushint 256
+    <=
+    assert
+    // escrow.py:373
+    // self.dispute_reason.value = reason
+    bytec 31 // "dispute_reason"
+    box_del
+    pop
+    bytec 31 // "dispute_reason"
+    swap
+    box_put
+    // escrow.py:374
+    // self.dispute_initiator.value = Txn.sender
+    pushbytes "dispute_initiator"
+    txn Sender
+    box_put
+    // escrow.py:375
+    // self.state_box.value = UInt64(DISPUTED)
+    pushint 4
+    itob
+    bytec_0 // "state"
+    swap
+    box_put
+    // escrow.py:376
+    // self.dispute_timestamp.value = Global.latest_timestamp
+    global LatestTimestamp
+    itob
+    bytec 27 // "dispute_timestamp"
+    swap
+    box_put
+    // escrow.py:79
+    // val, exists = self.candidate_count.maybe()
+    bytec 13 // "candidate_count"
+    box_get
+    swap
+    btoi
+    // escrow.py:80
+    // return val if exists else UInt64(0)
+    intc_1 // 0
+    swap
+    uncover 2
+    select
+    dup
+    bury 6
+    // escrow.py:380
+    // treasury = self.treasury_address.value
+    bytec 24 // "treasury_address"
+    box_get
+    swap
+    cover 2
+    assert // check self.treasury_address exists
+    // escrow.py:381
+    // creator = self.creator_address.value
+    bytec_1 // "creator_address"
+    box_get
+    swap
+    bury 10
+    assert // check self.creator_address exists
+    // escrow.py:382
+    // worker = self._get_agent_address()
+    callsub _get_agent_address
+    bury 8
+    // escrow.py:388
+    // if count > UInt64(0):
+    bnz submit_dispute_if_body@10
+    dup
+    bury 10
+    dup
+    bury 11
+    bury 11
+
+submit_dispute_after_if_else@35:
+    // escrow.py:426
+    // self.arbitrator_1.value = arb1
+    bytec 14 // "arbitrator_1"
+    dig 11
+    dup
+    cover 2
+    box_put
+    // escrow.py:427
+    // self.arbitrator_2.value = arb2
+    bytec 15 // "arbitrator_2"
+    dig 11
+    dup
+    cover 2
+    box_put
+    // escrow.py:428
+    // self.arbitrator_3.value = arb3
+    bytec 16 // "arbitrator_3"
+    dig 11
+    dup
+    cover 2
+    box_put
+    // escrow.py:430
+    // self.arbitrator_1_vote.value = UInt64(0)
+    intc_1 // 0
+    itob
+    bytec 17 // "arbitrator_1_vote"
+    dig 1
+    box_put
+    // escrow.py:431
+    // self.arbitrator_2_vote.value = UInt64(0)
+    bytec 18 // "arbitrator_2_vote"
+    dig 1
+    box_put
+    // escrow.py:432
+    // self.arbitrator_3_vote.value = UInt64(0)
+    bytec 19 // "arbitrator_3_vote"
+    swap
+    box_put
+    // escrow.py:434
+    // log(Bytes(b"dispute_submitted"))
+    pushbytes 0x646973707574655f7375626d6974746564
+    log
+    // escrow.py:435
+    // log(arb1.bytes)
+    uncover 2
+    log
+    // escrow.py:436
+    // log(arb2.bytes)
+    swap
+    log
+    // escrow.py:437
+    // log(arb3.bytes)
+    log
+    // escrow.py:361
+    // @arc4.abimethod
+    intc_0 // 1
+    return
+
+submit_dispute_if_body@10:
+    // escrow.py:389
+    // seed = op.sha256(Txn.tx_id + op.itob(Global.latest_timestamp))
+    txn TxID
+    global LatestTimestamp
+    itob
+    concat
+    sha256
+    // escrow.py:390
+    // start_idx = op.btoi(seed) % count
+    btoi
+    dig 6
+    %
+    // escrow.py:394
+    // found = False
+    intc_1 // 0
+    bury 6
+    // escrow.py:395
+    // searched = UInt64(0)
+    intc_1 // 0
+    bury 4
+    dig 1
+    bury 13
+    bury 4
+
+submit_dispute_while_top@11:
+    // escrow.py:396
+    // while searched < count and not found:
+    dig 2
+    dig 6
+    <
+    bz submit_dispute_after_while@17
+    dig 4
+    bnz submit_dispute_after_while@17
+    // escrow.py:397
+    // candidate = Box(Account, key=Bytes(b"cand_addr_") + op.itob(idx)).value
+    dig 3
+    itob
+    bytec 8 // 0x63616e645f616464725f
+    swap
+    concat
+    box_get
+    swap
+    dup
+    cover 2
+    bury 11
+    assert // check Box exists
+    // escrow.py:398
+    // if candidate != creator and candidate != worker:
+    dig 8
+    !=
+    bz submit_dispute_after_if_else@16
+    dig 8
+    dig 7
+    !=
+    bz submit_dispute_after_if_else@16
+    // escrow.py:400
+    // found = True
+    intc_0 // 1
+    bury 5
+    dig 8
+    bury 12
+
+submit_dispute_after_if_else@16:
+    // escrow.py:401
+    // idx = (idx + 1) % count
+    dig 3
+    intc_0 // 1
+    +
+    dig 6
+    %
+    bury 4
+    // escrow.py:402
+    // searched = searched + 1
+    dig 2
+    intc_0 // 1
+    +
+    bury 3
+    b submit_dispute_while_top@11
+
+submit_dispute_after_while@17:
+    // escrow.py:404-405
+    // # Try to find arb2
+    // found = False
+    intc_1 // 0
+    bury 5
+    // escrow.py:406
+    // searched = UInt64(0)
+    intc_1 // 0
+    bury 3
+    dup
+    bury 11
+
+submit_dispute_while_top@18:
+    // escrow.py:407
+    // while searched < count and not found:
+    dig 2
+    dig 6
+    <
+    bz submit_dispute_after_while@25
+    dig 4
+    bnz submit_dispute_after_while@25
+    // escrow.py:408
+    // candidate = Box(Account, key=Bytes(b"cand_addr_") + op.itob(idx)).value
+    dig 3
+    itob
+    bytec 8 // 0x63616e645f616464725f
+    swap
+    concat
+    box_get
+    swap
+    dup
+    cover 2
+    bury 11
+    assert // check Box exists
+    // escrow.py:409
+    // if candidate != creator and candidate != worker and candidate != arb1:
+    dig 8
+    !=
+    bz submit_dispute_after_if_else@24
+    dig 8
+    dig 7
+    !=
+    bz submit_dispute_after_if_else@24
+    dig 8
+    dig 12
+    !=
+    bz submit_dispute_after_if_else@24
+    // escrow.py:411
+    // found = True
+    intc_0 // 1
+    bury 5
+    dig 8
+    bury 11
+
+submit_dispute_after_if_else@24:
+    // escrow.py:412
+    // idx = (idx + 1) % count
+    dig 3
+    intc_0 // 1
+    +
+    dig 6
+    %
+    bury 4
+    // escrow.py:413
+    // searched = searched + 1
+    dig 2
+    intc_0 // 1
+    +
+    bury 3
+    b submit_dispute_while_top@18
+
+submit_dispute_after_while@25:
+    // escrow.py:415-416
+    // # Try to find arb3
+    // found = False
+    intc_1 // 0
+    bury 5
+    // escrow.py:417
+    // searched = UInt64(0)
+    intc_1 // 0
+    bury 3
+    bury 9
+
+submit_dispute_while_top@26:
+    // escrow.py:418
+    // while searched < count and not found:
+    dig 1
+    dig 5
+    <
+    bz submit_dispute_after_if_else@35
+    dig 3
+    bnz submit_dispute_after_if_else@35
+    // escrow.py:419
+    // candidate = Box(Account, key=Bytes(b"cand_addr_") + op.itob(idx)).value
+    dig 2
+    itob
+    bytec 8 // 0x63616e645f616464725f
+    swap
+    concat
+    box_get
+    swap
+    dup
+    cover 2
+    bury 10
+    assert // check Box exists
+    // escrow.py:420
+    // if candidate != creator and candidate != worker and candidate != arb1 and candidate != arb2:
+    dig 7
+    !=
+    bz submit_dispute_after_if_else@33
+    dig 7
+    dig 6
+    !=
+    bz submit_dispute_after_if_else@33
+    dig 7
+    dig 11
+    !=
+    bz submit_dispute_after_if_else@33
+    dig 7
+    dig 10
+    !=
+    bz submit_dispute_after_if_else@33
+    // escrow.py:422
+    // found = True
+    intc_0 // 1
+    bury 4
+    dig 7
+    bury 9
+
+submit_dispute_after_if_else@33:
+    // escrow.py:423
+    // idx = (idx + 1) % count
+    dig 2
+    intc_0 // 1
+    +
+    dig 5
+    %
+    bury 3
+    // escrow.py:424
+    // searched = searched + 1
+    dig 1
+    intc_0 // 1
+    +
+    bury 2
+    b submit_dispute_while_top@26
+
+submit_dispute_bool_false@8:
+    intc_1 // 0
+    b submit_dispute_bool_merge@9
+
+submit_dispute_bool_false@4:
+    intc_1 // 0
+    b submit_dispute_bool_merge@5
+
+
+// escrow.EscrowContract.vote_dispute[routing]() -> void:
+vote_dispute:
+    pushbytes ""
+    dupn 5
+    // escrow.py:439
+    // @arc4.abimethod
+    txna ApplicationArgs 1
+    dup
+    len
+    pushint 8
+    ==
+    assert // invalid number of bytes for arc4.uint64
+    btoi
+    dup
+    // escrow.py:441
+    // assert Txn.type_enum == TransactionType.ApplicationCall
+    txn TypeEnum
+    intc_3 // appl
+    ==
+    assert
+    // escrow.py:442
+    // assert Txn.on_completion == OnCompleteAction.NoOp
+    txn OnCompletion
+    !
+    assert
+    // escrow.py:443
+    // assert Txn.rekey_to == Account(Bytes(32 * b"\x00"))
+    txn RekeyTo
+    bytec_3 // 0x0000000000000000000000000000000000000000000000000000000000000000
+    ==
+    assert
+    // escrow.py:445
+    // assert self.state_box.value == DISPUTED, "Bounty is not disputed"
+    bytec_0 // "state"
+    box_get
+    assert // check self.state_box exists
+    btoi
+    pushint 4
+    ==
+    assert // Bounty is not disputed
+    // escrow.py:446
+    // assert vote_option == UInt64(1) or vote_option == UInt64(2) or vote_option == UInt64(3), "Invalid vote option"
+    intc_0 // 1
+    ==
+    bnz vote_dispute_bool_true@4
+    dup
+    intc_2 // 2
+    ==
+    bnz vote_dispute_bool_true@4
+    dup
+    pushint 3
+    ==
+    bz vote_dispute_bool_false@5
+
+vote_dispute_bool_true@4:
+    intc_0 // 1
+
+vote_dispute_bool_merge@6:
+    // escrow.py:446
+    // assert vote_option == UInt64(1) or vote_option == UInt64(2) or vote_option == UInt64(3), "Invalid vote option"
+    assert // Invalid vote option
+    // escrow.py:448
+    // sender = Txn.sender
+    txn Sender
+    dup
+    cover 2
+    // escrow.py:449
+    // voted = False
+    intc_1 // 0
+    bury 5
+    // escrow.py:450
+    // if sender == self.arbitrator_1.value and self.arbitrator_1_vote.value == UInt64(0):
+    bytec 14 // "arbitrator_1"
+    box_get
+    assert // check self.arbitrator_1 exists
+    ==
+    bz vote_dispute_else_body@9
+    bytec 17 // "arbitrator_1_vote"
+    box_get
+    assert // check self.arbitrator_1_vote exists
+    btoi
+    bnz vote_dispute_else_body@9
+    // escrow.py:451
+    // self.arbitrator_1_vote.value = vote_option
+    dup
+    itob
+    bytec 17 // "arbitrator_1_vote"
+    swap
+    box_put
+    // escrow.py:452
+    // voted = True
+    intc_0 // 1
+    bury 4
+
+vote_dispute_after_if_else@17:
+    // escrow.py:460
+    // assert voted, "Sender is not an assigned arbitrator with a pending vote"
+    dig 3
+    assert // Sender is not an assigned arbitrator with a pending vote
+    // escrow.py:462
+    // log(Bytes(b"arbitrator_voted"))
+    pushbytes 0x61726269747261746f725f766f746564
+    log
+    // escrow.py:463
+    // log(sender.bytes)
+    swap
+    log
+    // escrow.py:464
+    // log(op.itob(vote_option))
+    itob
+    log
+    // escrow.py:466-467
+    // # Check consensus
+    // v1 = self.arbitrator_1_vote.value
+    bytec 17 // "arbitrator_1_vote"
+    box_get
+    assert // check self.arbitrator_1_vote exists
+    btoi
+    dup
+    // escrow.py:468
+    // v2 = self.arbitrator_2_vote.value
+    bytec 18 // "arbitrator_2_vote"
+    box_get
+    assert // check self.arbitrator_2_vote exists
+    btoi
+    bury 6
+    // escrow.py:469
+    // v3 = self.arbitrator_3_vote.value
+    bytec 19 // "arbitrator_3_vote"
+    box_get
+    assert // check self.arbitrator_3_vote exists
+    btoi
+    bury 5
+    // escrow.py:471
+    // consensus_option = UInt64(0)
+    intc_1 // 0
+    bury 8
+    // escrow.py:472
+    // if v1 != UInt64(0) and v1 == v2:
+    bz vote_dispute_else_body@20
+    dup
+    dig 5
+    ==
+    bz vote_dispute_else_body@20
+    bury 6
+
+vote_dispute_after_if_else@33:
+    // escrow.py:481
+    // if consensus_option != UInt64(0):
+    dig 5
+    bz vote_dispute_after_if_else@35
+    // escrow.py:485
+    // escrow_amount = self.escrow_amount.value
+    bytec 5 // "escrow_amount"
+    box_get
+    assert // check self.escrow_amount exists
+    btoi
+    dup
+    // escrow.py:83
+    // val, exists = self.asset_id.maybe()
+    bytec 6 // "asset_id"
+    box_get
+    swap
+    btoi
+    // escrow.py:84
+    // return val if exists else UInt64(0)
+    intc_1 // 0
+    swap
+    uncover 2
+    select
+    dup
+    cover 2
+    // escrow.py:487
+    // self._verify_escrow_balance(asset_id, escrow_amount)
+    dig 1
+    callsub _verify_escrow_balance
+    // escrow.py:489
+    // fee_arbitration = escrow_amount * 5 // 10000
+    pushint 5
+    *
+    pushint 10000
+    /
+    cover 2
+    // escrow.py:491
+    // v1 = self.arbitrator_1_vote.value
+    bytec 17 // "arbitrator_1_vote"
+    box_get
+    assert // check self.arbitrator_1_vote exists
+    btoi
+    dup
+    cover 2
+    // escrow.py:492
+    // v2 = self.arbitrator_2_vote.value
+    bytec 18 // "arbitrator_2_vote"
+    box_get
+    assert // check self.arbitrator_2_vote exists
+    btoi
+    bury 9
+    // escrow.py:493
+    // v3 = self.arbitrator_3_vote.value
+    bytec 19 // "arbitrator_3_vote"
+    box_get
+    assert // check self.arbitrator_3_vote exists
+    btoi
+    bury 8
+    // escrow.py:495
+    // voted_count = UInt64(0)
+    intc_1 // 0
+    bury 6
+    // escrow.py:496
+    // if v1 != UInt64(0):
+    bz vote_dispute_after_if_else@38
+    // escrow.py:497
+    // voted_count = voted_count + 1
+    intc_0 // 1
+    bury 5
+
+vote_dispute_after_if_else@38:
+    // escrow.py:498
+    // if v2 != UInt64(0):
+    dig 7
+    bz vote_dispute_after_if_else@40
+    // escrow.py:499
+    // voted_count = voted_count + 1
+    dig 4
+    intc_0 // 1
+    +
+    bury 5
+
+vote_dispute_after_if_else@40:
+    // escrow.py:500
+    // if v3 != UInt64(0):
+    dig 6
+    bz vote_dispute_after_if_else@42
+    // escrow.py:501
+    // voted_count = voted_count + 1
+    dig 4
+    intc_0 // 1
+    +
+    bury 5
+
+vote_dispute_after_if_else@42:
+    // escrow.py:503
+    // fee_per_arbitrator = fee_arbitration // voted_count
+    uncover 3
+    dig 4
+    dup
+    cover 2
+    /
+    dup
+    bury 10
+    // escrow.py:504
+    // actual_arbitration_payout = fee_per_arbitrator * voted_count
+    *
+    cover 2
+    // escrow.py:506-507
+    // # Pay platform fee split (royalty + treasury + mediator) then arbitrators
+    // if consensus_option == UInt64(1):
+    dig 9
+    intc_0 // 1
+    ==
+    bz vote_dispute_else_body@50
+    // escrow.py:509
+    // self._get_agent_address(), escrow_amount, asset_id,
+    callsub _get_agent_address
+    // escrow.py:510
+    // Account(self.mediator_data.value.address.bytes),
+    bytec 4 // "mediator_data"
+    box_get
+    assert // check self.mediator_data exists
+    extract 0 32
+    dup
+    len
+    pushint 32
+    ==
+    assert // Address length is 32 bytes
+    // escrow.py:508-511
+    // remaining_amount = self._send_fee_split(
+    //     self._get_agent_address(), escrow_amount, asset_id,
+    //     Account(self.mediator_data.value.address.bytes),
+    // )
+    swap
+    uncover 5
+    dig 3
+    uncover 3
+    callsub _send_fee_split
+    // escrow.py:512
+    // remaining_amount = remaining_amount - actual_arbitration_payout
+    uncover 3
+    -
+    // escrow.py:513
+    // self.payout_type.value = Bytes(PAYOUT)
+    bytec_2 // "payout_type"
+    box_del
+    pop
+    bytec_2 // "payout_type"
+    bytec 21 // 0x5041594f5554
+    box_put
+    // escrow.py:514
+    // self.state_box.value = UInt64(CLOSED)
+    pushint 5
+    itob
+    bytec_0 // "state"
+    swap
+    box_put
+    // escrow.py:516-517
+    // # Pay voting arbitrators
+    // if v1 != UInt64(0):
+    uncover 2
+    bz vote_dispute_after_if_else@45
+    // escrow.py:518
+    // self._send_payout(self.arbitrator_1.value, fee_per_arbitrator, asset_id)
+    bytec 14 // "arbitrator_1"
+    box_get
+    assert // check self.arbitrator_1 exists
+    dig 7
+    dig 3
+    callsub _send_payout
+
+vote_dispute_after_if_else@45:
+    // escrow.py:519
+    // if v2 != UInt64(0):
+    dig 5
+    bz vote_dispute_after_if_else@47
+    // escrow.py:520
+    // self._send_payout(self.arbitrator_2.value, fee_per_arbitrator, asset_id)
+    bytec 15 // "arbitrator_2"
+    box_get
+    assert // check self.arbitrator_2 exists
+    dig 7
+    dig 3
+    callsub _send_payout
+
+vote_dispute_after_if_else@47:
+    // escrow.py:521
+    // if v3 != UInt64(0):
+    dig 4
+    bz vote_dispute_after_if_else@49
+    // escrow.py:522
+    // self._send_payout(self.arbitrator_3.value, fee_per_arbitrator, asset_id)
+    bytec 16 // "arbitrator_3"
+    box_get
+    assert // check self.arbitrator_3 exists
+    dig 7
+    dig 3
+    callsub _send_payout
+
+vote_dispute_after_if_else@49:
+    // escrow.py:524
+    // self._send_payout(self._get_agent_address(), remaining_amount, asset_id)
+    callsub _get_agent_address
+    swap
+    uncover 2
+    callsub _send_payout
+    // escrow.py:525
+    // log(Bytes(b"dispute_resolved_agent_win"))
+    bytec 32 // 0x646973707574655f7265736f6c7665645f6167656e745f77696e
+    log
+
+vote_dispute_after_if_else@35:
+    // escrow.py:439
+    // @arc4.abimethod
+    intc_0 // 1
+    return
+
+vote_dispute_else_body@50:
+    // escrow.py:526
+    // elif consensus_option == UInt64(2):
+    dig 9
+    intc_2 // 2
+    ==
+    bz vote_dispute_else_body@58
+    // escrow.py:528
+    // self.creator_address.value, escrow_amount, asset_id,
+    bytec_1 // "creator_address"
+    box_get
+    assert // check self.creator_address exists
+    // escrow.py:529
+    // Account(self.mediator_data.value.address.bytes),
+    bytec 4 // "mediator_data"
+    box_get
+    assert // check self.mediator_data exists
+    extract 0 32
+    dup
+    len
+    pushint 32
+    ==
+    assert // Address length is 32 bytes
+    // escrow.py:527-530
+    // remaining_amount = self._send_fee_split(
+    //     self.creator_address.value, escrow_amount, asset_id,
+    //     Account(self.mediator_data.value.address.bytes),
+    // )
+    swap
+    uncover 5
+    dig 3
+    uncover 3
+    callsub _send_fee_split
+    // escrow.py:531
+    // remaining_amount = remaining_amount - actual_arbitration_payout
+    uncover 3
+    -
+    // escrow.py:532
+    // self.payout_type.value = Bytes(REFUND)
+    bytec_2 // "payout_type"
+    box_del
+    pop
+    bytec_2 // "payout_type"
+    bytec 22 // 0x524546554e44
+    box_put
+    // escrow.py:533
+    // self.state_box.value = UInt64(CLOSED)
+    pushint 5
+    itob
+    bytec_0 // "state"
+    swap
+    box_put
+    // escrow.py:535-536
+    // # Pay voting arbitrators
+    // if v1 != UInt64(0):
+    uncover 2
+    bz vote_dispute_after_if_else@53
+    // escrow.py:537
+    // self._send_payout(self.arbitrator_1.value, fee_per_arbitrator, asset_id)
+    bytec 14 // "arbitrator_1"
+    box_get
+    assert // check self.arbitrator_1 exists
+    dig 7
+    dig 3
+    callsub _send_payout
+
+vote_dispute_after_if_else@53:
+    // escrow.py:538
+    // if v2 != UInt64(0):
+    dig 5
+    bz vote_dispute_after_if_else@55
+    // escrow.py:539
+    // self._send_payout(self.arbitrator_2.value, fee_per_arbitrator, asset_id)
+    bytec 15 // "arbitrator_2"
+    box_get
+    assert // check self.arbitrator_2 exists
+    dig 7
+    dig 3
+    callsub _send_payout
+
+vote_dispute_after_if_else@55:
+    // escrow.py:540
+    // if v3 != UInt64(0):
+    dig 4
+    bz vote_dispute_after_if_else@57
+    // escrow.py:541
+    // self._send_payout(self.arbitrator_3.value, fee_per_arbitrator, asset_id)
+    bytec 16 // "arbitrator_3"
+    box_get
+    assert // check self.arbitrator_3 exists
+    dig 7
+    dig 3
+    callsub _send_payout
+
+vote_dispute_after_if_else@57:
+    // escrow.py:543
+    // self._send_payout(self.creator_address.value, remaining_amount, asset_id)
+    bytec_1 // "creator_address"
+    box_get
+    assert // check self.creator_address exists
+    swap
+    uncover 2
+    callsub _send_payout
+    // escrow.py:544
+    // log(Bytes(b"dispute_resolved_creator_win"))
+    bytec 33 // 0x646973707574655f7265736f6c7665645f63726561746f725f77696e
+    log
+    b vote_dispute_after_if_else@35
+
+vote_dispute_else_body@58:
+    // escrow.py:547
+    // self.creator_address.value, escrow_amount, asset_id,
+    bytec_1 // "creator_address"
+    box_get
+    assert // check self.creator_address exists
+    // escrow.py:548
+    // Account(self.mediator_data.value.address.bytes),
+    bytec 4 // "mediator_data"
+    box_get
+    assert // check self.mediator_data exists
+    extract 0 32
+    dup
+    len
+    pushint 32
+    ==
+    assert // Address length is 32 bytes
+    // escrow.py:546-549
+    // remaining_amount = self._send_fee_split(
+    //     self.creator_address.value, escrow_amount, asset_id,
+    //     Account(self.mediator_data.value.address.bytes),
+    // )
+    swap
+    uncover 5
+    dig 3
+    uncover 3
+    callsub _send_fee_split
+    // escrow.py:550
+    // remaining_amount = remaining_amount - actual_arbitration_payout
+    uncover 3
+    -
+    // escrow.py:551
+    // self.payout_type.value = Bytes(SPLIT)
+    bytec_2 // "payout_type"
+    box_del
+    pop
+    bytec_2 // "payout_type"
+    bytec 34 // 0x53504c4954
+    box_put
+    // escrow.py:552
+    // self.state_box.value = UInt64(CLOSED)
+    pushint 5
+    itob
+    bytec_0 // "state"
+    swap
+    box_put
+    // escrow.py:554-555
+    // # Pay voting arbitrators
+    // if v1 != UInt64(0):
+    uncover 2
+    bz vote_dispute_after_if_else@60
+    // escrow.py:556
+    // self._send_payout(self.arbitrator_1.value, fee_per_arbitrator, asset_id)
+    bytec 14 // "arbitrator_1"
+    box_get
+    assert // check self.arbitrator_1 exists
+    dig 7
+    dig 3
+    callsub _send_payout
+
+vote_dispute_after_if_else@60:
+    // escrow.py:557
+    // if v2 != UInt64(0):
+    dig 5
+    bz vote_dispute_after_if_else@62
+    // escrow.py:558
+    // self._send_payout(self.arbitrator_2.value, fee_per_arbitrator, asset_id)
+    bytec 15 // "arbitrator_2"
+    box_get
+    assert // check self.arbitrator_2 exists
+    dig 7
+    dig 3
+    callsub _send_payout
+
+vote_dispute_after_if_else@62:
+    // escrow.py:559
+    // if v3 != UInt64(0):
+    dig 4
+    bz vote_dispute_after_if_else@64
+    // escrow.py:560
+    // self._send_payout(self.arbitrator_3.value, fee_per_arbitrator, asset_id)
+    bytec 16 // "arbitrator_3"
+    box_get
+    assert // check self.arbitrator_3 exists
+    dig 7
+    dig 3
+    callsub _send_payout
+
+vote_dispute_after_if_else@64:
+    // escrow.py:562
+    // half_amount = remaining_amount // 2
+    intc_2 // 2
+    /
+    // escrow.py:563
+    // self._send_payout(self.creator_address.value, half_amount, asset_id)
+    bytec_1 // "creator_address"
+    box_get
+    assert // check self.creator_address exists
+    dig 1
+    dig 3
+    callsub _send_payout
+    // escrow.py:564
+    // self._send_payout(self._get_agent_address(), half_amount, asset_id)
+    callsub _get_agent_address
+    swap
+    uncover 2
+    callsub _send_payout
+    // escrow.py:565
+    // log(Bytes(b"dispute_resolved_split"))
+    pushbytes 0x646973707574655f7265736f6c7665645f73706c6974
+    log
+    b vote_dispute_after_if_else@35
+
+vote_dispute_else_body@20:
+    // escrow.py:474
+    // elif v1 != UInt64(0) and v1 == v3:
+    dup
+    bz vote_dispute_else_body@23
+    dup
+    dig 4
+    ==
+    bz vote_dispute_else_body@23
+    bury 6
+    b vote_dispute_after_if_else@33
+
+vote_dispute_else_body@23:
+    // escrow.py:476
+    // elif v2 != UInt64(0) and v2 == v3:
+    dig 4
+    bz vote_dispute_else_body@26
+    dig 4
+    dig 4
+    ==
+    bz vote_dispute_else_body@26
+    pop
+    dig 3
+    bury 6
+    b vote_dispute_after_if_else@33
+
+vote_dispute_else_body@26:
+    // escrow.py:478
+    // elif v1 != UInt64(0) and v2 != UInt64(0) and v3 != UInt64(0):
+    bz vote_dispute_after_if_else@33
+    dig 3
+    bz vote_dispute_after_if_else@33
+    dig 2
+    bz vote_dispute_after_if_else@33
+    // escrow.py:479
+    // consensus_option = UInt64(3)
+    pushint 3
+    bury 6
+    b vote_dispute_after_if_else@33
+
+vote_dispute_else_body@9:
+    // escrow.py:453
+    // elif sender == self.arbitrator_2.value and self.arbitrator_2_vote.value == UInt64(0):
+    bytec 15 // "arbitrator_2"
+    box_get
+    assert // check self.arbitrator_2 exists
+    dig 2
+    ==
+    bz vote_dispute_else_body@12
+    bytec 18 // "arbitrator_2_vote"
+    box_get
+    assert // check self.arbitrator_2_vote exists
+    btoi
+    bnz vote_dispute_else_body@12
+    // escrow.py:454
+    // self.arbitrator_2_vote.value = vote_option
+    dup
+    itob
+    bytec 18 // "arbitrator_2_vote"
+    swap
+    box_put
+    // escrow.py:455
+    // voted = True
+    intc_0 // 1
+    bury 4
+    b vote_dispute_after_if_else@17
+
+vote_dispute_else_body@12:
+    // escrow.py:456
+    // elif sender == self.arbitrator_3.value and self.arbitrator_3_vote.value == UInt64(0):
+    bytec 16 // "arbitrator_3"
+    box_get
+    assert // check self.arbitrator_3 exists
+    dig 2
+    ==
+    bz vote_dispute_after_if_else@17
+    bytec 19 // "arbitrator_3_vote"
+    box_get
+    assert // check self.arbitrator_3_vote exists
+    btoi
+    bnz vote_dispute_after_if_else@17
+    // escrow.py:457
+    // self.arbitrator_3_vote.value = vote_option
+    dup
+    itob
+    bytec 19 // "arbitrator_3_vote"
+    swap
+    box_put
+    // escrow.py:458
+    // voted = True
+    intc_0 // 1
+    bury 4
+    b vote_dispute_after_if_else@17
+
+vote_dispute_bool_false@5:
+    intc_1 // 0
+    b vote_dispute_bool_merge@6
+
+
+// escrow.EscrowContract.resolve_dispute[routing]() -> void:
+resolve_dispute:
+    // escrow.py:567
+    // @arc4.abimethod
+    txna ApplicationArgs 1
+    dup
+    intc_1 // 0
+    extract_uint16 // on error: invalid array length header
+    intc_2 // 2
+    +
+    dig 1
+    len
+    ==
+    assert // invalid number of bytes for arc4.dynamic_array<arc4.uint8>
+    extract 2 0
+    dup
+    txna ApplicationArgs 2
+    dup
+    intc_1 // 0
+    extract_uint16 // on error: invalid array length header
+    intc_2 // 2
+    +
+    dig 1
+    len
+    ==
+    assert // invalid number of bytes for arc4.dynamic_array<arc4.uint8>
+    extract 2 0
+    swap
+    // escrow.py:569
+    // assert Txn.type_enum == TransactionType.ApplicationCall
+    txn TypeEnum
+    intc_3 // appl
+    ==
+    assert
+    // escrow.py:570
+    // assert Txn.on_completion == OnCompleteAction.NoOp
+    txn OnCompletion
+    !
+    assert
+    // escrow.py:571
+    // assert Txn.rekey_to == Account(Bytes(32 * b"\x00"))
+    txn RekeyTo
+    bytec_3 // 0x0000000000000000000000000000000000000000000000000000000000000000
+    ==
+    assert
+    // escrow.py:573
+    // assert self.state_box.value == DISPUTED
+    bytec_0 // "state"
+    box_get
+    assert // check self.state_box exists
+    btoi
+    pushint 4
+    ==
+    assert
+    // escrow.py:574
+    // assert resolution == Bytes(b"agent_win") or resolution == Bytes(b"creator_win")
+    pushbytes 0x6167656e745f77696e
+    ==
+    dup
+    cover 3
+    bnz resolve_dispute_bool_true@3
+    dig 1
+    pushbytes 0x63726561746f725f77696e
+    ==
+    bz resolve_dispute_bool_false@4
+
+resolve_dispute_bool_true@3:
+    intc_0 // 1
+
+resolve_dispute_bool_merge@5:
+    // escrow.py:574
+    // assert resolution == Bytes(b"agent_win") or resolution == Bytes(b"creator_win")
+    assert
+    // escrow.py:575
+    // assert mediator_signature.length > 0
+    dup
+    len
+    assert
+    // escrow.py:577-578
+    // # Cryptographically verify mediator signature
+    // mediator_addr = self.mediator_data.value.address.bytes
+    bytec 4 // "mediator_data"
+    box_get
+    assert // check self.mediator_data exists
+    extract 0 32
+    // escrow.py:579
+    // message = op.itob(Global.current_application_id.id) + resolution
+    global CurrentApplicationID
+    itob
+    uncover 3
+    concat
+    // escrow.py:580
+    // assert op.ed25519verify(message, mediator_signature, mediator_addr), "Invalid mediator signature"
+    cover 2
+    ed25519verify
+    assert // Invalid mediator signature
+    // escrow.py:582
+    // escrow_amount = self.escrow_amount.value
+    bytec 5 // "escrow_amount"
+    box_get
+    assert // check self.escrow_amount exists
+    btoi
+    dup
+    // escrow.py:83
+    // val, exists = self.asset_id.maybe()
+    bytec 6 // "asset_id"
+    box_get
+    swap
+    btoi
+    // escrow.py:84
+    // return val if exists else UInt64(0)
+    intc_1 // 0
+    swap
+    uncover 2
+    select
+    dup
+    uncover 2
+    // escrow.py:584
+    // self._verify_escrow_balance(asset_id, escrow_amount)
+    callsub _verify_escrow_balance
+    // escrow.py:586
+    // if resolution == Bytes(b"agent_win"):
+    uncover 2
+    bz resolve_dispute_else_body@7
+    // escrow.py:587
+    // self.payout_type.value = Bytes(PAYOUT)
+    bytec_2 // "payout_type"
+    box_del
+    pop
+    bytec_2 // "payout_type"
+    bytec 21 // 0x5041594f5554
+    box_put
+    // escrow.py:588
+    // self.state_box.value = UInt64(CLOSED)
+    pushint 5
+    itob
+    bytec_0 // "state"
+    swap
+    box_put
+    // escrow.py:590
+    // self._get_agent_address(), escrow_amount, asset_id,
+    callsub _get_agent_address
+    // escrow.py:591
+    // Account(self.mediator_data.value.address.bytes),
+    bytec 4 // "mediator_data"
+    box_get
+    assert // check self.mediator_data exists
+    extract 0 32
+    dup
+    len
+    pushint 32
+    ==
+    assert // Address length is 32 bytes
+    // escrow.py:589-592
+    // remaining_amount = self._send_fee_split(
+    //     self._get_agent_address(), escrow_amount, asset_id,
+    //     Account(self.mediator_data.value.address.bytes),
+    // )
+    swap
+    uncover 3
+    uncover 3
+    dup
+    cover 3
+    uncover 4
+    callsub _send_fee_split
+    // escrow.py:593
+    // self._send_payout(self._get_agent_address(), remaining_amount, asset_id)
+    callsub _get_agent_address
+    swap
+    uncover 2
+    callsub _send_payout
+    // escrow.py:594
+    // log(Bytes(b"dispute_resolved_agent_win"))
+    bytec 32 // 0x646973707574655f7265736f6c7665645f6167656e745f77696e
+    log
+
+resolve_dispute_after_if_else@8:
+    // escrow.py:567
+    // @arc4.abimethod
+    intc_0 // 1
+    return
+
+resolve_dispute_else_body@7:
+    // escrow.py:596
+    // self.payout_type.value = Bytes(REFUND)
+    bytec_2 // "payout_type"
+    box_del
+    pop
+    bytec_2 // "payout_type"
+    bytec 22 // 0x524546554e44
+    box_put
+    // escrow.py:597
+    // self.state_box.value = UInt64(CLOSED)
+    pushint 5
+    itob
+    bytec_0 // "state"
+    swap
+    box_put
+    // escrow.py:599
+    // self.creator_address.value, escrow_amount, asset_id,
+    bytec_1 // "creator_address"
+    box_get
+    assert // check self.creator_address exists
+    // escrow.py:600
+    // Account(self.mediator_data.value.address.bytes),
+    bytec 4 // "mediator_data"
+    box_get
+    assert // check self.mediator_data exists
+    extract 0 32
+    dup
+    len
+    pushint 32
+    ==
+    assert // Address length is 32 bytes
+    // escrow.py:598-601
+    // remaining_amount = self._send_fee_split(
+    //     self.creator_address.value, escrow_amount, asset_id,
+    //     Account(self.mediator_data.value.address.bytes),
+    // )
+    swap
+    uncover 3
+    dig 3
+    uncover 3
+    callsub _send_fee_split
+    // escrow.py:602
+    // self._send_payout(self.creator_address.value, remaining_amount, asset_id)
+    bytec_1 // "creator_address"
+    box_get
+    assert // check self.creator_address exists
+    swap
+    uncover 2
+    callsub _send_payout
+    // escrow.py:603
+    // log(Bytes(b"dispute_resolved_creator_win"))
+    bytec 33 // 0x646973707574655f7265736f6c7665645f63726561746f725f77696e
+    log
+    b resolve_dispute_after_if_else@8
+
+resolve_dispute_bool_false@4:
+    intc_1 // 0
+    b resolve_dispute_bool_merge@5
+
+
+// escrow.EscrowContract.auto_resolve_creator_win[routing]() -> void:
+auto_resolve_creator_win:
+    // escrow.py:607
+    // assert Txn.type_enum == TransactionType.ApplicationCall
+    txn TypeEnum
+    intc_3 // appl
+    ==
+    assert
+    // escrow.py:608
+    // assert Txn.on_completion == OnCompleteAction.NoOp
+    txn OnCompletion
+    !
+    assert
+    // escrow.py:610
+    // assert self.state_box.value == DISPUTED
+    bytec_0 // "state"
+    box_get
+    assert // check self.state_box exists
+    btoi
+    pushint 4
+    ==
+    assert
+    // escrow.py:612
+    // created_ts = self.dispute_timestamp.value
+    bytec 27 // "dispute_timestamp"
+    box_get
+    assert // check self.dispute_timestamp exists
+    btoi
+    // escrow.py:614
+    // assert Global.latest_timestamp > created_ts + timeout
+    global LatestTimestamp
+    swap
+    // escrow.py:613
+    // timeout = UInt64(14 * 24 * 60 * 60)  # 14 days
+    pushint 1209600
+    // escrow.py:614
+    // assert Global.latest_timestamp > created_ts + timeout
+    +
+    >
+    assert
+    // escrow.py:616
+    // self.payout_type.value = Bytes(REFUND)
+    bytec_2 // "payout_type"
+    box_del
+    pop
+    bytec_2 // "payout_type"
+    bytec 22 // 0x524546554e44
+    box_put
+    // escrow.py:617
+    // self.state_box.value = UInt64(CLOSED)
+    pushint 5
+    itob
+    bytec_0 // "state"
+    swap
+    box_put
+    // escrow.py:619
+    // escrow_amount = self.escrow_amount.value
+    bytec 5 // "escrow_amount"
+    box_get
+    assert // check self.escrow_amount exists
+    btoi
+    // escrow.py:83
+    // val, exists = self.asset_id.maybe()
+    bytec 6 // "asset_id"
+    box_get
+    swap
+    btoi
+    // escrow.py:84
+    // return val if exists else UInt64(0)
+    intc_1 // 0
+    swap
+    uncover 2
+    select
+    // escrow.py:621
+    // self._verify_escrow_balance(asset_id, escrow_amount)
+    dup
+    dig 2
+    callsub _verify_escrow_balance
+    // escrow.py:624
+    // self.creator_address.value, escrow_amount, asset_id,
+    bytec_1 // "creator_address"
+    box_get
+    assert // check self.creator_address exists
+    // escrow.py:625
+    // Account(self.mediator_data.value.address.bytes),
+    bytec 4 // "mediator_data"
+    box_get
+    assert // check self.mediator_data exists
+    extract 0 32
+    dup
+    len
+    pushint 32
+    ==
+    assert // Address length is 32 bytes
+    // escrow.py:623-626
+    // self._send_fee_split(
+    //     self.creator_address.value, escrow_amount, asset_id,
+    //     Account(self.mediator_data.value.address.bytes),
+    // )
+    swap
+    dig 3
+    dig 3
+    uncover 3
+    callsub _send_fee_split
+    pop
+    // escrow.py:627
+    // self._send_payout(self.creator_address.value, escrow_amount, asset_id)
+    bytec_1 // "creator_address"
+    box_get
+    assert // check self.creator_address exists
+    cover 2
+    callsub _send_payout
+    // escrow.py:629
+    // log(Bytes(b"dispute_auto_resolved_creator_win"))
+    pushbytes 0x646973707574655f6175746f5f7265736f6c7665645f63726561746f725f77696e
+    log
+    // escrow.py:605
+    // @arc4.abimethod
+    intc_0 // 1
+    return
+
+
+// escrow.EscrowContract.timeout_dispute[routing]() -> void:
+timeout_dispute:
+    // escrow.py:633
+    // assert Txn.type_enum == TransactionType.ApplicationCall
+    txn TypeEnum
+    intc_3 // appl
+    ==
+    assert
+    // escrow.py:634
+    // assert Txn.on_completion == OnCompleteAction.NoOp
+    txn OnCompletion
+    !
+    assert
+    // escrow.py:636
+    // assert self.state_box.value == DISPUTED
+    bytec_0 // "state"
+    box_get
+    assert // check self.state_box exists
+    btoi
+    pushint 4
+    ==
+    assert
+    // escrow.py:638
+    // dispute_ts = self.dispute_timestamp.value
+    bytec 27 // "dispute_timestamp"
+    box_get
+    assert // check self.dispute_timestamp exists
+    btoi
+    // escrow.py:639
+    // dispute_timeout = TemplateVar[UInt64]("DISPUTE_TIMEOUT")
+    intc 6 // TMPL_DISPUTE_TIMEOUT
+    // escrow.py:640
+    // assert Global.latest_timestamp > dispute_ts + dispute_timeout, "Dispute timeout not yet reached"
+    global LatestTimestamp
+    cover 2
+    +
+    >
+    assert // Dispute timeout not yet reached
+    // escrow.py:642
+    // escrow_amount = self.escrow_amount.value
+    bytec 5 // "escrow_amount"
+    box_get
+    assert // check self.escrow_amount exists
+    btoi
+    // escrow.py:83
+    // val, exists = self.asset_id.maybe()
+    bytec 6 // "asset_id"
+    box_get
+    swap
+    btoi
+    // escrow.py:84
+    // return val if exists else UInt64(0)
+    intc_1 // 0
+    swap
+    uncover 2
+    select
+    // escrow.py:644
+    // self._verify_escrow_balance(asset_id, escrow_amount)
+    dup
+    dig 2
+    callsub _verify_escrow_balance
+    // escrow.py:646
+    // self.payout_type.value = Bytes(SPLIT)
+    bytec_2 // "payout_type"
+    box_del
+    pop
+    bytec_2 // "payout_type"
+    bytec 34 // 0x53504c4954
+    box_put
+    // escrow.py:647
+    // self.state_box.value = UInt64(CLOSED)
+    pushint 5
+    itob
+    bytec_0 // "state"
+    swap
+    box_put
+    // escrow.py:651
+    // self.creator_address.value, escrow_amount, asset_id,
+    bytec_1 // "creator_address"
+    box_get
+    assert // check self.creator_address exists
+    // escrow.py:652
+    // Account(self.mediator_data.value.address.bytes),
+    bytec 4 // "mediator_data"
+    box_get
+    assert // check self.mediator_data exists
+    extract 0 32
+    dup
+    len
+    pushint 32
+    ==
+    assert // Address length is 32 bytes
+    // escrow.py:649-653
+    // # Split platform fee; remainder split between creator and agent
+    // remaining_amount = self._send_fee_split(
+    //     self.creator_address.value, escrow_amount, asset_id,
+    //     Account(self.mediator_data.value.address.bytes),
+    // )
+    swap
+    uncover 3
+    dig 3
+    uncover 3
+    callsub _send_fee_split
+    // escrow.py:654
+    // half_amount = remaining_amount // 2
+    intc_2 // 2
+    /
+    // escrow.py:655
+    // self._send_payout(self.creator_address.value, half_amount, asset_id)
+    bytec_1 // "creator_address"
+    box_get
+    assert // check self.creator_address exists
+    dig 1
+    dig 3
+    callsub _send_payout
+    // escrow.py:656
+    // self._send_payout(self._get_agent_address(), half_amount, asset_id)
+    callsub _get_agent_address
+    swap
+    uncover 2
+    callsub _send_payout
+    // escrow.py:658
+    // log(Bytes(b"dispute_timeout_split"))
+    pushbytes 0x646973707574655f74696d656f75745f73706c6974
+    log
+    // escrow.py:631
+    // @arc4.abimethod
+    intc_0 // 1
+    return
+
+
+// escrow.EscrowContract.auto_release[routing]() -> void:
+auto_release:
+    // escrow.py:662
+    // assert Txn.type_enum == TransactionType.ApplicationCall
+    txn TypeEnum
+    intc_3 // appl
+    ==
+    assert
+    // escrow.py:663
+    // assert Txn.on_completion == OnCompleteAction.NoOp
+    txn OnCompletion
+    !
+    assert
+    // escrow.py:665
+    // assert self.state_box.value == SUBMITTED
+    bytec_0 // "state"
+    box_get
+    assert // check self.state_box exists
+    btoi
+    intc_2 // 2
+    ==
+    assert
+    // escrow.py:87
+    // val, exists = self.is_hitm.maybe()
+    bytec 20 // "is_hitm"
+    box_get
+    swap
+    btoi
+    // escrow.py:88
+    // return val if exists else UInt64(0)
+    intc_1 // 0
+    swap
+    uncover 2
+    select
+    // escrow.py:666
+    // assert self._get_is_hitm() == 1
+    intc_0 // 1
+    ==
+    assert
+    // escrow.py:668
+    // deadline = self.review_deadline.value
+    bytec 26 // "review_deadline"
+    box_get
+    assert // check self.review_deadline exists
+    btoi
+    // escrow.py:669
+    // assert Global.latest_timestamp >= deadline
+    global LatestTimestamp
+    <=
+    assert
+    // escrow.py:671
+    // escrow_amount = self.escrow_amount.value
+    bytec 5 // "escrow_amount"
+    box_get
+    assert // check self.escrow_amount exists
+    btoi
+    // escrow.py:83
+    // val, exists = self.asset_id.maybe()
+    bytec 6 // "asset_id"
+    box_get
+    swap
+    btoi
+    // escrow.py:84
+    // return val if exists else UInt64(0)
+    intc_1 // 0
+    swap
+    uncover 2
+    select
+    // escrow.py:673
+    // self._verify_escrow_balance(asset_id, escrow_amount)
+    dup
+    dig 2
+    callsub _verify_escrow_balance
+    // escrow.py:675
+    // self.payout_type.value = Bytes(PAYOUT)
+    bytec_2 // "payout_type"
+    box_del
+    pop
+    bytec_2 // "payout_type"
+    bytec 21 // 0x5041594f5554
+    box_put
+    // escrow.py:676
+    // self.state_box.value = UInt64(CLOSED)
+    pushint 5
+    itob
+    bytec_0 // "state"
+    swap
+    box_put
+    // escrow.py:680
+    // self._get_agent_address(), escrow_amount, asset_id,
+    callsub _get_agent_address
+    // escrow.py:681
+    // Account(self.mediator_data.value.address.bytes),
+    bytec 4 // "mediator_data"
+    box_get
+    assert // check self.mediator_data exists
+    extract 0 32
+    dup
+    len
+    pushint 32
+    ==
+    assert // Address length is 32 bytes
+    // escrow.py:678-682
+    // # Split platform fee; remainder to agent
+    // remaining_amount = self._send_fee_split(
+    //     self._get_agent_address(), escrow_amount, asset_id,
+    //     Account(self.mediator_data.value.address.bytes),
+    // )
+    swap
+    uncover 3
+    dig 3
+    uncover 3
+    callsub _send_fee_split
+    // escrow.py:683
+    // self._send_payout(self._get_agent_address(), remaining_amount, asset_id)
+    callsub _get_agent_address
+    swap
+    uncover 2
+    callsub _send_payout
+    // escrow.py:685
+    // log(Bytes(b"auto_released_hitm"))
+    pushbytes 0x6175746f5f72656c65617365645f6869746d
+    log
+    // escrow.py:660
+    // @arc4.abimethod
+    intc_0 // 1
+    return
+
+
+// escrow.EscrowContract.claim_abandoned[routing]() -> void:
+claim_abandoned:
+    // escrow.py:689
+    // assert Txn.type_enum == TransactionType.ApplicationCall
+    txn TypeEnum
+    intc_3 // appl
+    ==
+    assert
+    // escrow.py:690
+    // assert Txn.on_completion == OnCompleteAction.NoOp
+    txn OnCompletion
+    !
+    assert
+    // escrow.py:691
+    // assert Txn.rekey_to == Account(Bytes(32 * b"\x00"))
+    txn RekeyTo
+    bytec_3 // 0x0000000000000000000000000000000000000000000000000000000000000000
+    ==
+    assert
+    // escrow.py:693
+    // assert self.state_box.value == REJECTED
+    bytec_0 // "state"
+    box_get
+    assert // check self.state_box exists
+    btoi
+    pushint 3
+    ==
+    assert
+    // escrow.py:99
+    // val, exists = self.rejection_count.maybe()
+    bytec 7 // "rejection_count"
+    box_get
+    swap
+    btoi
+    // escrow.py:100
+    // return val if exists else UInt64(0)
+    intc_1 // 0
+    swap
+    uncover 2
+    select
+    // escrow.py:694
+    // assert self._get_rejection_count() >= MAX_REJECTIONS
+    pushint 3
+    >=
+    assert
+    // escrow.py:695
+    // assert Txn.sender == self.creator_address.value
+    txn Sender
+    bytec_1 // "creator_address"
+    box_get
+    assert // check self.creator_address exists
+    ==
+    assert
+    // escrow.py:697
+    // escrow_amount = self.escrow_amount.value
+    bytec 5 // "escrow_amount"
+    box_get
+    assert // check self.escrow_amount exists
+    btoi
+    // escrow.py:83
+    // val, exists = self.asset_id.maybe()
+    bytec 6 // "asset_id"
+    box_get
+    swap
+    btoi
+    // escrow.py:84
+    // return val if exists else UInt64(0)
+    intc_1 // 0
+    swap
+    uncover 2
+    select
+    // escrow.py:699
+    // self._verify_escrow_balance(asset_id, escrow_amount)
+    dup
+    dig 2
+    callsub _verify_escrow_balance
+    // escrow.py:701
+    // self.payout_type.value = Bytes(REFUND)
+    bytec_2 // "payout_type"
+    box_del
+    pop
+    bytec_2 // "payout_type"
+    bytec 22 // 0x524546554e44
+    box_put
+    // escrow.py:702
+    // self.state_box.value = UInt64(CLOSED)
+    pushint 5
+    itob
+    bytec_0 // "state"
+    swap
+    box_put
+    // escrow.py:706
+    // self.creator_address.value, escrow_amount, asset_id,
+    bytec_1 // "creator_address"
+    box_get
+    assert // check self.creator_address exists
+    // escrow.py:707
+    // Account(self.mediator_data.value.address.bytes),
+    bytec 4 // "mediator_data"
+    box_get
+    assert // check self.mediator_data exists
+    extract 0 32
+    dup
+    len
+    pushint 32
+    ==
+    assert // Address length is 32 bytes
+    // escrow.py:704-708
+    // # Split platform fee; remainder to creator (deduped)
+    // remaining_amount = self._send_fee_split(
+    //     self.creator_address.value, escrow_amount, asset_id,
+    //     Account(self.mediator_data.value.address.bytes),
+    // )
+    swap
+    uncover 3
+    dig 3
+    uncover 3
+    callsub _send_fee_split
+    // escrow.py:709
+    // self._send_payout(self.creator_address.value, remaining_amount, asset_id)
+    bytec_1 // "creator_address"
+    box_get
+    assert // check self.creator_address exists
+    swap
+    uncover 2
+    callsub _send_payout
+    // escrow.py:711
+    // log(Bytes(b"abandoned_refunded_creator"))
+    pushbytes 0x6162616e646f6e65645f726566756e6465645f63726561746f72
+    log
+    // escrow.py:687
+    // @arc4.abimethod
+    intc_0 // 1
+    return
+
+
+// escrow.EscrowContract.expire_claim[routing]() -> void:
+expire_claim:
+    // escrow.py:715
+    // assert Txn.type_enum == TransactionType.ApplicationCall
+    txn TypeEnum
+    intc_3 // appl
+    ==
+    assert
+    // escrow.py:716
+    // assert Txn.on_completion == OnCompleteAction.NoOp
+    txn OnCompletion
+    !
+    assert
+    // escrow.py:718
+    // assert self.state_box.value == CLAIMED
+    bytec_0 // "state"
+    box_get
+    assert // check self.state_box exists
+    btoi
+    intc_0 // 1
+    ==
+    assert
+    // escrow.py:720
+    // claim_deadline = self.claim_deadline.value
+    bytec 30 // "claim_deadline"
+    box_get
+    assert // check self.claim_deadline exists
+    btoi
+    // escrow.py:721
+    // assert Global.latest_timestamp > claim_deadline, "Claim deadline not yet reached"
+    global LatestTimestamp
+    <
+    assert // Claim deadline not yet reached
+    // escrow.py:723-724
+    // # Record claim expiry
+    // self.state_box.value = UInt64(CLAIM_EXPIRED)
+    pushint 7
+    itob
+    bytec_0 // "state"
+    swap
+    box_put
+    // escrow.py:725
+    // log(Bytes(b"claim_expired"))
+    pushbytes 0x636c61696d5f65787069726564
+    log
+    // escrow.py:726
+    // log(self.bounty_id.value)
+    bytec 12 // "bounty_id"
+    box_get
+    assert // check self.bounty_id exists
+    log
+    // escrow.py:727
+    // log(self._get_agent_address().bytes)
+    callsub _get_agent_address
+    log
+    // escrow.py:728
+    // log(Bytes(b"karma_penalty_20"))
+    pushbytes 0x6b61726d615f70656e616c74795f3230
+    log
+    // escrow.py:730-731
+    // # SECURITY FIX: Revert agent address to zero address so someone else can claim
+    // self.agent_address.value = Account(Bytes(32 * b"\x00"))
+    bytec 9 // "agent_address"
+    bytec_3 // 0x0000000000000000000000000000000000000000000000000000000000000000
+    box_put
+    // escrow.py:733-734
+    // # Revert to OPEN so others can claim
+    // self.state_box.value = UInt64(OPEN)
+    intc_1 // 0
+    itob
+    bytec_0 // "state"
+    dig 1
+    box_put
+    // escrow.py:735
+    // self.rejection_count.value = UInt64(0)
+    bytec 7 // "rejection_count"
+    swap
+    box_put
+    // escrow.py:737
+    // log(Bytes(b"bounty_reopened"))
+    pushbytes 0x626f756e74795f72656f70656e6564
+    log
+    // escrow.py:713
+    // @arc4.abimethod
+    intc_0 // 1
+    return
+
+
+// escrow.EscrowContract.github_verify[routing]() -> void:
+github_verify:
+    // escrow.py:739
+    // @arc4.abimethod
+    txna ApplicationArgs 1
+    dup
+    intc_1 // 0
+    extract_uint16 // on error: invalid array length header
+    intc_2 // 2
+    +
+    dig 1
+    len
+    ==
+    assert // invalid number of bytes for arc4.dynamic_array<arc4.uint8>
+    extract 2 0
+    txna ApplicationArgs 2
+    dup
+    intc_1 // 0
+    extract_uint16 // on error: invalid array length header
+    intc_2 // 2
+    +
+    dig 1
+    len
+    ==
+    assert // invalid number of bytes for arc4.dynamic_array<arc4.uint8>
+    extract 2 0
+    txna ApplicationArgs 3
+    dup
+    intc_1 // 0
+    extract_uint16 // on error: invalid array length header
+    intc_2 // 2
+    +
+    dig 1
+    len
+    ==
+    assert // invalid number of bytes for arc4.dynamic_array<arc4.uint8>
+    extract 2 0
+    // escrow.py:741
+    // assert Txn.type_enum == TransactionType.ApplicationCall
+    txn TypeEnum
+    intc_3 // appl
+    ==
+    assert
+    // escrow.py:742
+    // assert Txn.on_completion == OnCompleteAction.NoOp
+    txn OnCompletion
+    !
+    assert
+    // escrow.py:743
+    // assert Txn.rekey_to == Account(Bytes(32 * b"\x00"))
+    txn RekeyTo
+    bytec_3 // 0x0000000000000000000000000000000000000000000000000000000000000000
+    ==
+    assert
+    // escrow.py:745
+    // assert self.state_box.value == SUBMITTED
+    bytec_0 // "state"
+    box_get
+    assert // check self.state_box exists
+    btoi
+    intc_2 // 2
+    ==
+    assert
+    // escrow.py:747-748
+    // # Store GitHub verification data
+    // self.proof_url.value = pr_url
+    bytec 10 // "proof_url"
+    box_del
+    pop
+    bytec 10 // "proof_url"
+    uncover 3
+    box_put
+    // escrow.py:749
+    // self.github_status.value = Bytes(b"pending")
+    bytec 23 // "github_status"
+    box_del
+    pop
+    bytec 23 // "github_status"
+    bytec 28 // 0x70656e64696e67
+    box_put
+    // escrow.py:751-752
+    // # Store test hash in proof_data
+    // self.proof_data.value = test_hash
+    bytec 11 // "proof_data"
+    box_del
+    pop
+    bytec 11 // "proof_data"
+    uncover 2
+    box_put
+    // escrow.py:754-755
+    // # Store OIDC token
+    // self.oidc_token.value = oidc_token
+    bytec 35 // "oidc_token"
+    box_del
+    pop
+    bytec 35 // "oidc_token"
+    swap
+    box_put
+    // escrow.py:757
+    // log(Bytes(b"github_verified"))
+    pushbytes 0x6769746875625f7665726966696564
+    log
+    // escrow.py:758
+    // log(self.bounty_id.value)
+    bytec 12 // "bounty_id"
+    box_get
+    assert // check self.bounty_id exists
+    log
+    // escrow.py:759
+    // log(Bytes(b"pending"))
+    bytec 28 // 0x70656e64696e67
+    log
+    // escrow.py:739
+    // @arc4.abimethod
+    intc_0 // 1
+    return
+
+
+// escrow.EscrowContract.set_github_status[routing]() -> void:
+set_github_status:
+    // escrow.py:761
+    // @arc4.abimethod
+    txna ApplicationArgs 1
+    dup
+    intc_1 // 0
+    extract_uint16 // on error: invalid array length header
+    intc_2 // 2
+    +
+    dig 1
+    len
+    ==
+    assert // invalid number of bytes for arc4.dynamic_array<arc4.uint8>
+    extract 2 0
+    dup
+    // escrow.py:763
+    // assert Txn.type_enum == TransactionType.ApplicationCall
+    txn TypeEnum
+    intc_3 // appl
+    ==
+    assert
+    // escrow.py:764
+    // assert Txn.on_completion == OnCompleteAction.NoOp
+    txn OnCompletion
+    !
+    assert
+    // escrow.py:765
+    // assert Txn.rekey_to == Account(Bytes(32 * b"\x00"))
+    txn RekeyTo
+    bytec_3 // 0x0000000000000000000000000000000000000000000000000000000000000000
+    ==
+    assert
+    // escrow.py:767
+    // assert status == Bytes(b"pass") or status == Bytes(b"fail") or status == Bytes(b"pending")
+    pushbytes 0x70617373
+    ==
+    bnz set_github_status_bool_true@4
+    dup
+    pushbytes 0x6661696c
+    ==
+    bnz set_github_status_bool_true@4
+    dup
+    bytec 28 // 0x70656e64696e67
+    ==
+    bz set_github_status_bool_false@5
+
+set_github_status_bool_true@4:
+    intc_0 // 1
+
+set_github_status_bool_merge@6:
+    // escrow.py:767
+    // assert status == Bytes(b"pass") or status == Bytes(b"fail") or status == Bytes(b"pending")
+    assert
+    // escrow.py:769
+    // self.github_status.value = status
+    bytec 23 // "github_status"
+    box_del
+    pop
+    bytec 23 // "github_status"
+    dig 1
+    box_put
+    // escrow.py:771
+    // log(Bytes(b"github_status_updated"))
+    pushbytes 0x6769746875625f7374617475735f75706461746564
+    log
+    // escrow.py:772
+    // log(status)
+    log
+    // escrow.py:761
+    // @arc4.abimethod
+    intc_0 // 1
+    return
+
+set_github_status_bool_false@5:
+    intc_1 // 0
+    b set_github_status_bool_merge@6
+
+
+// escrow.EscrowContract.get_bounty_info[routing]() -> void:
+get_bounty_info:
+    // escrow.py:776
+    // assert Txn.type_enum == TransactionType.ApplicationCall
+    txn TypeEnum
+    intc_3 // appl
+    ==
+    assert
+    // escrow.py:777
+    // assert Txn.on_completion == OnCompleteAction.NoOp
+    txn OnCompletion
+    !
+    assert
+    // escrow.py:779
+    // log(Bytes(b"bounty_info"))
+    pushbytes 0x626f756e74795f696e666f
+    log
+    // escrow.py:780
+    // log(op.itob(self.state_box.value))
+    bytec_0 // "state"
+    box_get
+    assert // check self.state_box exists
+    btoi
+    itob
+    log
+    // escrow.py:781
+    // log(self.bounty_id.value)
+    bytec 12 // "bounty_id"
+    box_get
+    assert // check self.bounty_id exists
+    log
+    // escrow.py:782
+    // log(op.itob(self.escrow_amount.value))
+    bytec 5 // "escrow_amount"
+    box_get
+    assert // check self.escrow_amount exists
+    btoi
+    itob
+    log
+    // escrow.py:783
+    // log(self.creator_address.value.bytes)
+    bytec_1 // "creator_address"
+    box_get
+    assert // check self.creator_address exists
+    log
+    // escrow.py:784
+    // log(self.agent_address.value.bytes)
+    bytec 9 // "agent_address"
+    box_get
+    assert // check self.agent_address exists
+    log
+    // escrow.py:785
+    // log(op.itob(self.rejection_count.value))
+    bytec 7 // "rejection_count"
+    box_get
+    assert // check self.rejection_count exists
+    btoi
+    itob
+    log
+    // escrow.py:774
+    // @arc4.abimethod
+    intc_0 // 1
+    return
+
+
+// escrow.EscrowContract.register_arbitrator[routing]() -> void:
+register_arbitrator:
+    // escrow.py:787
+    // @arc4.abimethod
+    txna ApplicationArgs 1
+    dup
+    len
+    pushint 32
+    ==
+    assert // invalid number of bytes for arc4.static_array<arc4.uint8, 32>
+    // escrow.py:789
+    // assert Txn.type_enum == TransactionType.ApplicationCall
+    txn TypeEnum
+    intc_3 // appl
+    ==
+    assert
+    // escrow.py:790
+    // assert Txn.on_completion == OnCompleteAction.NoOp
+    txn OnCompletion
+    !
+    assert
+    // escrow.py:791
+    // assert Txn.rekey_to == Account(Bytes(32 * b"\x00"))
+    txn RekeyTo
+    bytec_3 // 0x0000000000000000000000000000000000000000000000000000000000000000
+    ==
+    assert
+    // escrow.py:793
+    // assert Txn.sender == address, "Sender must match address to register"
+    txn Sender
+    dig 1
+    ==
+    assert // Sender must match address to register
+    // escrow.py:795-796
+    // # Check if already registered
+    // key_idx = Bytes(b"cand_idx_") + address.bytes
+    bytec 29 // 0x63616e645f6964785f
+    dig 1
+    concat
+    // escrow.py:797
+    // dummy, exists = op.Box.get(key_idx)
+    dup
+    box_len
+    bury 1
+    // escrow.py:798
+    // assert not exists, "Arbitrator already registered"
+    !
+    assert // Arbitrator already registered
+    // escrow.py:79
+    // val, exists = self.candidate_count.maybe()
+    bytec 13 // "candidate_count"
+    box_get
+    swap
+    btoi
+    // escrow.py:80
+    // return val if exists else UInt64(0)
+    intc_1 // 0
+    swap
+    uncover 2
+    select
+    // escrow.py:802-803
+    // # Write to pool
+    // Box(Account, key=Bytes(b"cand_addr_") + op.itob(count)).value = address
+    dup
+    itob
+    bytec 8 // 0x63616e645f616464725f
+    dig 1
+    concat
+    dig 4
+    box_put
+    // escrow.py:804
+    // Box(UInt64, key=key_idx).value = count
+    uncover 2
+    swap
+    box_put
+    // escrow.py:806-807
+    // # Increment count
+    // self.candidate_count.value = count + 1
+    intc_0 // 1
+    +
+    itob
+    bytec 13 // "candidate_count"
+    swap
+    box_put
+    // escrow.py:809
+    // log(Bytes(b"arbitrator_registered"))
+    pushbytes 0x61726269747261746f725f72656769737465726564
+    log
+    // escrow.py:810
+    // log(address.bytes)
+    log
+    // escrow.py:787
+    // @arc4.abimethod
+    intc_0 // 1
+    return
+
+
+// escrow.EscrowContract.deregister_arbitrator[routing]() -> void:
+deregister_arbitrator:
+    // escrow.py:812
+    // @arc4.abimethod
+    txna ApplicationArgs 1
+    dupn 2
+    len
+    pushint 32
+    ==
+    assert // invalid number of bytes for arc4.static_array<arc4.uint8, 32>
+    // escrow.py:814
+    // assert Txn.type_enum == TransactionType.ApplicationCall
+    txn TypeEnum
+    intc_3 // appl
+    ==
+    assert
+    // escrow.py:815
+    // assert Txn.on_completion == OnCompleteAction.NoOp
+    txn OnCompletion
+    !
+    assert
+    // escrow.py:816
+    // assert Txn.rekey_to == Account(Bytes(32 * b"\x00"))
+    txn RekeyTo
+    bytec_3 // 0x0000000000000000000000000000000000000000000000000000000000000000
+    ==
+    assert
+    // escrow.py:818
+    // assert Txn.sender == address, "Sender must match address to deregister"
+    txn Sender
+    dig 1
+    ==
+    assert // Sender must match address to deregister
+    // escrow.py:820-821
+    // # Check if registered
+    // key_idx = Bytes(b"cand_idx_") + address.bytes
+    bytec 29 // 0x63616e645f6964785f
+    swap
+    concat
+    dupn 2
+    // escrow.py:822
+    // dummy, exists = op.Box.get(key_idx)
+    box_len
+    bury 1
+    // escrow.py:823
+    // assert exists, "Arbitrator not registered"
+    assert // Arbitrator not registered
+    // escrow.py:79
+    // val, exists = self.candidate_count.maybe()
+    bytec 13 // "candidate_count"
+    box_get
+    swap
+    btoi
+    // escrow.py:80
+    // return val if exists else UInt64(0)
+    intc_1 // 0
+    swap
+    uncover 2
+    select
+    // escrow.py:827
+    // remove_idx = idx_box.value
+    swap
+    box_get
+    pop
+    btoi
+    dup
+    cover 4
+    // escrow.py:828
+    // last_idx = count - 1
+    swap
+    intc_0 // 1
+    -
+    dup
+    cover 2
+    // escrow.py:830
+    // if remove_idx != last_idx:
+    !=
+    bz deregister_arbitrator_after_if_else@3
+    // escrow.py:831-832
+    // # Swap with last element
+    // last_addr = Box(Account, key=Bytes(b"cand_addr_") + op.itob(last_idx)).value
+    dup
+    itob
+    bytec 8 // 0x63616e645f616464725f
+    swap
+    concat
+    box_get
+    assert // check Box exists
+    // escrow.py:833
+    // Box(Account, key=Bytes(b"cand_addr_") + op.itob(remove_idx)).value = last_addr
+    dig 4
+    itob
+    bytec 8 // 0x63616e645f616464725f
+    dig 1
+    concat
+    dig 2
+    box_put
+    // escrow.py:834
+    // Box(UInt64, key=Bytes(b"cand_idx_") + last_addr.bytes).value = remove_idx
+    bytec 29 // 0x63616e645f6964785f
+    uncover 2
+    concat
+    swap
+    box_put
+
+deregister_arbitrator_after_if_else@3:
+    // escrow.py:836-837
+    // # Delete last element box and reverse mapping index box
+    // key_addr = Bytes(b"cand_addr_") + op.itob(last_idx)
+    itob
+    bytec 8 // 0x63616e645f616464725f
+    dig 1
+    concat
+    // escrow.py:838
+    // assert op.Box.delete(key_addr), "Failed to delete address box"
+    box_del
+    assert // Failed to delete address box
+    // escrow.py:839
+    // assert op.Box.delete(key_idx), "Failed to delete index box"
+    swap
+    box_del
+    assert // Failed to delete index box
+    // escrow.py:841
+    // self.candidate_count.value = last_idx
+    bytec 13 // "candidate_count"
+    swap
+    box_put
+    // escrow.py:843
+    // log(Bytes(b"arbitrator_deregistered"))
+    pushbytes 0x61726269747261746f725f646572656769737465726564
+    log
+    // escrow.py:844
+    // log(address.bytes)
+    log
+    // escrow.py:812
+    // @arc4.abimethod
+    intc_0 // 1
+    return
+
+
+// escrow.EscrowContract.delete_bounty[routing]() -> void:
+delete_bounty:
+    // escrow.py:848
+    // assert Txn.sender == self.creator_address.value, "Only creator can delete application"
+    txn Sender
+    bytec_1 // "creator_address"
+    box_get
+    assert // check self.creator_address exists
+    ==
+    assert // Only creator can delete application
+    // escrow.py:849
+    // assert self.state_box.value == CLOSED, "Bounty must be fully closed/paid out before deletion"
+    bytec_0 // "state"
+    box_get
+    assert // check self.state_box exists
+    btoi
+    pushint 5
+    ==
+    assert // Bounty must be fully closed/paid out before deletion
+    // escrow.py:851-852
+    // # Sweep all remaining ALGO and close out the contract account
+    // app_balance, exists = op.AcctParamsGet.acct_balance(Global.current_application_address)
+    global CurrentApplicationAddress
+    acct_params_get AcctBalance
+    // escrow.py:853
+    // if exists and app_balance > 0:
+    bz delete_bounty_after_if_else@5
+    dup
+    bz delete_bounty_after_if_else@5
+    // escrow.py:854-859
+    // itxn.Payment(
+    //     receiver=self.creator_address.value,
+    //     amount=UInt64(0),
+    //     fee=0,
+    //     close_remainder_to=self.creator_address.value
+    // ).submit()
+    itxn_begin
+    // escrow.py:855
+    // receiver=self.creator_address.value,
+    bytec_1 // "creator_address"
+    box_get
+    assert // check self.creator_address exists
+    dup
+    itxn_field CloseRemainderTo
+    // escrow.py:856
+    // amount=UInt64(0),
+    intc_1 // 0
+    itxn_field Amount
+    itxn_field Receiver
+    // escrow.py:854
+    // itxn.Payment(
+    intc_0 // pay
+    itxn_field TypeEnum
+    // escrow.py:857
+    // fee=0,
+    intc_1 // 0
+    itxn_field Fee
+    // escrow.py:854-859
+    // itxn.Payment(
+    //     receiver=self.creator_address.value,
+    //     amount=UInt64(0),
+    //     fee=0,
+    //     close_remainder_to=self.creator_address.value
+    // ).submit()
+    itxn_submit
+
+delete_bounty_after_if_else@5:
+    // escrow.py:846
+    // @arc4.abimethod(allow_actions=["DeleteApplication"])
+    intc_0 // 1
+    return
+
+
+// escrow.EscrowContract._get_agent_address() -> bytes:
+_get_agent_address:
+    // escrow.py:95
+    // val, exists = self.agent_address.maybe()
+    bytec 9 // "agent_address"
+    box_get
+    // escrow.py:96
+    // return val if exists else Account(Bytes(32 * b"\x00"))
+    bz _get_agent_address_ternary_false@2
+    retsub
+
+_get_agent_address_ternary_false@2:
+    pop
+    // escrow.py:96
+    // return val if exists else Account(Bytes(32 * b"\x00"))
+    bytec_3 // 0x0000000000000000000000000000000000000000000000000000000000000000
+    retsub
+
+
+// escrow.EscrowContract._verify_escrow_balance(asset_id: uint64, escrow_amount: uint64) -> void:
+_verify_escrow_balance:
+    // escrow.py:116
+    // def _verify_escrow_balance(self, asset_id: UInt64, escrow_amount: UInt64) -> None:
+    proto 2 0
+    // escrow.py:117
+    // if asset_id > 0:
+    frame_dig -2
+    bz _verify_escrow_balance_else_body@2
+    // escrow.py:119
+    // Global.current_application_address, asset_id
+    global CurrentApplicationAddress
+    // escrow.py:118-120
+    // balance, exists = op.AssetHoldingGet.asset_balance(
+    //     Global.current_application_address, asset_id
+    // )
+    frame_dig -2
+    asset_holding_get AssetBalance
+    // escrow.py:121
+    // assert exists, "Contract is not opted into the asset"
+    assert // Contract is not opted into the asset
+    // escrow.py:122
+    // assert balance >= escrow_amount, "Insufficient asset balance"
+    frame_dig -1
+    >=
+    assert // Insufficient asset balance
+    retsub
+
+_verify_escrow_balance_else_body@2:
+    // escrow.py:124
+    // app_balance, exists = op.AcctParamsGet.acct_balance(Global.current_application_address)
+    global CurrentApplicationAddress
+    acct_params_get AcctBalance
+    // escrow.py:125
+    // assert exists, "Failed to read contract balance"
+    assert // Failed to read contract balance
+    // escrow.py:126
+    // assert app_balance >= escrow_amount, "Insufficient contract balance"
+    frame_dig -1
+    >=
+    assert // Insufficient contract balance
+    retsub
+
+
+// escrow.EscrowContract._send_payout(receiver: bytes, amount: uint64, asset_id: uint64) -> void:
+_send_payout:
+    // escrow.py:128
+    // def _send_payout(self, receiver: Account, amount: UInt64, asset_id: UInt64) -> None:
+    proto 3 0
+    // escrow.py:129
+    // if asset_id == 0:
+    frame_dig -1
+    bnz _send_payout_else_body@3
+    // escrow.py:130-134
+    // itxn.Payment(
+    //     receiver=receiver,
+    //     amount=amount,
+    //     fee=0,
+    // ).submit()
+    itxn_begin
+    frame_dig -2
+    itxn_field Amount
+    frame_dig -3
+    itxn_field Receiver
+    // escrow.py:130
+    // itxn.Payment(
+    intc_0 // pay
+    itxn_field TypeEnum
+    // escrow.py:133
+    // fee=0,
+    intc_1 // 0
+    itxn_field Fee
+    // escrow.py:130-134
+    // itxn.Payment(
+    //     receiver=receiver,
+    //     amount=amount,
+    //     fee=0,
+    // ).submit()
+    itxn_submit
+    retsub
+
+_send_payout_else_body@3:
+    // escrow.py:136-141
+    // itxn.AssetTransfer(
+    //     xfer_asset=asset_id,
+    //     asset_receiver=receiver,
+    //     asset_amount=amount,
+    //     fee=0,
+    // ).submit()
+    itxn_begin
+    frame_dig -2
+    itxn_field AssetAmount
+    frame_dig -3
+    itxn_field AssetReceiver
+    frame_dig -1
+    itxn_field XferAsset
+    // escrow.py:136
+    // itxn.AssetTransfer(
+    pushint 4 // axfer
+    itxn_field TypeEnum
+    // escrow.py:140
+    // fee=0,
+    intc_1 // 0
+    itxn_field Fee
+    // escrow.py:136-141
+    // itxn.AssetTransfer(
+    //     xfer_asset=asset_id,
+    //     asset_receiver=receiver,
+    //     asset_amount=amount,
+    //     fee=0,
+    // ).submit()
+    itxn_submit
+    retsub
+
+
+// escrow.EscrowContract._send_fee_split(primary_recipient: bytes, escrow_amount: uint64, asset_id: uint64, mediator_addr: bytes) -> uint64:
+_send_fee_split:
+    // escrow.py:143-149
+    // def _send_fee_split(
+    //     self,
+    //     primary_recipient: Account,
+    //     escrow_amount: UInt64,
+    //     asset_id: UInt64,
+    //     mediator_addr: Account,
+    // ) -> UInt64:
+    proto 4 1
+    // escrow.py:157
+    // fee_platform = escrow_amount * 2 // 100  # 2% total platform fee
+    frame_dig -3
+    intc_2 // 2
+    *
+    pushint 100
+    /
+    // escrow.py:158
+    // fee_creator = fee_platform // 2          # 1% royalty
+    dup
+    intc_2 // 2
+    /
+    dup
+    cover 2
+    // escrow.py:159
+    // fee_treasury = fee_platform - fee_creator  # 1% treasury
+    -
+    // escrow.py:160
+    // fee_mediator = escrow_amount * 25 // 10000  # 0.25%
+    frame_dig -3
+    pushint 25
+    *
+    pushint 10000
+    /
+    // escrow.py:162-163
+    // # Dedup royalty when primary recipient is the creator
+    // is_creator = self.creator_address.value == primary_recipient
+    bytec_1 // "creator_address"
+    box_get
+    assert // check self.creator_address exists
+    frame_dig -4
+    ==
+    // escrow.py:165
+    // if not is_creator:
+    bnz _send_fee_split_after_if_else@2
+    // escrow.py:166
+    // self._send_payout(self.creator_address.value, fee_creator, asset_id)
+    bytec_1 // "creator_address"
+    box_get
+    assert // check self.creator_address exists
+    dig 3
+    frame_dig -2
+    callsub _send_payout
+
+_send_fee_split_after_if_else@2:
+    // escrow.py:168
+    // self._send_payout(self.treasury_address.value, fee_treasury, asset_id)
+    bytec 24 // "treasury_address"
+    box_get
+    assert // check self.treasury_address exists
+    uncover 2
+    dup
+    cover 2
+    frame_dig -2
+    callsub _send_payout
+    // escrow.py:169
+    // self._send_payout(mediator_addr, fee_mediator, asset_id)
+    frame_dig -1
+    dig 2
+    frame_dig -2
+    callsub _send_payout
+    // escrow.py:171
+    // return escrow_amount - fee_creator - fee_treasury - fee_mediator
+    frame_dig -3
+    uncover 3
+    -
+    swap
+    -
+    swap
+    -
+    retsub
