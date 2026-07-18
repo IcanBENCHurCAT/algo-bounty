@@ -1,17 +1,16 @@
 <!--
 SYNC IMPACT REPORT:
-- Version change: 2.0.0 -> 2.1.0
+- Version change: 2.1.0 -> 2.2.0
 - Ratification Date: 2026-07-16
-- Last Amended Date: 2026-07-18
+- Last Amended Date: 2026-07-18 (v2.2.0)
 - Modified Sections:
-  - Section 5.3 (Bounty Fee Collection and Treasury Distribution) updated with Mediator Fee Safety Net rules.
+  - Section 5 (Transparent Governance, Upgrades, and Platform Fee Sharing) updated with regulatory de-risking rules.
 - Added rules:
-  - HITM mode: mediator fee redirected to worker.
-  - Auto mode (undisputed): mediator fee redirected to worker.
-  - Auto mode (disputed): mediator fee split among active mediators.
-  - UI mirror requirement: UI must mirror these dynamic calculations.
+  - Section 5.6: Hosted Indexer Neutrality (preventing fee discrimination).
+  - Section 5.7: Direct Peer-to-Peer Engagement (offloading tax reporting / forms to user).
+  - Section 5.8: Stewardship of Autonomous Agents (legal responsibility mapped to human steward).
 - Templates requiring updates:
-  - plan-template.md (updated)
+  - None (advisory policy rules).
 -->
 # AlgoBounty Project Constitution
 
@@ -66,6 +65,9 @@ This document defines the prescriptive architectural rules, engineering standard
      - **UI Mirroring**: The frontend dashboard UI MUST mirror this exact dynamic fee calculation in its real-time fee breakdown display, showing `0 ALGO` mediator fee and corresponding increased claimant payout under HITM or undisputed Auto modes, and only displaying the active `0.25%` mediator fee allocation when mediation is explicitly active or expected during a dispute.
 5.4. **Upgrade Path**: When upgrading contracts, migration scripts and deprecation strategies (such as freezing old contracts or migrating user boxes) MUST be defined in specs and plans prior to execution. Proxy application patterns or explicit application ID registry routers should be preferred.
 5.5. **DAO Governance Evolution**: As the platform transitions to production (Stage 3), upgrades, mediator keys, and the Platform Treasury allocation MUST be managed by a DAO-governed voting model. The Developer Royalty allocation remains permanently assigned to the original creator/steward account.
+5.6. **Hosted Indexer Neutrality**: To maintain neutral status and avoid classification as a commercial matching broker, any hosted platform indexer or search dashboard MUST index and display all deployments of the `EscrowContract` smart contract template. The indexer MUST NOT filter out, penalize, or hide bounties that modify default contract fee addresses, reduce platform fees to `0%`, or specify custom treasury accounts.
+5.7. **Direct Peer-to-Peer Engagement**: The platform is an open-source matching protocol and does not act as an employer, agent, or payment clearinghouse. All transactions, work agreements, and payouts are direct P2P interactions between creators and workers. All tax compliance, documentation (such as Form 1099 or DAC7), and withholding obligations are the sole responsibility of the participating counterparties and MUST be handled directly between them off-chain.
+5.8. **Stewardship of Autonomous Agents**: Because autonomous software agents lack legal personality and tax registration capabilities, any Algorand account or wallet controlled by an agent on the platform MUST have a designated human steward. The human steward assumes full legal, tax, and financial responsibility for all actions, claims, disputes, and payouts executed by their agent's wallet.
 
 ### 6. Least-Privilege Wallet and Key Management
 6.1. The Web3 frontend application MUST display clear, legible transaction details (assets, application calls, exact fees, and final effects) to the user *before* requesting a wallet signature. Hidden side effects are strictly prohibited.
@@ -132,5 +134,5 @@ Agents and human contributors MUST use this checklist to validate new specs/plan
 - [ ] Are any high-risk deployment tasks gated behind human verification? (Rule 9.3)
 
 ---
-**Version**: 2.1.0 | **Ratified**: 2026-07-16 | **Last Amended**: 2026-07-18
-**Superseded rules**: 2.0.0 core principles were updated with mediator fee safety net logic in Section 5.3.
+**Version**: 2.2.0 | **Ratified**: 2026-07-16 | **Last Amended**: 2026-07-18 (v2.2.0)
+**Superseded rules**: 2.1.0 core principles were updated with indexer neutrality, peer-to-peer tax offloading, and human stewardship rules in Sections 5.6, 5.7, and 5.8.
