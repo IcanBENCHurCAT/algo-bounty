@@ -46,19 +46,22 @@ export function computeFeeBreakdown(
   escrowAmount: number,
   hitmEnabled: boolean,
   isDispute: boolean = false,
+  platformFeeBps: number = 200,
+  developerFeeBps: number = 100,
 ): FeeBreakdown {
-  const fee = Math.floor(Math.floor(escrowAmount * 2 / 100) / 2) // 1%
-  const mediatorTotal = Math.floor(escrowAmount * 25 / 10000) // 0.25%
+  const developer_royalty = Math.floor((escrowAmount * developerFeeBps) / 10000)
+  const platform_treasury = Math.floor((escrowAmount * Math.max(0, platformFeeBps - developerFeeBps)) / 10000)
+  const mediatorTotal = Math.floor((escrowAmount * 25) / 10000) // 0.25%
   
   // Mediator fee is redirected to worker if HITM is enabled or if no dispute is raised.
   const mediator = (hitmEnabled || !isDispute) ? 0 : mediatorTotal
 
   return {
     escrow_amount: escrowAmount,
-    developer_royalty: fee,
-    platform_treasury: fee,
+    developer_royalty,
+    platform_treasury,
     mediator_fee: mediator,
-    claimant_payout: escrowAmount - fee - fee - mediator,
+    claimant_payout: escrowAmount - developer_royalty - platform_treasury - mediator,
   }
 }
 
@@ -77,15 +80,17 @@ export function formatFeeDisplay(fee: FeeBreakdown): FeeBreakdownDisplay {
  * React hook: { breakdown, display } for any escrow amount.
  *
  * Usage:
- *   const { breakdown, display } = useFeeBreakdown(escrowAmount, hitmEnabled, isDispute)
+ *   const { breakdown, display } = useFeeBreakdown(escrowAmount, hitmEnabled, isDispute, platformFeeBps, developerFeeBps)
  */
 export function useFeeBreakdown(
   escrowAmount: number,
   hitmEnabled: boolean,
   isDispute: boolean = false,
+  platformFeeBps: number = 200,
+  developerFeeBps: number = 100,
 ): { breakdown: FeeBreakdown; display: FeeBreakdownDisplay } {
   return {
-    breakdown: computeFeeBreakdown(escrowAmount, hitmEnabled, isDispute),
-    display: formatFeeDisplay(computeFeeBreakdown(escrowAmount, hitmEnabled, isDispute)),
+    breakdown: computeFeeBreakdown(escrowAmount, hitmEnabled, isDispute, platformFeeBps, developerFeeBps),
+    display: formatFeeDisplay(computeFeeBreakdown(escrowAmount, hitmEnabled, isDispute, platformFeeBps, developerFeeBps)),
   }
 }

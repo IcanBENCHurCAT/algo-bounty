@@ -211,7 +211,9 @@ CREATE TABLE IF NOT EXISTS bounties (
     deadline_round    INTEGER,
     hitm_review_days  INTEGER DEFAULT 7,
     rejection_count   INTEGER DEFAULT 0,
-    payout_type       VARCHAR
+    payout_type       VARCHAR,
+    platform_fee      INTEGER DEFAULT 200,
+    treasury_address  VARCHAR DEFAULT 'RTCed54abc91f37d8d2d2cb2cf69ce60b0021fd67e5'
 );
 
 -- GitHub Pull Requests linked to bounties
@@ -397,6 +399,8 @@ class Bounty(Base):
     rejection_count = Column(Integer, default=0)
     payout_type = Column(String, nullable=True)
     treasury_altered = Column(Boolean, default=False, nullable=False)
+    platform_fee = Column(Integer, default=200, nullable=False)
+    treasury_address = Column(String(58), default="RTCed54abc91f37d8d2d2cb2cf69ce60b0021fd67e5", nullable=False)
 
 
 class GitHubPR(Base):

@@ -22,6 +22,8 @@ class BountyCreate(BaseModel):
     signed_txn: Optional[str] = None
     app_id: Optional[int] = None
     bounty_id: Optional[str] = None
+    platform_fee: int = 200
+    treasury_address: Optional[str] = None
 
 class BountyDeployResponse(BaseModel):
     unsigned_txns: list[str]

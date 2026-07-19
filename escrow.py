@@ -74,6 +74,8 @@ class EscrowContract(ARC4Contract):
         self.arbitrator_1_vote = Box(UInt64, key="arbitrator_1_vote")
         self.arbitrator_2_vote = Box(UInt64, key="arbitrator_2_vote")
         self.arbitrator_3_vote = Box(UInt64, key="arbitrator_3_vote")
+        self.platform_fee = Box(UInt64, key="platform_fee")
+
 
     def _get_candidate_count(self) -> UInt64:
         val, exists = self.candidate_count.maybe()
@@ -148,16 +150,13 @@ class EscrowContract(ARC4Contract):
         mediator_addr: Account,
         is_dispute: UInt64 = UInt64(0),
     ) -> UInt64:
-        """Split the 2% platform fee 50/50 between royalty and treasury,
+        """Split the platform fee 50/50 between royalty and treasury,
         pay the 0.25% mediator fee, and return the remaining balance.
-
-        - 1% of escrow_amount -> Creator royalty (deduped if primary == creator)
-        - 1% of escrow_amount  -> Treasury
-        - 0.25% of escrow_amount -> Mediator (redirected to primary_recipient if undisputed or HITM)
         """
-        fee_platform = escrow_amount * 2 // 100  # 2% total platform fee
-        fee_creator = fee_platform // 2          # 1% royalty
-        fee_treasury = fee_platform - fee_creator  # 1% treasury
+        platform_fee_val = TemplateVar[UInt64]("PLATFORM_FEE")
+        fee_platform = escrow_amount * platform_fee_val // 10000  # Dynamic platform fee
+        fee_creator = fee_platform // 2          # royalty
+        fee_treasury = fee_platform - fee_creator  # treasury
         fee_mediator = escrow_amount * 25 // 10000  # 0.25%
 
         # Dedup royalty when primary recipient is the creator
@@ -199,6 +198,11 @@ class EscrowContract(ARC4Contract):
         # SECURITY FIX: Prevent re-initialization
         val, exists = self.state_box.maybe()
         assert not exists, "Bounty already initialized"
+
+        # Validate platform fee template var
+        platform_fee_val = TemplateVar[UInt64]("PLATFORM_FEE")
+        assert platform_fee_val <= UInt64(1000), "Platform fee cannot exceed 10%"
+        self.platform_fee.value = platform_fee_val
 
         # Validate inputs
         assert bounty_id.length <= 64

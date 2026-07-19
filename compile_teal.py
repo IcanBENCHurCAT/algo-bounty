@@ -22,7 +22,7 @@ try:
         algokit_cmd = venv_algokit_nix
 
     result = subprocess.run(
-        [algokit_cmd, 'compile', 'python', contract_path, '--out-dir', os.path.join(base_dir, 'artifacts'), '--output-teal', '--template-var', 'DISPUTE_TIMEOUT=300', '--template-var', 'CLAIM_TIMEOUT=120'],
+        [algokit_cmd, 'compile', 'python', contract_path, '--out-dir', os.path.join(base_dir, 'artifacts'), '--output-teal', '--template-var', 'DISPUTE_TIMEOUT=300', '--template-var', 'CLAIM_TIMEOUT=120', '--template-var', 'PLATFORM_FEE=200'],
         capture_output=True, text=True, timeout=30
     )
     # Copy EscrowContract.approval.teal to escrow.teal for compatibility

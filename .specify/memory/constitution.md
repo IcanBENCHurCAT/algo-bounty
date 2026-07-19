@@ -1,14 +1,13 @@
 <!--
 SYNC IMPACT REPORT:
-- Version change: 2.1.0 -> 2.2.0
+- Version change: 2.3.0 -> 2.4.0
 - Ratification Date: 2026-07-16
-- Last Amended Date: 2026-07-18 (v2.2.0)
+- Last Amended Date: 2026-07-18 (v2.4.0)
 - Modified Sections:
-  - Section 5 (Transparent Governance, Upgrades, and Platform Fee Sharing) updated with regulatory de-risking rules.
+  - Section 5 (Transparent Governance, Upgrades, and Platform Fee Sharing) updated with additional self-hosting guardrails.
 - Added rules:
-  - Section 5.6: Hosted Indexer Neutrality (preventing fee discrimination).
-  - Section 5.7: Direct Peer-to-Peer Engagement (offloading tax reporting / forms to user).
-  - Section 5.8: Stewardship of Autonomous Agents (legal responsibility mapped to human steward).
+  - Section 5.10: No Proprietary Vendor Lock-in (BYOK).
+  - Section 5.11: Frontend Portability and Decentralization.
 - Templates requiring updates:
   - None (advisory policy rules).
 -->
@@ -68,6 +67,9 @@ This document defines the prescriptive architectural rules, engineering standard
 5.6. **Hosted Indexer Neutrality**: To maintain neutral status and avoid classification as a commercial matching broker, any hosted platform indexer or search dashboard MUST index and display all deployments of the `EscrowContract` smart contract template. The indexer MUST NOT filter out, penalize, or hide bounties that modify default contract fee addresses, reduce platform fees to `0%`, or specify custom treasury accounts.
 5.7. **Direct Peer-to-Peer Engagement**: The platform is an open-source matching protocol and does not act as an employer, agent, or payment clearinghouse. All transactions, work agreements, and payouts are direct P2P interactions between creators and workers. All tax compliance, documentation (such as Form 1099 or DAC7), and withholding obligations are the sole responsibility of the participating counterparties and MUST be handled directly between them off-chain.
 5.8. **Stewardship of Autonomous Agents**: Because autonomous software agents lack legal personality and tax registration capabilities, any Algorand account or wallet controlled by an agent on the platform MUST have a designated human steward. The human steward assumes full legal, tax, and financial responsibility for all actions, claims, disputes, and payouts executed by their agent's wallet.
+5.9. **Self-Hosting and Open Source Licensing (AGPL 3.0)**: The platform MUST be designed to be trivially self-hostable by anyone, whether locally or in a private cloud. The architecture MUST allow operators to easily reconfigure fee routing to their own treasury accounts, apply custom UI reskins, and run autonomous deployments without relying on a central authority. The project adopts the AGPL 3.0 license to ensure that any modified or self-hosted versions of the platform—especially those offered as a service over a network—remain fully open source. This guarantees that improvements and bug fixes are shared back with the community and prevents proprietary enclosure of the core escrow and gateway logic.
+5.10. **No Proprietary Vendor Lock-in (BYOK)**: To preserve self-hostability, the platform MUST NOT hardcode or mandate the use of proprietary third-party API keys or centralized brokers for core escrow functionality (e.g., GitHub OIDC, AI services). All external integrations MUST support a "Bring Your Own Key" (BYOK) or "Bring Your Own App" configuration so that local operators are never blocked by the original author's rate limits or suspended accounts.
+5.11. **Frontend Portability and Decentralization**: The frontend Web3 application MUST be designed to be minimally reliant on a centralized backend for core smart contract interactions (creation, claiming, approval). It SHOULD support static generation/export (e.g., via Next.js `output: 'export'`) to enable hosting on decentralized storage networks like IPFS or Arweave, communicating directly with Algorand RPC nodes.
 
 ### 6. Least-Privilege Wallet and Key Management
 6.1. The Web3 frontend application MUST display clear, legible transaction details (assets, application calls, exact fees, and final effects) to the user *before* requesting a wallet signature. Hidden side effects are strictly prohibited.
@@ -132,7 +134,10 @@ Agents and human contributors MUST use this checklist to validate new specs/plan
 - [ ] Are payouts structured as atomic groups (app call + inner payment)? (Rule 10.3)
 - [ ] Have all database queries been designed to support both PostgreSQL and SQLite? (Rule 10.5)
 - [ ] Are any high-risk deployment tasks gated behind human verification? (Rule 9.3)
+- [ ] Do external integrations support "Bring Your Own Key" (BYOK) to prevent vendor lock-in? (Rule 5.10)
+- [ ] Are core Web3 interactions operable without a centralized backend? (Rule 5.11)
 
 ---
-**Version**: 2.2.0 | **Ratified**: 2026-07-16 | **Last Amended**: 2026-07-18 (v2.2.0)
-**Superseded rules**: 2.1.0 core principles were updated with indexer neutrality, peer-to-peer tax offloading, and human stewardship rules in Sections 5.6, 5.7, and 5.8.
+---
+**Version**: 2.4.0 | **Ratified**: 2026-07-16 | **Last Amended**: 2026-07-18 (v2.4.0)
+**Superseded rules**: 2.3.0 core principles were updated with BYOK and frontend portability guardrails in Sections 5.10 and 5.11.

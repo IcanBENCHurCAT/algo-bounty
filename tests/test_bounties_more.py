@@ -258,4 +258,59 @@ def test_create_bounty_custom_treasury_deduction(client, db_session, seeded_agen
         assert creator_agent.karma == 45
 
 
+def test_create_bounty_fee_validation(client, seeded_agents):
+    _, _, _ = seeded_agents
+    from tests.conftest import get_auth_token
+    token = get_auth_token(client, "CREATOR_ADDR")
+    
+    res = client.post("/api/v1/bounties", json={
+        "description": "Too high fee",
+        "amount": 1000000,
+        "repo_url": "https://github.com/test/repo",
+        "platform_fee": 1200
+    }, headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 400
+    assert "Platform fee cannot exceed 10%" in res.json()["detail"]
+
+
+def test_bounty_fee_breakdown_dynamic(client, db_session, seeded_agents):
+    _, _, _ = seeded_agents
+    
+    mock_decode_map = {
+        "CREATOR_ADDR": b"\x01" * 32,
+        "WORKER_ADDR": b"\x02" * 32,
+    }
+    
+    with patch("algosdk.encoding.decode_address", side_effect=lambda x: mock_decode_map.get(x, b"\x00" * 32)), \
+         patch("algosdk.encoding.encode_address", side_effect=lambda x: "CREATOR_ADDR" if x == b"\x01" * 32 else "WORKER_ADDR"):
+         
+        b = Bounty(
+            bounty_id="b_dynamic_fee",
+            app_id=98765,
+            status="open",
+            creator="CREATOR_ADDR",
+            amount=1_000_000,
+            repo_url="https://github.com/test/repo",
+            platform_fee=500,
+            treasury_address="GD64GE2CO655KJZTNST75T4UR24B54IGNST4O73VQQ375S45T4U4VQQ37Y"
+        )
+        db_session.add(b)
+        db_session.commit()
+        
+        from tests.conftest import get_auth_token
+        token = get_auth_token(client, "WORKER_ADDR")
+        
+        res = client.post("/api/v1/bounties/b_dynamic_fee/claim/txn", headers={"Authorization": f"Bearer {token}"})
+        assert res.status_code == 200
+        
+        data = res.json()
+        fb = data["fee_breakdown"]
+        
+        assert fb["developer_royalty"] == 25000
+        assert fb["platform_treasury"] == 25000
+        assert fb["mediator_fee"] == 0
+        assert fb["claimant_payout"] == 950000
+
+
+
 
