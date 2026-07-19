@@ -64,7 +64,7 @@ export function FeeBreakdownTable({
           </span>
           {fee.mediator_fee === 0 && (
             <span style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 500, lineHeight: '1.2' }}>
-              Redirected to Payout
+              Redirected to Payout (would be {display.mediator_fee} if invoked)
             </span>
           )}
         </div>
