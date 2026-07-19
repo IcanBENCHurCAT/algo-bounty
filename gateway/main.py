@@ -1,3 +1,4 @@
+from .schemas import HealthResponse
 import os
 from datetime import datetime, UTC
 from contextlib import asynccontextmanager
@@ -90,7 +91,7 @@ print(f"[WEB3] Algorand network: {NODE_ENV} (sandbox={sandbox_active})")
 
 # ── Health Check ─────────────────────────────────────────────────
 
-@app.get("/health")
+@app.get("/health", response_model=HealthResponse)
 async def health_check():
     """Public health check endpoint for load balancers and monitoring."""
     return {

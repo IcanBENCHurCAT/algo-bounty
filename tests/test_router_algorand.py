@@ -26,7 +26,7 @@ def test_algorand_health_exception():
         assert res.status_code == 503
 
 def test_algorand_balance_success():
-    with patch("gateway.routers.algorand.get_account_balance", return_value={"balance": 100}):
+    with patch("gateway.routers.algorand.get_account_balance", return_value={"address": "ADDR", "balance": 100, "balance_algo": 0.0001}):
         res = client.get("/api/v1/algorand/balance/ADDR")
         assert res.status_code == 200
         assert res.json()["balance"] == 100
@@ -37,7 +37,7 @@ def test_algorand_balance_exception():
         assert res.status_code == 500
 
 def test_algorand_asset_holders_success():
-    with patch("gateway.routers.algorand.get_asset_holders", return_value={"total_holders": 5}):
+    with patch("gateway.routers.algorand.get_asset_holders", return_value={"asset_id": 123, "total_holders": 5, "holders": []}):
         res = client.get("/api/v1/algorand/asset/123/holders")
         assert res.status_code == 200
         assert res.json()["total_holders"] == 5

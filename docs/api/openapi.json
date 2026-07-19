@@ -15,7 +15,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
               }
             }
           }
@@ -45,7 +47,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AuthChallengeResponse"
+                }
               }
             }
           },
@@ -85,7 +89,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AuthVerifyResponse"
+                }
               }
             }
           },
@@ -245,7 +251,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ListBountiesResponse"
+                }
               }
             }
           },
@@ -288,7 +296,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/BountyCreateResponse"
+                }
               }
             }
           },
@@ -329,7 +339,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/BountyResponse"
+                }
               }
             }
           },
@@ -432,7 +444,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/BountyActionResponse"
+                }
               }
             }
           },
@@ -488,7 +502,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/BountyActionResponse"
+                }
               }
             }
           },
@@ -591,7 +607,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/BountyActionResponse"
+                }
               }
             }
           },
@@ -647,7 +665,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/BountyActionResponse"
+                }
               }
             }
           },
@@ -703,7 +723,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/BountyActionResponse"
+                }
               }
             }
           },
@@ -744,7 +766,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/BountyOnchainResponse"
+                }
               }
             }
           },
@@ -774,7 +798,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AlgorandHealthResponse"
+                }
               }
             }
           }
@@ -805,7 +831,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AlgorandBalanceResponse"
+                }
               }
             }
           },
@@ -846,7 +874,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AlgorandAssetHoldersResponse"
+                }
               }
             }
           },
@@ -876,7 +906,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AgentProfileResponse"
+                }
               }
             }
           }
@@ -912,7 +944,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AgentProfileResponse"
+                }
               }
             }
           },
@@ -942,7 +976,13 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/NotificationResponse"
+                  },
+                  "type": "array",
+                  "title": "Response List Notifications Api V1 Notifications Get"
+                }
               }
             }
           }
@@ -983,7 +1023,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/MarkNotificationReadResponse"
+                }
               }
             }
           },
@@ -1013,7 +1055,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/EventStreamResponse"
+                }
               }
             }
           }
@@ -1033,7 +1077,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookResponse"
+                }
               }
             }
           }
@@ -1063,7 +1109,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/OIDCVerifyResponse"
+                }
               }
             }
           },
@@ -1093,7 +1141,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ArbitratorRegistrationResponse"
+                }
               }
             }
           }
@@ -1118,7 +1168,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ArbitratorRegistrationResponse"
+                }
               }
             }
           }
@@ -1169,7 +1221,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ArbitratorVoteResponse"
+                }
               }
             }
           },
@@ -1189,6 +1243,181 @@
   },
   "components": {
     "schemas": {
+      "AgentProfileResponse": {
+        "properties": {
+          "address": {
+            "type": "string",
+            "title": "Address"
+          },
+          "karma": {
+            "type": "integer",
+            "title": "Karma"
+          },
+          "completed_bounties": {
+            "type": "integer",
+            "title": "Completed Bounties"
+          },
+          "disputes_lost": {
+            "type": "integer",
+            "title": "Disputes Lost"
+          }
+        },
+        "type": "object",
+        "required": [
+          "address",
+          "karma",
+          "completed_bounties",
+          "disputes_lost"
+        ],
+        "title": "AgentProfileResponse"
+      },
+      "AlgorandAssetHoldersResponse": {
+        "properties": {
+          "asset_id": {
+            "type": "integer",
+            "title": "Asset Id"
+          },
+          "total_holders": {
+            "type": "integer",
+            "title": "Total Holders"
+          },
+          "holders": {
+            "items": {
+              "$ref": "#/components/schemas/AssetHolderRecord"
+            },
+            "type": "array",
+            "title": "Holders"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "asset_id",
+          "total_holders",
+          "holders"
+        ],
+        "title": "AlgorandAssetHoldersResponse"
+      },
+      "AlgorandBalanceResponse": {
+        "properties": {
+          "address": {
+            "type": "string",
+            "title": "Address"
+          },
+          "balance": {
+            "type": "integer",
+            "title": "Balance"
+          },
+          "balance_algo": {
+            "type": "number",
+            "title": "Balance Algo"
+          },
+          "total_assets": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Assets"
+          },
+          "assets": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/AssetHolder"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assets"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "address",
+          "balance",
+          "balance_algo"
+        ],
+        "title": "AlgorandBalanceResponse"
+      },
+      "AlgorandHealthResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "network": {
+            "type": "string",
+            "title": "Network"
+          },
+          "algod": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Algod"
+          },
+          "indexer": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Indexer"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "network"
+        ],
+        "title": "AlgorandHealthResponse"
+      },
       "ApproveTxnResponse": {
         "properties": {
           "unsigned_txn": {
@@ -1209,6 +1438,118 @@
           "fee_breakdown_display"
         ],
         "title": "ApproveTxnResponse"
+      },
+      "ArbitratorRegistrationResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "address": {
+            "type": "string",
+            "title": "Address"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "address"
+        ],
+        "title": "ArbitratorRegistrationResponse"
+      },
+      "ArbitratorVoteResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "bounty_id": {
+            "type": "string",
+            "title": "Bounty Id"
+          },
+          "vote": {
+            "type": "string",
+            "title": "Vote"
+          },
+          "tx_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tx Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "bounty_id",
+          "vote"
+        ],
+        "title": "ArbitratorVoteResponse"
+      },
+      "AssetHolder": {
+        "properties": {
+          "asset_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Id"
+          },
+          "amount": {
+            "type": "integer",
+            "title": "Amount"
+          }
+        },
+        "type": "object",
+        "required": [
+          "amount"
+        ],
+        "title": "AssetHolder"
+      },
+      "AssetHolderRecord": {
+        "properties": {
+          "address": {
+            "type": "string",
+            "title": "Address"
+          },
+          "amount": {
+            "type": "integer",
+            "title": "Amount"
+          }
+        },
+        "type": "object",
+        "required": [
+          "address",
+          "amount"
+        ],
+        "title": "AssetHolderRecord"
+      },
+      "AuthChallengeResponse": {
+        "properties": {
+          "challenge": {
+            "type": "string",
+            "title": "Challenge"
+          },
+          "expires_at": {
+            "type": "string",
+            "title": "Expires At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "challenge",
+          "expires_at"
+        ],
+        "title": "AuthChallengeResponse"
       },
       "AuthRequest": {
         "properties": {
@@ -1245,6 +1586,96 @@
           "challenge"
         ],
         "title": "AuthVerify"
+      },
+      "AuthVerifyResponse": {
+        "properties": {
+          "jwt": {
+            "type": "string",
+            "title": "Jwt"
+          },
+          "address": {
+            "type": "string",
+            "title": "Address"
+          },
+          "expires_at": {
+            "type": "string",
+            "title": "Expires At"
+          },
+          "karma": {
+            "type": "integer",
+            "title": "Karma"
+          }
+        },
+        "type": "object",
+        "required": [
+          "jwt",
+          "address",
+          "expires_at",
+          "karma"
+        ],
+        "title": "AuthVerifyResponse"
+      },
+      "BountyActionResponse": {
+        "properties": {
+          "bounty_id": {
+            "type": "string",
+            "title": "Bounty Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "worker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worker"
+          },
+          "tx_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tx Id"
+          },
+          "payout_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payout Type"
+          },
+          "rejection_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rejection Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "bounty_id",
+          "status"
+        ],
+        "title": "BountyActionResponse"
       },
       "BountyClaim": {
         "properties": {
@@ -1362,6 +1793,219 @@
         ],
         "title": "BountyCreate"
       },
+      "BountyCreateResponse": {
+        "properties": {
+          "bounty_id": {
+            "type": "string",
+            "title": "Bounty Id"
+          },
+          "app_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "tx_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tx Id"
+          },
+          "onchain": {
+            "type": "boolean",
+            "title": "Onchain"
+          }
+        },
+        "type": "object",
+        "required": [
+          "bounty_id",
+          "status",
+          "onchain"
+        ],
+        "title": "BountyCreateResponse"
+      },
+      "BountyOnchainResponse": {
+        "properties": {
+          "bounty_id": {
+            "type": "string",
+            "title": "Bounty Id"
+          },
+          "onchain": {
+            "type": "boolean",
+            "title": "Onchain"
+          },
+          "app_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App Id"
+          },
+          "confirmed_round": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmed Round"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "bounty_id",
+          "onchain"
+        ],
+        "title": "BountyOnchainResponse"
+      },
+      "BountyResponse": {
+        "properties": {
+          "bounty_id": {
+            "type": "string",
+            "title": "Bounty Id"
+          },
+          "app_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "creator": {
+            "type": "string",
+            "title": "Creator"
+          },
+          "worker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worker"
+          },
+          "amount": {
+            "type": "integer",
+            "title": "Amount"
+          },
+          "asset_id": {
+            "type": "integer",
+            "title": "Asset Id"
+          },
+          "asset_name": {
+            "type": "string",
+            "title": "Asset Name"
+          },
+          "hitm": {
+            "type": "boolean",
+            "title": "Hitm"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "repo_url": {
+            "type": "string",
+            "title": "Repo Url"
+          },
+          "karma_requirement": {
+            "type": "integer",
+            "title": "Karma Requirement"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "rejection_count": {
+            "type": "integer",
+            "title": "Rejection Count"
+          },
+          "treasury_altered": {
+            "type": "boolean",
+            "title": "Treasury Altered"
+          }
+        },
+        "type": "object",
+        "required": [
+          "bounty_id",
+          "status",
+          "creator",
+          "amount",
+          "asset_id",
+          "asset_name",
+          "hitm",
+          "description",
+          "repo_url",
+          "karma_requirement",
+          "created_at",
+          "rejection_count",
+          "treasury_altered"
+        ],
+        "title": "BountyResponse"
+      },
       "DisputeCreate": {
         "properties": {
           "reason": {
@@ -1385,6 +2029,11 @@
           "reason"
         ],
         "title": "DisputeCreate"
+      },
+      "EventStreamResponse": {
+        "properties": {},
+        "type": "object",
+        "title": "EventStreamResponse"
       },
       "FeeBreakdown": {
         "properties": {
@@ -1467,6 +2116,106 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "HealthResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "service": {
+            "type": "string",
+            "title": "Service"
+          },
+          "timestamp": {
+            "type": "string",
+            "title": "Timestamp"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "sandbox_active": {
+            "type": "boolean",
+            "title": "Sandbox Active"
+          },
+          "node_env": {
+            "type": "string",
+            "title": "Node Env"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "service",
+          "timestamp",
+          "version",
+          "sandbox_active",
+          "node_env"
+        ],
+        "title": "HealthResponse"
+      },
+      "ListBountiesResponse": {
+        "properties": {
+          "bounties": {
+            "items": {
+              "$ref": "#/components/schemas/BountyResponse"
+            },
+            "type": "array",
+            "title": "Bounties"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "bounties",
+          "total"
+        ],
+        "title": "ListBountiesResponse"
+      },
+      "MarkNotificationReadResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "MarkNotificationReadResponse"
+      },
+      "NotificationResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "read": {
+            "type": "boolean",
+            "title": "Read"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "message",
+          "read",
+          "created_at"
+        ],
+        "title": "NotificationResponse"
+      },
       "OIDCVerifyRequest": {
         "properties": {
           "token": {
@@ -1506,6 +2255,31 @@
           "token"
         ],
         "title": "OIDCVerifyRequest"
+      },
+      "OIDCVerifyResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "payload": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payload"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "OIDCVerifyResponse"
       },
       "ValidationError": {
         "properties": {
@@ -1570,6 +2344,41 @@
           "vote"
         ],
         "title": "VoteRequest"
+      },
+      "WebhookResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "delivery_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delivery Id"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "WebhookResponse"
       },
       "WorkApprove": {
         "properties": {
