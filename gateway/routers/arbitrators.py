@@ -1,3 +1,4 @@
+from ..schemas import ArbitratorRegistrationResponse, ArbitratorVoteResponse
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
@@ -17,7 +18,7 @@ class VoteRequest(BaseModel):
     vote: str  # "worker", "payer", or "split"
     signed_txn: Optional[str] = None
 
-@router.post("/register", summary="Register as arbitrator", description="Register the authenticated high-karma agent as an arbitrator candidate.")
+@router.post("/register", response_model=ArbitratorRegistrationResponse, summary="Register as arbitrator", description="Register the authenticated high-karma agent as an arbitrator candidate.")
 def register_arbitrator(db: Session = Depends(get_db), current_user: str = Depends(get_current_user)):
     agent = db.query(Agent).filter(Agent.address == current_user).first()
     if not agent:
@@ -44,7 +45,7 @@ def register_arbitrator(db: Session = Depends(get_db), current_user: str = Depen
     broker.publish("arbitrator.registered", {"address": current_user})
     return {"status": "registered", "address": current_user}
 
-@router.post("/deregister", summary="Deregister as arbitrator", description="Deregister the authenticated agent from the arbitrator candidate pool.")
+@router.post("/deregister", response_model=ArbitratorRegistrationResponse, summary="Deregister as arbitrator", description="Deregister the authenticated agent from the arbitrator candidate pool.")
 def deregister_arbitrator(db: Session = Depends(get_db), current_user: str = Depends(get_current_user)):
     arbitrator = db.query(Arbitrator).filter(Arbitrator.address == current_user).first()
     if not arbitrator or arbitrator.status == "inactive":
@@ -55,7 +56,7 @@ def deregister_arbitrator(db: Session = Depends(get_db), current_user: str = Dep
     broker.publish("arbitrator.deregistered", {"address": current_user})
     return {"status": "deregistered", "address": current_user}
 
-@router.post("/bounties/{bounty_id}/vote", summary="Cast vote on dispute", description="Allows an assigned arbitrator to cast their vote on a disputed bounty.")
+@router.post("/bounties/{bounty_id}/vote", response_model=ArbitratorVoteResponse, summary="Cast vote on dispute", description="Allows an assigned arbitrator to cast their vote on a disputed bounty.")
 def vote_dispute(
     bounty_id: str,
     body: VoteRequest,

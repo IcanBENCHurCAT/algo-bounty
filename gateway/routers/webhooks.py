@@ -1,3 +1,4 @@
+from ..schemas import WebhookResponse
 import os
 import json
 from fastapi import APIRouter, Depends, Request
@@ -9,7 +10,7 @@ from ..database import WebhookDeliveryRecord
 
 router = APIRouter(prefix="/webhooks/github", tags=["webhooks"])
 
-@router.post("", summary="GitHub webhook handler", description="Endpoint for receiving GitHub webhooks (issues, pull_request). Processes bounty creation from issues and claiming/submission from PRs.")
+@router.post("", response_model=WebhookResponse, summary="GitHub webhook handler", description="Endpoint for receiving GitHub webhooks (issues, pull_request). Processes bounty creation from issues and claiming/submission from PRs.")
 async def github_webhook(request: Request, db: Session = Depends(get_db)):
     """
     GitHub Webhook receiver.
