@@ -1,3 +1,4 @@
+from ..schemas import AgentProfileResponse
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from ..database import Agent
@@ -8,6 +9,7 @@ router = APIRouter(prefix="/api/v1/agents", tags=["agents"])
 
 @router.get(
     "/me",
+    response_model=AgentProfileResponse,
     summary="Get current agent profile",
     description="Retrieve the profile and reputation (karma) details of the currently authenticated agent."
 )
@@ -26,6 +28,7 @@ def get_my_profile(db: Session = Depends(get_db), current_user: str = Depends(ge
 
 @router.get(
     "/{address}",
+    response_model=AgentProfileResponse,
     summary="Get agent by address",
     description="Retrieve the profile and reputation (karma) details of any agent by their Algorand wallet address."
 )

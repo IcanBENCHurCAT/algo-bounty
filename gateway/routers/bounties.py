@@ -1,3 +1,4 @@
+from ..schemas import ListBountiesResponse, BountyResponse, BountyCreateResponse, BountyActionResponse, BountyOnchainResponse
 import re
 from datetime import datetime, UTC
 from typing import Optional
@@ -43,7 +44,7 @@ class ApproveTxnResponse(BaseModel):
     fee_breakdown: FeeBreakdown
     fee_breakdown_display: FeeBreakdownDisplay
 
-@router.get("", summary="List all bounties", description="Retrieve a list of bounties with optional filtering by status, repository, amount, karma requirement, and HITM mode.")
+@router.get("", response_model=ListBountiesResponse, summary="List all bounties", description="Retrieve a list of bounties with optional filtering by status, repository, amount, karma requirement, and HITM mode.")
 def list_bounties(
     status: Optional[str] = None,
     repo: Optional[str] = None,
@@ -98,7 +99,7 @@ def list_bounties(
         })
     return {"bounties": result, "total": len(result)}
 
-@router.get("/{bounty_id}", summary="Get bounty details", description="Retrieve detailed information about a specific bounty by its ID.")
+@router.get("/{bounty_id}", response_model=BountyResponse, summary="Get bounty details", description="Retrieve detailed information about a specific bounty by its ID.")
 def get_bounty(bounty_id: str, db: Session = Depends(get_db)):
     b = db.query(Bounty).filter(Bounty.bounty_id == bounty_id).first()
     if not b:
@@ -121,7 +122,7 @@ def get_bounty(bounty_id: str, db: Session = Depends(get_db)):
         "treasury_altered": b.treasury_altered
     }
 
-@router.post("", summary="Create a new bounty", description="Deploy a new bounty escrow on-chain (if not in sandbox) and create a database record. Deducts 1 karma from the creator.")
+@router.post("", response_model=BountyCreateResponse, summary="Create a new bounty", description="Deploy a new bounty escrow on-chain (if not in sandbox) and create a database record. Deducts 1 karma from the creator.")
 def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_user: str = Depends(get_current_user)):
     if body.platform_fee > 1000:
         raise HTTPException(status_code=400, detail="Platform fee cannot exceed 10% (1000 basis points)")
@@ -364,7 +365,7 @@ async def get_claim_txn(
         fee_breakdown_display=fee_display,
     )
 
-@router.post("/{bounty_id}/claim", summary="Claim a bounty", description="Allows a worker to claim an open bounty. Validates karma requirements and processes on-chain claim if a signed transaction is provided.")
+@router.post("/{bounty_id}/claim", response_model=BountyActionResponse, summary="Claim a bounty", description="Allows a worker to claim an open bounty. Validates karma requirements and processes on-chain claim if a signed transaction is provided.")
 async def claim_bounty(
     bounty_id: str,
     body: BountyClaim,
@@ -429,7 +430,7 @@ async def claim_bounty(
 
     return {"bounty_id": bounty_id, "status": "claimed", "worker": current_user, "tx_id": tx_id}
 
-@router.post("/{bounty_id}/submit", summary="Submit work for a bounty", description="Allows the claiming worker to submit their solution (PR URL). Updates bounty status to 'submitted'.")
+@router.post("/{bounty_id}/submit", response_model=BountyActionResponse, summary="Submit work for a bounty", description="Allows the claiming worker to submit their solution (PR URL). Updates bounty status to 'submitted'.")
 async def submit_work(
     bounty_id: str,
     body: WorkSubmit,
@@ -607,7 +608,7 @@ async def get_approve_txn(
         fee_breakdown_display=fee_display,
     )
 
-@router.post("/{bounty_id}/approve", summary="Approve submitted work", description="Allows the creator to approve the submitted work, closing the bounty and releasing funds. Awards +10 karma to worker and +5 to creator.")
+@router.post("/{bounty_id}/approve", response_model=BountyActionResponse, summary="Approve submitted work", description="Allows the creator to approve the submitted work, closing the bounty and releasing funds. Awards +10 karma to worker and +5 to creator.")
 async def approve_work(
     bounty_id: str,
     body: WorkApprove,
@@ -679,7 +680,7 @@ async def approve_work(
 
     return {"bounty_id": bounty_id, "status": "closed", "payout_type": "PAYOUT", "tx_id": tx_id}
 
-@router.post("/{bounty_id}/reject", summary="Reject submitted work", description="Allows the creator to reject submitted work. Increments rejection count and applies progressive karma penalties to the worker.")
+@router.post("/{bounty_id}/reject", response_model=BountyActionResponse, summary="Reject submitted work", description="Allows the creator to reject submitted work. Increments rejection count and applies progressive karma penalties to the worker.")
 async def reject_work(
     bounty_id: str,
     body: WorkReject,
@@ -752,7 +753,7 @@ async def reject_work(
 
     return {"bounty_id": bounty_id, "status": "rejected", "rejection_count": b.rejection_count, "tx_id": tx_id}
 
-@router.post("/{bounty_id}/dispute", summary="Open a dispute", description="Allows either the creator or the worker to open a dispute if the work is in submitted or rejected state.")
+@router.post("/{bounty_id}/dispute", response_model=BountyActionResponse, summary="Open a dispute", description="Allows either the creator or the worker to open a dispute if the work is in submitted or rejected state.")
 async def dispute_work(
     bounty_id: str,
     body: DisputeCreate,
@@ -826,7 +827,7 @@ def _get_bounty_github_info(bounty: Bounty) -> tuple[Optional[str], Optional[int
 
     return bounty.repo_url, issue_num
 
-@router.get("/{bounty_id}/onchain", summary="Poll on-chain status", description="Retrieve the current status of the bounty's escrow application directly from the Algorand blockchain.")
+@router.get("/{bounty_id}/onchain", response_model=BountyOnchainResponse, summary="Poll on-chain status", description="Retrieve the current status of the bounty's escrow application directly from the Algorand blockchain.")
 def get_bounty_onchain(bounty_id: str, db: Session = Depends(get_db)):
     """Poll on-chain escrow state for a bounty."""
     b = db.query(Bounty).filter(Bounty.bounty_id == bounty_id).first()
