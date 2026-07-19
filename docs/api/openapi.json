@@ -1336,6 +1336,22 @@
               }
             ],
             "title": "Bounty Id"
+          },
+          "platform_fee": {
+            "type": "integer",
+            "title": "Platform Fee",
+            "default": 200
+          },
+          "treasury_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Treasury Address"
           }
         },
         "type": "object",
