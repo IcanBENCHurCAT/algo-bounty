@@ -1964,11 +1964,25 @@
             "title": "Hitm"
           },
           "description": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Description"
           },
           "repo_url": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Repo Url"
           },
           "karma_requirement": {
@@ -1997,8 +2011,6 @@
           "asset_id",
           "asset_name",
           "hitm",
-          "description",
-          "repo_url",
           "karma_requirement",
           "created_at",
           "rejection_count",
