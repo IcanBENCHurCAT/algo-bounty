@@ -11,7 +11,7 @@ The platform collects a 2% fee on successful bounty payouts and an additional 0.
 - Users must understand exactly how their escrowed funds are being split before signing transactions.
 
 ## Decision
-1. **On-Chain 50/50 Fee Split**: The 2% base platform fee will be programmatically split on-chain during the payout transaction group. 1% will be sent to the Developer Royalty address (the bounty creator) and 1% will be sent to the Platform Treasury account.
+1. **On-Chain 50/50 Fee Split**: The 2% base platform fee will be programmatically split on-chain during the payout transaction group. 1% will be sent to the Developer Royalty address (AlgoBounty creator) and 1% will be sent to the Platform Treasury account.
 2. **Dynamic Mediator Fee Redirection (Safety Net)**: 
    - If the bounty is in HITM mode (`is_hitm = 1`), the 0.25% mediator fee is redirected entirely to the worker/claimant.
    - If the bounty is in Auto mode (`is_hitm = 0`) and is resolved without entering a dispute, the 0.25% fee is also redirected to the worker/claimant.
