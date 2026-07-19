@@ -26,18 +26,18 @@ This document defines the prescriptive architectural rules, engineering standard
 2.2. Contracts MUST validate all critical transaction fields strictly: verify transaction types (`pay`, `axfer`, `appl`), assert correct `sender` values, check application transaction fee bounds, and enforce safe usage of `OnComplete` codes (e.g., rejecting arbitrary `UpdateApplication` or `DeleteApplication` calls unless authorized by explicit governance).
 2.3. Every state-modifying smart contract method MUST verify that `Txn.rekey_to()` remains unmodified (`Account(0)`), preventing account takeover.
 2.4. Keys and storage sizes inside Global/Local Boxes MUST be strictly limited to prevent Denial-of-Service and memory bloating:
-   - Proof URL: `<= 512` bytes
-   - Proof JSON: `<= 2048` bytes
-   - Dispute Reason: `<= 256` bytes
+    - Proof URL: `<= 512` bytes
+    - Proof JSON: `<= 2048` bytes
+    - Dispute Reason: `<= 256` bytes
 2.5. Any smart contract change (including new application ID deployments, runtime parameter upgrades, or contract logic changes) MUST go through the full spec-kit process: `/speckit-specify` → `/speckit-plan` → `/speckit-tasks` → `/speckit-implement`, with comprehensive unit and integration testing before deployment.
 
 ### 3. Explicit State Machines and Invariants
 3.1. Every stateful contract MUST enforce an explicit state machine defining the valid lifecycle transitions (e.g., `INITIALIZED`, `FUNDED`, `CLAIMED`, `SUBMITTED`, `APPROVED`, `DISPUTED`, `RESOLVED`, `REFUNDED`).
 3.2. Guard functions MUST check the current state before executing logic.
 3.3. Key system invariants MUST be strictly enforced on-chain:
-   - Escrow accounts must hold the exact funded amount required for the bounty.
-   - Payout splits must sum precisely to `100%` (or the funded balance minus treasury fees).
-   - Only the designated creator, claimant, or arbitrator can execute their respective actions according to state context.
+    - Escrow accounts must hold the exact funded amount required for the bounty.
+    - Payout splits must sum precisely to `100%` (or the funded balance minus treasury fees).
+    - Only the designated creator, claimant, or arbitrator can execute their respective actions according to state context.
 
 ### 4. Deterministic ABI and API Usage
 4.1. All application methods MUST use Algorand ABI specifications, with arguments and return types declared and kept in sync with on-chain logic.
@@ -45,25 +45,25 @@ This document defines the prescriptive architectural rules, engineering standard
 
 ### 5. Transparent Governance, Upgrades, and Platform Fee Sharing
 5.1. **Deployment Architecture Roadmap**: The deployment lifecycle proceeds across three stages:
-   - **Stage 1 (Local Dev)**: Operates against sandbox environments and local SQLite databases.
-   - **Stage 2 (Staging/Beta)**: Deployed to testnet networks and serverless cloud runners (e.g., GCP Cloud Run) with Postgres.
-   - **Stage 3 (Production/Scale)**: Orchestrated container environments (e.g., Kubernetes) with high-availability Postgres clusters.
+    - **Stage 1 (Local Dev)**: Operates against sandbox environments and local SQLite databases.
+    - **Stage 2 (Staging/Beta)**: Deployed to testnet networks and serverless cloud runners (e.g., GCP Cloud Run) with Postgres.
+    - **Stage 3 (Production/Scale)**: Orchestrated container environments (e.g., Kubernetes) with high-availability Postgres clusters.
 5.2. Only the platform administrator account, an authorized multi-sig account, or an on-chain DAO voting contract specified during contract deployment (the platform `mediator` or platform owner key) can upgrade applications or adjust critical platform parameters (e.g., fee rates, treasury destinations).
 5.3. **Bounty Fee Collection and Treasury Distribution**:
-   - The platform collects a `2%` platform fee and a `0.25%` mediator fee upon successful payout distributions.
-   - Collected fees MUST be programmatically split and distributed according to the following safety nets:
-     - **Developer Royalty**: `1%` of the total payout (50% of the platform fee) MUST be sent directly to the creator's wallet address (or a designated royalty account) as compensation for platform stewardship.
-     - **Platform Treasury**: `1%` of the total payout (50% of the platform fee) MUST be sent to the platform treasury account to self-fund system maintenance.
-     - **Mediator Fee Safety Net**: The `0.25%` mediator fee allocation is dynamically distributed depending on the bounty's review mode and dispute status:
-       - **HITM Mode**: If the bounty is created in Human-in-the-Middle (HITM) mode, no mediator can ever be involved in dispute resolution. The `0.25%` fee allocation MUST NOT be sent to a mediator; instead, it MUST be programmatically redirected to the worker (claimant) to maximize payout.
-       - **Auto Mode (No Dispute)**: If the bounty is in Auto mode (no HITM) and is completed/approved without a dispute being raised, the `0.25%` fee allocation MUST be programmatically redirected to the worker (claimant).
-       - **Auto Mode (Disputed)**: If the bounty is in Auto mode and enters a dispute requiring mediation, the `0.25%` mediator fee MUST be distributed evenly among the active mediators who participate in resolving the dispute.
-     - **UI Mirroring**: The frontend dashboard UI MUST mirror this exact dynamic fee calculation in its real-time fee breakdown display, showing `0 ALGO` mediator fee and corresponding increased claimant payout under HITM or undisputed Auto modes, and only displaying the active `0.25%` mediator fee allocation when mediation is explicitly active or expected during a dispute.
+    - The platform collects a `2%` platform fee and a `0.25%` mediator fee upon successful payout distributions.
+    - Collected fees MUST be programmatically split and distributed according to the following safety nets:
+        - **Developer Royalty**: `1%` of the total payout (50% of the platform fee) MUST be sent directly to the creator's wallet address (or a designated royalty account) as compensation for platform stewardship.
+        - **Platform Treasury**: `1%` of the total payout (50% of the platform fee) MUST be sent to the platform treasury account to self-fund system maintenance.
+        - **Mediator Fee Safety Net**: The `0.25%` mediator fee allocation is dynamically distributed depending on the bounty's review mode and dispute status:
+            - **HITM Mode**: If the bounty is created in Human-in-the-Middle (HITM) mode, no mediator can ever be involved in dispute resolution. The `0.25%` fee allocation MUST NOT be sent to a mediator; instead, it MUST be programmatically redirected to the worker (claimant) to maximize payout.
+            - **Auto Mode (No Dispute)**: If the bounty is in Auto mode (no HITM) and is completed/approved without a dispute being raised, the `0.25%` fee allocation MUST be programmatically redirected to the worker (claimant).
+            - **Auto Mode (Disputed)**: If the bounty is in Auto mode and enters a dispute requiring mediation, the `0.25%` mediator fee MUST be distributed evenly among the active mediators who participate in resolving the dispute.
+        - **UI Mirroring**: The frontend dashboard UI MUST mirror this exact dynamic fee calculation in its real-time fee breakdown display, showing `0 ALGO` mediator fee and corresponding increased claimant payout under HITM or undisputed Auto modes, and only displaying the active `0.25%` mediator fee allocation when mediation is explicitly active or expected during a dispute.
 5.4. **Upgrade Path**: When upgrading contracts, migration scripts and deprecation strategies (such as freezing old contracts or migrating user boxes) MUST be defined in specs and plans prior to execution. Proxy application patterns or explicit application ID registry routers should be preferred.
 5.5. **DAO Governance Evolution (Phased Platform Cooperative)**: The platform will transition to a decentralized cooperative DAO in three phases:
-   - **Phase 1: Progressive Decentralization (Transition Phase)**: While the system is new and the treasury is accumulating funds, the lead developer/admin retains a stewardship role to perform emergency/administrative refunds for stuck bounties and directly fund platform-improvement bounties from the treasury. This is a temporary bootstrap measure.
-   - **Phase 2: Pure Governance (Compliant)**: Control transitions to the community via a 1-member-1-vote non-transferable Soulbound Token (SBT). Membership is gated by on-chain Karma (e.g., Karma > 50). This SBT governs protocol upgrades and the existing treasury without conferring financial expectation.
-   - **Phase 3: Economic Participation (Deferred)**: To maintain compliance with financial regulations, the issuance of any tradable economic token representing patronage dividends from platform surpluses is explicitly deferred pending comprehensive legal review. The Developer Royalty allocation remains permanently assigned to the original creator/steward account.
+    - **Phase 1: Progressive Decentralization (Transition Phase)**: While the system is new and the treasury is accumulating funds, the lead developer/admin retains a stewardship role to perform emergency/administrative refunds for stuck bounties and directly fund platform-improvement bounties from the treasury. This is a temporary bootstrap measure.
+    - **Phase 2: Pure Governance (Compliant)**: Control transitions to the community via a 1-member-1-vote non-transferable Soulbound Token (SBT). Membership is gated by on-chain Karma (e.g., Karma > 50). This SBT governs protocol upgrades and the existing treasury without conferring financial expectation.
+    - **Phase 3: Economic Participation (Deferred)**: To maintain compliance with financial regulations, the issuance of any tradable economic token representing patronage dividends from platform surpluses is explicitly deferred pending comprehensive legal review. The Developer Royalty allocation remains permanently assigned to the original creator/steward account.
 5.6. **Hosted Indexer Neutrality**: To maintain neutral status and avoid classification as a commercial matching broker, any hosted platform indexer or search dashboard MUST index and display all deployments of the `EscrowContract` smart contract template. The indexer MUST NOT filter out, penalize, or hide bounties that modify default contract fee addresses, reduce platform fees to `0%`, or specify custom treasury accounts.
 5.7. **Direct Peer-to-Peer Engagement**: The platform is an open-source matching protocol and does not act as an employer, agent, or payment clearinghouse. All transactions, work agreements, and payouts are direct P2P interactions between creators and workers. All tax compliance, documentation (such as Form 1099 or DAC7), and withholding obligations are the sole responsibility of the participating counterparties and MUST be handled directly between them off-chain.
 5.8. **Stewardship of Autonomous Agents**: Because autonomous software agents lack legal personality and tax registration capabilities, any Algorand account or wallet controlled by an agent on the platform MUST have a designated human steward. The human steward assumes full legal, tax, and financial responsibility for all actions, claims, disputes, and payouts executed by their agent's wallet.
