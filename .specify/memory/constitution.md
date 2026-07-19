@@ -1,15 +1,12 @@
 <!--
 SYNC IMPACT REPORT:
-- Version change: 2.3.0 -> 2.4.0
+- Version change: 2.4.0 -> 2.5.0
 - Ratification Date: 2026-07-16
-- Last Amended Date: 2026-07-18 (v2.4.0)
+- Last Amended Date: 2026-07-19 (v2.5.0)
 - Modified Sections:
-  - Section 5 (Transparent Governance, Upgrades, and Platform Fee Sharing) updated with additional self-hosting guardrails.
-- Added rules:
-  - Section 5.10: No Proprietary Vendor Lock-in (BYOK).
-  - Section 5.11: Frontend Portability and Decentralization.
+  - Section 5.5 (DAO Governance Evolution) updated to reflect the 3-phase Platform Cooperative model (Developer Stewardship -> SBT Governance -> Deferred Economic Token).
 - Templates requiring updates:
-  - None (advisory policy rules).
+  - None (advisory governance policy rules).
 -->
 # AlgoBounty Project Constitution
 
@@ -63,7 +60,10 @@ This document defines the prescriptive architectural rules, engineering standard
        - **Auto Mode (Disputed)**: If the bounty is in Auto mode and enters a dispute requiring mediation, the `0.25%` mediator fee MUST be distributed evenly among the active mediators who participate in resolving the dispute.
      - **UI Mirroring**: The frontend dashboard UI MUST mirror this exact dynamic fee calculation in its real-time fee breakdown display, showing `0 ALGO` mediator fee and corresponding increased claimant payout under HITM or undisputed Auto modes, and only displaying the active `0.25%` mediator fee allocation when mediation is explicitly active or expected during a dispute.
 5.4. **Upgrade Path**: When upgrading contracts, migration scripts and deprecation strategies (such as freezing old contracts or migrating user boxes) MUST be defined in specs and plans prior to execution. Proxy application patterns or explicit application ID registry routers should be preferred.
-5.5. **DAO Governance Evolution**: As the platform transitions to production (Stage 3), upgrades, mediator keys, and the Platform Treasury allocation MUST be managed by a DAO-governed voting model. The Developer Royalty allocation remains permanently assigned to the original creator/steward account.
+5.5. **DAO Governance Evolution (Phased Platform Cooperative)**: The platform will transition to a decentralized cooperative DAO in three phases:
+   - **Phase 1: Progressive Decentralization (Transition Phase)**: While the system is new and the treasury is accumulating funds, the lead developer/admin retains a stewardship role to perform emergency/administrative refunds for stuck bounties and directly fund platform-improvement bounties from the treasury. This is a temporary bootstrap measure.
+   - **Phase 2: Pure Governance (Compliant)**: Control transitions to the community via a 1-member-1-vote non-transferable Soulbound Token (SBT). Membership is gated by on-chain Karma (e.g., Karma > 50). This SBT governs protocol upgrades and the existing treasury without conferring financial expectation.
+   - **Phase 3: Economic Participation (Deferred)**: To maintain compliance with financial regulations, the issuance of any tradable economic token representing patronage dividends from platform surpluses is explicitly deferred pending comprehensive legal review. The Developer Royalty allocation remains permanently assigned to the original creator/steward account.
 5.6. **Hosted Indexer Neutrality**: To maintain neutral status and avoid classification as a commercial matching broker, any hosted platform indexer or search dashboard MUST index and display all deployments of the `EscrowContract` smart contract template. The indexer MUST NOT filter out, penalize, or hide bounties that modify default contract fee addresses, reduce platform fees to `0%`, or specify custom treasury accounts.
 5.7. **Direct Peer-to-Peer Engagement**: The platform is an open-source matching protocol and does not act as an employer, agent, or payment clearinghouse. All transactions, work agreements, and payouts are direct P2P interactions between creators and workers. All tax compliance, documentation (such as Form 1099 or DAC7), and withholding obligations are the sole responsibility of the participating counterparties and MUST be handled directly between them off-chain.
 5.8. **Stewardship of Autonomous Agents**: Because autonomous software agents lack legal personality and tax registration capabilities, any Algorand account or wallet controlled by an agent on the platform MUST have a designated human steward. The human steward assumes full legal, tax, and financial responsibility for all actions, claims, disputes, and payouts executed by their agent's wallet.
@@ -138,6 +138,5 @@ Agents and human contributors MUST use this checklist to validate new specs/plan
 - [ ] Are core Web3 interactions operable without a centralized backend? (Rule 5.11)
 
 ---
----
-**Version**: 2.4.0 | **Ratified**: 2026-07-16 | **Last Amended**: 2026-07-18 (v2.4.0)
-**Superseded rules**: 2.3.0 core principles were updated with BYOK and frontend portability guardrails in Sections 5.10 and 5.11.
+**Version**: 2.5.0 | **Ratified**: 2026-07-16 | **Last Amended**: 2026-07-19 (v2.5.0)
+**Superseded rules**: 2.4.0 core principles were updated with a phased cooperative DAO rollout in Section 5.5, deferring economic tokens pending legal review.
