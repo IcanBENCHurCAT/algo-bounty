@@ -8,6 +8,8 @@ import { useToast } from '@/providers'
 import { createBounty } from '@/lib/api'
 import { Button } from '@/components/ui/Button'
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card'
+import { useFeeBreakdown } from '@/hooks/useFeeBreakdown'
+import { FeeBreakdownTable } from '@/components/ui/FeeBreakdownTable'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -32,6 +34,10 @@ interface FormState {
   tags: string
   githubIssue: string
   hitmReviewDays: string
+  platformFee: string
+  treasuryAddress: string
+  developerFee: string
+  taxAccepted: boolean
 }
 
 const INITIAL: FormState = {
@@ -46,6 +52,10 @@ const INITIAL: FormState = {
   tags: '',
   githubIssue: '',
   hitmReviewDays: '3',
+  platformFee: '2.0',
+  treasuryAddress: '',
+  developerFee: '1.0',
+  taxAccepted: false,
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
@@ -97,6 +107,7 @@ export default function CreateBountyPage() {
   const [form, setForm] = useState<FormState>(INITIAL)
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({})
+  const [showAdvanced, setShowAdvanced] = useState(false)
 
   const set = (field: keyof FormState, value: string | boolean | number) =>
     setForm((prev) => ({ ...prev, [field]: value }))
@@ -108,8 +119,28 @@ export default function CreateBountyPage() {
     if (!form.description.trim()) errs.description = 'Description is required'
     if (!form.amountAlgo || Number(form.amountAlgo) <= 0) errs.amountAlgo = 'Must be > 0'
     if (!form.repoUrl.trim()) errs.repoUrl = 'Repository URL is required'
+    
     const rounds = Number(form.deadlineRounds)
     if (!rounds || rounds < 100) errs.deadlineRounds = 'Minimum 100 rounds'
+
+    const pf = Number(form.platformFee)
+    if (isNaN(pf) || pf < 0 || pf > 10) {
+      errs.platformFee = 'Platform fee must be between 0% and 10%'
+    }
+
+    const df = Number(form.developerFee)
+    if (isNaN(df) || df < 0 || df > pf) {
+      errs.developerFee = `Developer fee must be between 0% and Platform Fee (${pf}%)`
+    }
+
+    if (form.treasuryAddress.trim() && !/^[A-Z2-7]{58}$/.test(form.treasuryAddress.trim())) {
+      errs.treasuryAddress = 'Invalid Algorand address format (must be 58 characters, uppercase A-Z, 2-7)'
+    }
+
+    if (!form.taxAccepted) {
+      errs.taxAccepted = 'You must accept the tax liability disclaimer'
+    }
+
     setErrors(errs)
     return Object.keys(errs).length === 0
   }
@@ -142,6 +173,9 @@ export default function CreateBountyPage() {
           .split(',')
           .map((s) => s.trim())
           .filter(Boolean),
+        platform_fee: Math.round(Number(form.platformFee) * 100),
+        developer_fee: Math.round(Number(form.developerFee) * 100),
+        ...(form.treasuryAddress.trim() ? { treasury_address: form.treasuryAddress.trim() } : {}),
         ...(form.githubIssue ? { github_issue: Number(form.githubIssue) } : {}),
         ...(form.hitm && form.hitmReviewDays
           ? { hitm_review_days: Number(form.hitmReviewDays) }
@@ -195,6 +229,18 @@ export default function CreateBountyPage() {
   }
 
   // ─── Render ──────────────────────────────────────────────────────────────
+
+  const amt = Number(form.amountAlgo)
+  const escrowAmount = isNaN(amt) ? 0 : Math.round(amt * 1_000_000)
+  const platformFeeBps = Math.round(Number(form.platformFee || '2.0') * 100)
+  const developerFeeBps = Math.round(Number(form.developerFee || '1.0') * 100)
+  const { breakdown, display: feeDisplay } = useFeeBreakdown(
+    escrowAmount,
+    form.hitm,
+    false,
+    platformFeeBps,
+    developerFeeBps
+  )
 
   return (
     <div
@@ -430,22 +476,136 @@ export default function CreateBountyPage() {
           )}
         </div>
 
-        {/* Preview */}
-        <div
-          style={{
-            padding: '1rem 1.25rem',
-            borderRadius: '0.75rem',
-            background: 'rgba(99,102,241,0.06)',
-            border: '1px solid rgba(99,102,241,0.15)',
-            fontSize: '0.875rem',
-            color: 'var(--color-accent-2)',
-          }}
-        >
-          <strong>Escrow amount:</strong>{' '}
-          {form.amountAlgo ? `${form.amountAlgo} ALGO` : '—'}{' '}
-          <span style={{ color: 'var(--color-text-muted)' }}>
-            + ~0.002 ALGO network fees · Locked on-chain until completion
-          </span>
+        {/* Advanced Settings Accordion */}
+        <div style={sectionStyle}>
+          <button
+            type="button"
+            id="advanced-settings-toggle"
+            onClick={() => setShowAdvanced(!showAdvanced)}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'var(--color-text-primary)',
+              fontSize: '1rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              width: '100%',
+              padding: 0,
+              textAlign: 'left',
+            }}
+          >
+            <span>Advanced Settings</span>
+            <span style={{ transform: showAdvanced ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
+              ▶
+            </span>
+          </button>
+
+          {showAdvanced && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', marginTop: '0.5rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div style={fieldStyle}>
+                  <label htmlFor="platformFee" style={labelStyle}>Custom Platform Fee (%)</label>
+                  <input
+                    id="platformFee"
+                    type="number"
+                    step="0.1"
+                    value={form.platformFee}
+                    onChange={(e) => set('platformFee', e.target.value)}
+                    style={inputStyle}
+                  />
+                  {errors.platformFee && <span style={{ color: 'var(--color-danger)', fontSize: '0.8rem' }}>{errors.platformFee}</span>}
+                </div>
+
+                <div style={fieldStyle}>
+                  <label htmlFor="developerFee" style={labelStyle}>Custom Developer Fee (%)</label>
+                  <input
+                    id="developerFee"
+                    type="number"
+                    step="0.1"
+                    value={form.developerFee}
+                    onChange={(e) => set('developerFee', e.target.value)}
+                    style={inputStyle}
+                  />
+                  {errors.developerFee && <span style={{ color: 'var(--color-danger)', fontSize: '0.8rem' }}>{errors.developerFee}</span>}
+                </div>
+              </div>
+
+              <div style={fieldStyle}>
+                <label htmlFor="treasuryAddress" style={labelStyle}>Custom Treasury Address</label>
+                <input
+                  id="treasuryAddress"
+                  type="text"
+                  placeholder="Algorand Address (58 chars)"
+                  value={form.treasuryAddress}
+                  onChange={(e) => set('treasuryAddress', e.target.value)}
+                  style={inputStyle}
+                />
+                {errors.treasuryAddress && <span style={{ color: 'var(--color-danger)', fontSize: '0.8rem' }}>{errors.treasuryAddress}</span>}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Preview & Fee Breakdown */}
+        {form.amountAlgo && Number(form.amountAlgo) > 0 ? (
+          <div
+            style={{
+              padding: '1.5rem',
+              borderRadius: '1rem',
+              background: 'rgba(99,102,241,0.06)',
+              border: '1px solid rgba(99,102,241,0.15)',
+              fontSize: '0.9375rem',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '1rem',
+            }}
+          >
+            <div>
+              <strong>Escrow amount:</strong> {form.amountAlgo} ALGO{' '}
+              <span style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>
+                · Locked on-chain until completion
+              </span>
+            </div>
+            <FeeBreakdownTable
+              fee={breakdown}
+              display={feeDisplay}
+              hitm={form.hitm}
+              label="Preview of fee breakdown"
+            />
+          </div>
+        ) : (
+          <div
+            style={{
+              padding: '1rem 1.25rem',
+              borderRadius: '0.75rem',
+              background: 'rgba(255,255,255,0.02)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              fontSize: '0.875rem',
+              color: 'var(--color-text-muted)',
+            }}
+          >
+            Enter a reward amount to preview the fee breakdown.
+          </div>
+        )}
+
+        {/* P2P Tax Disclaimer Checkbox */}
+        <div style={{ ...sectionStyle, background: 'rgba(239,68,68,0.03)', border: '1px solid rgba(239,68,68,0.15)' }}>
+          <label style={{ display: 'flex', gap: '0.75rem', cursor: 'pointer', alignItems: 'flex-start' }}>
+            <input
+              id="tax-disclaimer-checkbox"
+              type="checkbox"
+              checked={form.taxAccepted}
+              onChange={(e) => set('taxAccepted', e.target.checked)}
+              style={{ marginTop: '0.25rem', cursor: 'pointer' }}
+            />
+            <span style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)', lineHeight: '1.4' }}>
+              I acknowledge that I am responsible for peer-to-peer tax reporting, compliance, and withholding obligations.
+            </span>
+          </label>
+          {errors.taxAccepted && <span style={{ color: 'var(--color-danger)', fontSize: '0.8rem' }}>{errors.taxAccepted}</span>}
         </div>
 
         {/* Actions */}
@@ -453,7 +613,12 @@ export default function CreateBountyPage() {
           <Link href="/">
             <Button type="button" variant="ghost">Cancel</Button>
           </Link>
-          <Button id="create-bounty-btn" type="submit" loading={loading}>
+          <Button
+            id="create-bounty-btn"
+            type="submit"
+            loading={loading}
+            disabled={!form.taxAccepted}
+          >
             🚀 Create &amp; Escrow
           </Button>
         </div>

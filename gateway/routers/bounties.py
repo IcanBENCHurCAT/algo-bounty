@@ -123,6 +123,9 @@ def get_bounty(bounty_id: str, db: Session = Depends(get_db)):
 
 @router.post("", summary="Create a new bounty", description="Deploy a new bounty escrow on-chain (if not in sandbox) and create a database record. Deducts 1 karma from the creator.")
 def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_user: str = Depends(get_current_user)):
+    if body.platform_fee > 1000:
+        raise HTTPException(status_code=400, detail="Platform fee cannot exceed 10% (1000 basis points)")
+
     # Check if user has enough karma to create this bounty
     agent = db.query(Agent).filter(Agent.address == current_user).first()
     if not agent:
@@ -217,9 +220,12 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
         agent.karma -= 1
     db.commit()
 
+    default_treasury = settings.TREASURY_ADDRESS or "RTCed54abc91f37d8d2d2cb2cf69ce60b0021fd67e5"
     if body.bounty_id:
         pending_bounty.status = "open"
         pending_bounty.treasury_altered = is_custom_treasury
+        pending_bounty.platform_fee = body.platform_fee
+        pending_bounty.treasury_address = body.treasury_address or default_treasury
         db.commit()
     else:
         new_bounty = Bounty(
@@ -234,7 +240,9 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
             repo_url=body.repo_url,
             karma_requirement=body.karma_requirement,
             hitm_review_days=body.hitm_review_days,
-            treasury_altered=is_custom_treasury
+            treasury_altered=is_custom_treasury,
+            platform_fee=body.platform_fee,
+            treasury_address=body.treasury_address or default_treasury
         )
         db.add(new_bounty)
         db.commit()
@@ -318,15 +326,19 @@ async def get_claim_txn(
     
     # Fee breakdown (FR-002, FR-004, FR-010)
     escrow_amount = b.amount
-    fee = (escrow_amount * 2) // 100 // 2  # 1% (developer royalty + platform treasury)
+    platform_fee_bps = getattr(b, "platform_fee", 200)
+    fee_platform = (escrow_amount * platform_fee_bps) // 10000
+    fee_royalty = fee_platform // 2
+    fee_treasury = fee_platform - fee_royalty
+    
     # Mediator Fee Safety Net (Constitution v2.1.0): always 0 unless active dispute
     mediator_fee = 0
-    claimant_payout = escrow_amount - fee - fee - mediator_fee
+    claimant_payout = escrow_amount - fee_royalty - fee_treasury - mediator_fee
 
     fee_breakdown = FeeBreakdown(
         escrow_amount=escrow_amount,
-        developer_royalty=fee,
-        platform_treasury=fee,
+        developer_royalty=fee_royalty,
+        platform_treasury=fee_treasury,
         mediator_fee=mediator_fee,
         claimant_payout=claimant_payout,
     )
@@ -340,8 +352,8 @@ async def get_claim_txn(
 
     fee_display = FeeBreakdownDisplay(
         total=_fmt(escrow_amount),
-        developer_royalty=_fmt(fee),
-        platform_treasury=_fmt(fee),
+        developer_royalty=_fmt(fee_royalty),
+        platform_treasury=_fmt(fee_treasury),
         mediator_fee=_fmt(mediator_fee),
         claimant_payout=_fmt(claimant_payout),
     )
@@ -557,15 +569,19 @@ async def get_approve_txn(
     # Fee breakdown (FR-002, FR-004, FR-010)
     # Same integer-division formula as the on-chain contract.
     escrow_amount = b.amount
-    fee = (escrow_amount * 2) // 100 // 2  # 1% (developer royalty + platform treasury)
+    platform_fee_bps = getattr(b, "platform_fee", 200)
+    fee_platform = (escrow_amount * platform_fee_bps) // 10000
+    fee_royalty = fee_platform // 2
+    fee_treasury = fee_platform - fee_royalty
+    
     # Mediator Fee Safety Net (Constitution v2.1.0): always 0 unless active dispute
     mediator_fee = 0
-    claimant_payout = escrow_amount - fee - fee - mediator_fee
+    claimant_payout = escrow_amount - fee_royalty - fee_treasury - mediator_fee
 
     fee_breakdown = FeeBreakdown(
         escrow_amount=escrow_amount,
-        developer_royalty=fee,
-        platform_treasury=fee,
+        developer_royalty=fee_royalty,
+        platform_treasury=fee_treasury,
         mediator_fee=mediator_fee,
         claimant_payout=claimant_payout,
     )
@@ -579,8 +595,8 @@ async def get_approve_txn(
 
     fee_display = FeeBreakdownDisplay(
         total=_fmt(escrow_amount),
-        developer_royalty=_fmt(fee),
-        platform_treasury=_fmt(fee),
+        developer_royalty=_fmt(fee_royalty),
+        platform_treasury=_fmt(fee_treasury),
         mediator_fee=_fmt(mediator_fee),
         claimant_payout=_fmt(claimant_payout),
     )

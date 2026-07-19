@@ -143,3 +143,59 @@ def test_poll_bounty_events(mock_get_client):
 
     mock_get_client.side_effect = Exception("error")
     assert poll_bounty_events() == []
+
+
+def test_verify_escrow_schema():
+    from gateway.indexer import verify_escrow_schema
+    mock_client = MagicMock()
+    
+    # 1. Matching boxes
+    mock_client.application_boxes.return_value = {
+        "boxes": [
+            {"name": "c3RhdGU="}, # "state" in base64
+            {"name": "Ym91bnR5X2lk"} # "bounty_id" in base64
+        ]
+    }
+    with patch("gateway.indexer.get_algod_client", return_value=mock_client):
+        assert verify_escrow_schema(123) is True
+        
+    # 2. Missing bounty_id box
+    mock_client.application_boxes.return_value = {
+        "boxes": [
+            {"name": "c3RhdGU="}
+        ]
+    }
+    with patch("gateway.indexer.get_algod_client", return_value=mock_client):
+        assert verify_escrow_schema(123) is False
+
+
+@patch("gateway.indexer.get_algod_client")
+def test_read_box_uint64_and_address(mock_get_client):
+    from gateway.indexer import read_box_uint64, read_box_address
+    mock_client = MagicMock()
+    mock_get_client.return_value = mock_client
+    
+    import base64
+    import struct
+    from algosdk.account import generate_account
+    from algosdk.encoding import decode_address
+    
+    encoded_fee = base64.b64encode(struct.pack('>Q', 500)).decode('utf-8')
+    _, valid_addr = generate_account()
+    addr_bytes = decode_address(valid_addr)
+    encoded_addr = base64.b64encode(addr_bytes).decode('utf-8')
+    
+    # Mock application_info response containing box-entries
+    mock_client.application_info.return_value = {
+        "apps-local-state": {
+            "box-entries": [
+                {"name": "platform_fee", "value": encoded_fee},
+                {"name": "treasury_address", "value": encoded_addr}
+            ]
+        }
+    }
+    
+    # Check that they decode correctly
+    assert read_box_uint64(12345, "platform_fee") == 500
+    assert read_box_address(12345, "treasury_address") == valid_addr
+

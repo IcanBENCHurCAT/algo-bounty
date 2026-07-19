@@ -118,25 +118,113 @@ def get_bounty_app_info(db, app_id):
         return None
 
 
-def read_box_value(app_id: int, box_name: str):
-    """Read a specific box value from an escrow app. Returns decoded string or None."""
+def read_box_raw_bytes(app_id: int, box_name: str) -> bytes:
+    """Read raw bytes of a box value from an escrow app."""
     try:
+        import base64
         algod_client = get_algod_client()
+        
+        # Try application_box_by_name first
+        try:
+            resp = algod_client.application_box_by_name(app_id, box_name.encode("utf-8"))
+            raw_val = resp.get("value")
+            if raw_val:
+                return base64.b64decode(raw_val)
+        except Exception:
+            pass
+
+        # Fallback to application_info box entries
         app_info = algod_client.application_info(app_id)
         local_state = app_info.get("apps-local-state", {})
         boxes = local_state.get("box-entries", [])
 
+        # Try base64 and hex encoding of box_name
+        name_b64 = base64.b64encode(box_name.encode("utf-8")).decode("utf-8")
+        name_hex = box_name.encode("utf-8").hex()
+
         for box in boxes:
-            if box.get("name", "") == box_name:
-                raw = box.get("value", "")
+            b_name = box.get("name", "")
+            if b_name in (box_name, name_b64, name_hex):
+                raw_val = box.get("value", "")
+                
+                # Check if it looks like a hex string
+                is_hex = len(raw_val) % 2 == 0 and all(c in "0123456789abcdefABCDEF" for c in raw_val)
+                if is_hex:
+                    try:
+                        return bytes.fromhex(raw_val)
+                    except Exception:
+                        pass
+                
+                # Try base64
                 try:
-                    return bytes.fromhex(raw).decode("utf-8")
-                except (ValueError, UnicodeDecodeError):
-                    return raw
+                    decoded = base64.b64decode(raw_val)
+                    try:
+                        decoded.decode("utf-8")
+                        return decoded
+                    except UnicodeDecodeError:
+                        if len(decoded) in (8, 32):
+                            return decoded
+                        return raw_val.encode("utf-8") if isinstance(raw_val, str) else raw_val
+                except Exception:
+                    return raw_val.encode("utf-8") if isinstance(raw_val, str) else raw_val
         return None
     except Exception as exc:
         print(f"[INDEXER] Box read error: {exc}")
         return None
+
+
+def read_box_value(app_id: int, box_name: str):
+    """Read a specific box value from an escrow app. Returns decoded string or raw bytes if decode fails."""
+    val_bytes = read_box_raw_bytes(app_id, box_name)
+    if val_bytes is None:
+        return None
+    try:
+        return val_bytes.decode("utf-8")
+    except UnicodeDecodeError:
+        return val_bytes
+
+
+def read_box_uint64(app_id: int, box_name: str) -> int:
+    """Read a specific box value from an escrow app as uint64."""
+    val_bytes = read_box_raw_bytes(app_id, box_name)
+    if val_bytes is None or len(val_bytes) != 8:
+        return None
+    import struct
+    return struct.unpack('>Q', val_bytes)[0]
+
+
+def read_box_address(app_id: int, box_name: str) -> str:
+    """Read a specific box value from an escrow app as an Algorand address string."""
+    val_bytes = read_box_raw_bytes(app_id, box_name)
+    if val_bytes is None or len(val_bytes) != 32:
+        return None
+    from algosdk.encoding import encode_address
+    return encode_address(val_bytes)
+
+
+def verify_escrow_schema(app_id: int) -> bool:
+    """Verify that the application has the expected box keys of an AlgoBounty contract."""
+    try:
+        algod_client = get_algod_client()
+        boxes_resp = algod_client.application_boxes(app_id)
+        box_names = [box.get("name") for box in boxes_resp.get("boxes", [])]
+        
+        import base64
+        state_b64 = base64.b64encode(b"state").decode("utf-8")
+        bounty_id_b64 = base64.b64encode(b"bounty_id").decode("utf-8")
+        
+        has_state = False
+        has_bounty_id = False
+        for name in box_names:
+            if name in (b"state", "state", state_b64):
+                has_state = True
+            if name in (b"bounty_id", "bounty_id", bounty_id_b64):
+                has_bounty_id = True
+                
+        return has_state and has_bounty_id
+    except Exception:
+        return False
+
 
 
 def fetch_app_logs(app_id: int, min_round: int = 0):

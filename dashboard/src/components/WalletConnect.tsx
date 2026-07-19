@@ -23,6 +23,7 @@ export function WalletConnect({ variant = 'compact' }: WalletConnectProps) {
   const { wallets } = useWallet()
   const { connected, address, walletType, loading, error, connect, disconnect } = useAuth()
   const [showDropdown, setShowDropdown] = useState(false)
+  const [stewardAccepted, setStewardAccepted] = useState(false)
 
   if (loading) {
     return (
@@ -148,11 +149,32 @@ export function WalletConnect({ variant = 'compact' }: WalletConnectProps) {
               border: '1px solid rgba(255,255,255,0.1)',
               borderRadius: '0.875rem',
               padding: '0.5rem',
-              minWidth: '200px',
+              minWidth: '240px',
               zIndex: 50,
               boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
             }}
           >
+            <div
+              style={{
+                padding: '0.5rem 0.75rem',
+                borderBottom: '1px solid rgba(255,255,255,0.06)',
+                marginBottom: '0.5rem',
+              }}
+            >
+              <label style={{ display: 'flex', gap: '0.5rem', cursor: 'pointer', alignItems: 'flex-start' }}>
+                <input
+                  id="agent-steward-checkbox"
+                  type="checkbox"
+                  checked={stewardAccepted}
+                  onChange={(e) => setStewardAccepted(e.target.checked)}
+                  style={{ marginTop: '0.15rem', cursor: 'pointer' }}
+                />
+                <span style={{ fontSize: '0.7rem', color: '#94a3b8', lineHeight: '1.3' }}>
+                  I agree that any wallet controlled by an autonomous software agent must have a designated human steward who accepts full legal, tax, and financial responsibility.
+                </span>
+              </label>
+            </div>
+
             <p
               style={{
                 margin: '0 0 0.5rem',
@@ -173,7 +195,9 @@ export function WalletConnect({ variant = 'compact' }: WalletConnectProps) {
                 <button
                   key={wallet.id}
                   id={`connect-${wallet.id}`}
+                  disabled={!stewardAccepted}
                   onClick={() => {
+                    if (!stewardAccepted) return
                     setShowDropdown(false)
                     void connect(wallet.id)
                   }}
@@ -186,20 +210,25 @@ export function WalletConnect({ variant = 'compact' }: WalletConnectProps) {
                     borderRadius: '0.625rem',
                     background: 'transparent',
                     border: 'none',
-                    color: '#e2e8f0',
-                    cursor: 'pointer',
+                    color: stewardAccepted ? '#e2e8f0' : '#64748b',
+                    cursor: stewardAccepted ? 'pointer' : 'not-allowed',
+                    opacity: stewardAccepted ? 1 : 0.5,
                     fontSize: '0.9375rem',
                     fontWeight: 500,
                     textAlign: 'left',
                     transition: 'background 0.15s',
                     fontFamily: 'inherit',
                   }}
-                  onMouseEnter={(e) =>
-                    (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')
-                  }
-                  onMouseLeave={(e) =>
-                    (e.currentTarget.style.background = 'transparent')
-                  }
+                  onMouseEnter={(e) => {
+                    if (stewardAccepted) {
+                      e.currentTarget.style.background = 'rgba(255,255,255,0.06)'
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (stewardAccepted) {
+                      e.currentTarget.style.background = 'transparent'
+                    }
+                  }}
                 >
                   <span
                     style={{

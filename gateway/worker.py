@@ -4,7 +4,10 @@ import signal
 import base64
 from datetime import datetime, timezone, timedelta
 from gateway.database import SessionLocal, Bounty, Agent, Arbitrator, DisputeArbitrator
-from gateway.indexer import poll_bounty_events, fetch_app_logs, read_box_value, sync_bounty_from_chain
+from gateway.indexer import (
+    poll_bounty_events, fetch_app_logs, read_box_value, sync_bounty_from_chain,
+    read_box_uint64, read_box_address
+)
 
 # Arbitrators who fail to vote within this window are penalised and marked inactive.
 ARBITRATOR_VOTE_DEADLINE_HOURS: int = int(os.environ.get("ARBITRATOR_VOTE_DEADLINE_HOURS", "48"))
@@ -113,6 +116,18 @@ async def indexer_worker():
                             app_id = event.get("app_id")
                             bounty = bounty_map.get(app_id)
                             if bounty:
+                                # Sync platform_fee and treasury_address from on-chain boxes
+                                try:
+                                    pf = read_box_uint64(app_id, "platform_fee")
+                                    ta = read_box_address(app_id, "treasury_address")
+                                    if pf is not None:
+                                        bounty.platform_fee = pf
+                                    if ta is not None:
+                                        bounty.treasury_address = ta
+                                    db.commit()
+                                except Exception as e:
+                                    print(f"[WORKER] Error syncing custom fee parameters for {bounty.bounty_id}: {e}")
+
                                 # General sync placeholder
                                 try:
                                     state_raw = read_box_value(app_id, "state")
