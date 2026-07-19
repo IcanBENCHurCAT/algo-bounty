@@ -47,9 +47,29 @@ export function FeeBreakdownTable({
       borderBottom: true,
     },
     {
-      label: 'Mediator Fee (0.25%)',
-      amount: fee.mediator_fee === 0 ? '0 ALGO (Redirected)' : display.mediator_fee,
-      color: fee.mediator_fee === 0 ? 'var(--color-success)' : '#94a3b8',
+      label: (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+          <span style={{ fontWeight: 500 }}>Mediator Fee (0.25%)</span>
+          <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 400, lineHeight: '1.2' }}>
+            {fee.mediator_fee === 0
+              ? 'Defaults to 0 ALGO (redirected to worker payout unless disputed)'
+              : 'Applied to resolve open dispute'}
+          </span>
+        </div>
+      ),
+      amount: (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'flex-end' }}>
+          <span style={{ fontWeight: 600 }}>
+            {fee.mediator_fee === 0 ? '0 ALGO' : display.mediator_fee}
+          </span>
+          {fee.mediator_fee === 0 && (
+            <span style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 500, lineHeight: '1.2' }}>
+              Redirected to Payout
+            </span>
+          )}
+        </div>
+      ),
+      color: fee.mediator_fee === 0 ? '#10b981' : '#94a3b8',
       borderBottom: true,
       variant: fee.mediator_fee === 0 ? 'zero' : 'active',
     },
