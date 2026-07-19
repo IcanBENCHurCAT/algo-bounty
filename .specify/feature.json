@@ -1,8 +1,3 @@
 {
-  "active_feature": "mediator-fee-safety-net",
-  "spec_directory": "specs/009-mediator-fee-safety-net",
-  "feature_directory": "specs/009-mediator-fee-safety-net",
-  "spec_file": "specs/009-mediator-fee-safety-net/spec.md",
-  "branch_name": "009-mediator-fee-safety-net",
-  "timestamp": "2026-07-18T15:00:00-04:00"
+  "feature_directory": "specs/003-byoa-github-integration"
 }
