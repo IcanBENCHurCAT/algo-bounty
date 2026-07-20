@@ -76,6 +76,7 @@ class EscrowContract(ARC4Contract):
         self.arbitrator_3_vote = Box(UInt64, key="arbitrator_3_vote")
         self.platform_fee = Box(UInt64, key="platform_fee")
         self.gateway_address = Box(Account, key="gateway_address")
+        self.authorized_app_id = Box(UInt64, key="authorized_app_id")
 
 
     def _get_candidate_count(self) -> UInt64:
@@ -205,6 +206,7 @@ class EscrowContract(ARC4Contract):
         mediator: Account,
         treasury: Account,
         gateway_address: Account,
+        authorized_app_id: UInt64,
     ) -> None:
         assert Txn.type_enum == TransactionType.ApplicationCall
         assert Txn.on_completion == OnCompleteAction.NoOp
@@ -249,9 +251,14 @@ class EscrowContract(ARC4Contract):
         self.bounty_id.value = bounty_id
         self.creator_address.value = Txn.sender
         self.gateway_address.value = gateway_address
+        self.authorized_app_id.value = authorized_app_id
 
-        if is_hitm > 0:
-            self.is_hitm.value = is_hitm
+        effective_hitm = is_hitm
+        if authorized_app_id == UInt64(0):
+            effective_hitm = UInt64(1)
+
+        if effective_hitm > 0:
+            self.is_hitm.value = effective_hitm
         if asset_id > 0:
             self.asset_id.value = asset_id
         if review_days > 0:
@@ -350,8 +357,13 @@ class EscrowContract(ARC4Contract):
         assert Txn.on_completion == OnCompleteAction.NoOp
         assert Txn.rekey_to == Account(Bytes(32 * b"\x00"))
 
-        assert self.state_box.value == SUBMITTED
-        assert Txn.sender == self.creator_address.value, "Only creator can approve work"
+        # Can be approved by the creator, OR by the authorized gateway (if not HITM)
+        is_creator = Txn.sender == self.creator_address.value
+        gw_addr, gw_exists = self.gateway_address.maybe()
+        is_gateway = gw_exists and Txn.sender == gw_addr
+        if is_gateway:
+            assert self._get_is_hitm() == 0, "Cannot auto-approve in HITM mode"
+        assert is_creator or is_gateway, "Only creator or authorized gateway can approve work"
 
         escrow_amount = self.escrow_amount.value
         asset_id = self._get_asset_id()

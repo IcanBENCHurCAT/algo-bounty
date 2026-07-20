@@ -1,4 +1,4 @@
-from ..schemas import AgentProfileResponse
+from ..schemas import AgentProfileResponse, AgentLinkGitHub
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from ..database import Agent
@@ -52,6 +52,33 @@ def get_agent(address: str, db: Session = Depends(get_db)):
 
     return {
         "address": agent.address,
+        "github_username": agent.github_username,
+        "karma": agent.karma,
+        "completed_bounties": agent.completed_bounties,
+        "disputes_lost": agent.disputes_lost
+    }
+
+@router.put(
+    "/me/github",
+    response_model=AgentProfileResponse,
+    summary="Link GitHub username to profile",
+    description="Link a GitHub username to the currently authenticated agent's profile."
+)
+def link_github_username(body: AgentLinkGitHub, db: Session = Depends(get_db), current_user: str = Depends(get_current_user)):
+    agent = db.query(Agent).filter(Agent.address == current_user).first()
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent profile missing")
+
+    existing = db.query(Agent).filter(Agent.github_username == body.github_username, Agent.address != current_user).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="GitHub username already linked to another wallet address")
+
+    agent.github_username = body.github_username
+    db.commit()
+    db.refresh(agent)
+    return {
+        "address": agent.address,
+        "github_username": agent.github_username,
         "karma": agent.karma,
         "completed_bounties": agent.completed_bounties,
         "disputes_lost": agent.disputes_lost

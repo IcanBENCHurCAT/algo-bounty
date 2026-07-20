@@ -2,8 +2,8 @@
 
 **Date**: 2026-07-19
 
-**Status**: Accepted
-
+**Status**: Superseded by ADR 0012
+**Note**: Replaced by Node Incentivization & Fee Splitting architecture.
 ## Context
 The platform collects a 2% fee on successful bounty payouts and an additional 0.25% fee reserved for mediators. To align with the AlgoBounty Constitution (Specs 006, 007, and 008) regarding revenue sharing, decentralization, and transparency, the fee mechanics and user experience must be defined clearly. Specifically:
 - The 2% platform fee needs to be distributed according to governance rules (50% to Developer Royalty, 50% to Platform Treasury).

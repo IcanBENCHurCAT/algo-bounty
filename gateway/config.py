@@ -55,6 +55,10 @@ class Config:
         return self.get_secret("GITHUB_PRIVATE_KEY")
 
     @property
+    def GITHUB_INSTALLATION_ID(self) -> str:
+        return self.get_secret("GITHUB_INSTALLATION_ID")
+
+    @property
     def PLATFORM_PRIVATE_KEY(self) -> str:
         val = self.get_secret("PLATFORM_PRIVATE_KEY")
         if self.ALGORAND_NETWORK in ("testnet", "mainnet") and not val:

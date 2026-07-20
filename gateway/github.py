@@ -28,7 +28,7 @@ async def get_github_bot_token(owner: Optional[str] = None, repo: Optional[str] 
     """
     app_id = settings.GITHUB_APP_ID
     private_key = settings.GITHUB_PRIVATE_KEY
-    installation_id = os.environ.get("GITHUB_INSTALLATION_ID")
+    installation_id = settings.GITHUB_INSTALLATION_ID
 
     if not (app_id and private_key):
         return settings.GITHUB_TOKEN
@@ -362,7 +362,79 @@ async def handle_issue_event(db: Session, payload: dict):
     issue = payload.get("issue", {})
     repo = payload.get("repository", {})
     
-    if action not in ["opened", "labeled"]:
+    if action not in ["opened", "labeled", "closed"]:
+        return
+
+    if action == "closed":
+        issue_number = issue.get("number")
+        bounty_id = f"b_{issue_number}"
+        bounty = db.query(Bounty).filter(Bounty.bounty_id == bounty_id).first()
+        if not bounty:
+            return
+            
+        actor = payload.get("sender", {}).get("login")
+        
+        worker_agent = (
+            db.query(Agent).filter(Agent.github_username == actor).first()
+            or db.query(Agent).filter(Agent.address == actor).first()
+        )
+        
+        if bounty.status in ["claimed", "submitted"]:
+            if not bounty.is_hitm:
+                tx_id = None
+                recipient_addr = worker_agent.address if worker_agent else None
+                if not recipient_addr:
+                    if settings.ALGORAND_NETWORK == "sandbox" or os.environ.get("TESTING") == "True":
+                        recipient_addr = actor
+                    else:
+                        logger.warning(f"[GITHUB] Cannot auto-approve bounty {bounty_id}: issue closed by @{actor} without linked wallet.")
+                        comment_text = (
+                            f"⚠️ **Auto-Release Blocked**\n\n"
+                            f"GitHub user @{actor} closed this issue, but their GitHub username is not linked to an Algorand wallet address.\n"
+                            f"Please link your wallet address on the dashboard to receive your payout!"
+                        )
+                        await post_github_comment_and_labels(bounty.repo_url, issue_number, comment=comment_text)
+                        return
+                    
+                if bounty.app_id:
+                    payout_result = release_trustless(
+                        app_id=bounty.app_id,
+                        worker_address=recipient_addr,
+                    )
+                    if not payout_result["success"]:
+                        logger.error(f"[GITHUB] release_trustless failed for bounty {bounty_id}: {payout_result['error']}")
+                        return
+                    tx_id = payout_result["tx_id"]
+                    
+                bounty.status = "closed"
+                bounty.payout_type = "PAYOUT"
+                bounty.worker = actor
+                db.commit()
+                
+                comment_text = (
+                    f"🎉 **Bounty Completed & Funds Released!**\n\n"
+                    f"Issue `ALGO-{issue_number}` has been closed by @{actor}. "
+                    f"The escrow has been closed, and funds have been automatically released!\n"
+                    + (f"- **Payout TX**: `{tx_id}`" if tx_id else "")
+                )
+                await post_github_comment_and_labels(
+                    bounty.repo_url, issue_number,
+                    comment=comment_text,
+                    add_labels=["bounty:approved"],
+                    remove_labels=["bounty:submitted", "bounty:claimed"]
+                )
+                
+                if worker_agent:
+                    worker_agent.karma += 5
+                    worker_agent.completed_bounties += 1
+                    db.commit()
+            else:
+                comment_text = (
+                    f"⚠️ **Issue Closed - Awaiting Escrow Release**\n\n"
+                    f"Issue `ALGO-{issue_number}` has been closed by @{actor}, but this bounty is in **HITM Mode**.\n"
+                    f"Creator @{bounty.creator} must sign the release transaction on the dashboard to pay the worker."
+                )
+                await post_github_comment_and_labels(bounty.repo_url, issue_number, comment=comment_text)
         return
 
     labels = [label.get("name") for label in issue.get("labels", [])]
@@ -458,10 +530,12 @@ async def handle_pr_event(db: Session, payload: dict):
     ).all()
     existing_pr_bounty_ids = {pr.bounty_id for pr in existing_prs}
 
-    # Pre-fetch worker agent if needed for "closed" action
     worker_agent = None
     if action == "closed" and pr.get("merged") is True:
-        worker_agent = db.query(Agent).filter(Agent.address == author).first()
+        worker_agent = (
+            db.query(Agent).filter(Agent.github_username == author).first()
+            or db.query(Agent).filter(Agent.address == author).first()
+        )
 
     for issue_number in issue_numbers:
         bounty_id = f"b_{issue_number}"
@@ -544,12 +618,28 @@ async def handle_pr_event(db: Session, payload: dict):
             # PR Merged! If trustless mode is on, auto-approve the payout!
             if bounty.status in ["claimed", "submitted"]:
                 if not bounty.is_hitm:
-                    # Trustless mode: dispatch on-chain payout before updating DB (T022)
+                    recipient_addr = worker_agent.address if worker_agent else None
+                    if not recipient_addr:
+                        if settings.ALGORAND_NETWORK == "sandbox" or os.environ.get("TESTING") == "True":
+                            recipient_addr = author
+                        else:
+                            logger.warning(
+                                f"[GITHUB] Cannot auto-approve bounty {bounty.bounty_id}: "
+                                f"worker @{author} does not have a linked wallet address."
+                            )
+                            comment_text = (
+                                f"⚠️ **Auto-Release Blocked**\n\n"
+                                f"PR #{pr_number} has been merged, but worker @{author}'s GitHub username is not linked to an Algorand wallet address.\n"
+                                f"Please link your wallet address on the dashboard to receive your payout!"
+                            )
+                            await post_github_comment_and_labels(bounty.repo_url, int(issue_number), comment=comment_text)
+                            continue
+
                     tx_id = None
                     if bounty.app_id:
                         payout_result = release_trustless(
                             app_id=bounty.app_id,
-                            worker_address=bounty.worker or author,
+                            worker_address=recipient_addr,
                         )
                         if not payout_result["success"]:
                             logger.error(
