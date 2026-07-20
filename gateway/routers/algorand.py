@@ -1,3 +1,4 @@
+from ..schemas import AlgorandHealthResponse, AlgorandBalanceResponse, AlgorandAssetHoldersResponse
 from fastapi import APIRouter, HTTPException
 from ..algod_client import (
     get_account_balance, get_asset_holders,
@@ -6,7 +7,7 @@ from ..algod_client import (
 
 router = APIRouter(prefix="/api/v1/algorand", tags=["algorand"])
 
-@router.get("/health", summary="Algorand node health", description="Check the connectivity and status of the Algorand node (Algod) and Indexer. Returns detailed network information.")
+@router.get("/health", response_model=AlgorandHealthResponse, summary="Algorand node health", description="Check the connectivity and status of the Algorand node (Algod) and Indexer. Returns detailed network information.")
 def algorand_health():
     """Health check for Algorand network."""
     try:
@@ -18,7 +19,7 @@ def algorand_health():
         raise HTTPException(status_code=503, detail=str(e))
 
 
-@router.get("/balance/{address}", summary="Get wallet balance", description="Retrieve the current ALGO balance and asset holdings for any Algorand wallet address.")
+@router.get("/balance/{address}", response_model=AlgorandBalanceResponse, summary="Get wallet balance", description="Retrieve the current ALGO balance and asset holdings for any Algorand wallet address.")
 def algorand_balance(address: str):
     """Return ALGO balance for any address."""
     try:
@@ -27,7 +28,7 @@ def algorand_balance(address: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/asset/{asset_id}/holders", summary="List asset holders", description="Retrieve a list of all wallet addresses holding a specific Algorand Standard Asset (ASA).")
+@router.get("/asset/{asset_id}/holders", response_model=AlgorandAssetHoldersResponse, summary="List asset holders", description="Retrieve a list of all wallet addresses holding a specific Algorand Standard Asset (ASA).")
 def algorand_asset_holders(asset_id: int):
     """Get asset holders for an ASA."""
     try:

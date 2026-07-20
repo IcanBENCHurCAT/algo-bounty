@@ -65,3 +65,133 @@ class FeeBreakdownDisplay(BaseModel):
     platform_treasury: str
     mediator_fee: str
     claimant_payout: str
+
+
+class AgentProfileResponse(BaseModel):
+    address: str
+    karma: int
+    completed_bounties: int
+    disputes_lost: int
+
+class AlgorandHealthResponse(BaseModel):
+    status: str
+    network: str
+    algod: Optional[bool] = None
+    indexer: Optional[bool] = None
+    error: Optional[str] = None
+
+class AssetHolder(BaseModel):
+    asset_id: Optional[int] = None
+    amount: int
+
+class AlgorandBalanceResponse(BaseModel):
+    address: str
+    balance: int
+    balance_algo: float
+    total_assets: Optional[int] = None
+    assets: Optional[list[AssetHolder]] = None
+    error: Optional[str] = None
+
+class AssetHolderRecord(BaseModel):
+    address: str
+    amount: int
+
+class AlgorandAssetHoldersResponse(BaseModel):
+    asset_id: int
+    total_holders: int
+    holders: list[AssetHolderRecord]
+    error: Optional[str] = None
+
+class ArbitratorRegistrationResponse(BaseModel):
+    status: str
+    address: str
+
+class ArbitratorVoteResponse(BaseModel):
+    status: str
+    bounty_id: str
+    vote: str
+    tx_id: Optional[str] = None
+
+class AuthChallengeResponse(BaseModel):
+    challenge: str
+    expires_at: str
+
+class AuthVerifyResponse(BaseModel):
+    jwt: str
+    address: str
+    expires_at: str
+    karma: int
+
+class BountyResponse(BaseModel):
+    bounty_id: str
+    app_id: Optional[int] = None
+    status: str
+    creator: str
+    worker: Optional[str] = None
+    amount: int
+    asset_id: int
+    asset_name: str
+    hitm: bool
+    description: Optional[str] = None
+    repo_url: Optional[str] = None
+    karma_requirement: int
+    created_at: str
+    rejection_count: int
+    treasury_altered: bool
+
+class ListBountiesResponse(BaseModel):
+    bounties: list[BountyResponse]
+    total: int
+
+class BountyCreateResponse(BaseModel):
+    bounty_id: str
+    app_id: Optional[int] = None
+    status: str
+    tx_id: Optional[str] = None
+    onchain: bool
+
+class BountyActionResponse(BaseModel):
+    bounty_id: str
+    status: str
+    worker: Optional[str] = None
+    tx_id: Optional[str] = None
+    payout_type: Optional[str] = None
+    rejection_count: Optional[int] = None
+
+class BountyOnchainResponse(BaseModel):
+    bounty_id: str
+    onchain: bool
+    app_id: Optional[int] = None
+    confirmed_round: Optional[int] = None
+    state: Optional[str] = None
+    error: Optional[str] = None
+    status: Optional[str] = None
+
+class NotificationResponse(BaseModel):
+    id: int
+    message: str
+    read: bool
+    created_at: str
+
+class MarkNotificationReadResponse(BaseModel):
+    status: str
+
+class OIDCVerifyResponse(BaseModel):
+    status: str
+    payload: Optional[dict] = None
+
+class WebhookResponse(BaseModel):
+    status: str
+    delivery_id: Optional[str] = None
+    reason: Optional[str] = None
+
+class HealthResponse(BaseModel):
+    status: str
+    service: str
+    timestamp: str
+    version: str
+    sandbox_active: bool
+    node_env: str
+
+class EventStreamResponse(BaseModel):
+    pass # SSE endpoint, returns a text/event-stream
