@@ -401,6 +401,8 @@ class Bounty(Base):
     treasury_altered = Column(Boolean, default=False, nullable=False)
     platform_fee = Column(Integer, default=200, nullable=False)
     treasury_address = Column(String(58), default="RTCed54abc91f37d8d2d2cb2cf69ce60b0021fd67e5", nullable=False)
+    gateway_address = Column(String(58), nullable=True)
+
 
 
 class GitHubPR(Base):

@@ -121,7 +121,7 @@ def run_lifecycle_test():
 
     # 6. Initialize bounty state (create_bounty NoOp call)
     print("\n[Step 5] Initializing bounty state...")
-    create_method = Method.from_signature("create_bounty(byte[],uint64,uint64,uint64,uint64,address,address)void")
+    create_method = Method.from_signature("create_bounty(byte[],uint64,uint64,uint64,uint64,address,address,address)void")
     create_selector = create_method.get_selector()
     
     bounty_id_bytes = ABIType.from_string("byte[]").encode(b"testnet_test_1")
@@ -131,6 +131,7 @@ def run_lifecycle_test():
     review_days_arg = ABIType.from_string("uint64").encode(0)
     mediator_arg = algosdk.encoding.decode_address(creator.address)
     treasury_arg = algosdk.encoding.decode_address(creator.address)
+    gateway_address_arg = algosdk.encoding.decode_address(creator.address)
     
     app_args = [
         create_selector,
@@ -140,12 +141,14 @@ def run_lifecycle_test():
         asset_id_arg,
         review_days_arg,
         mediator_arg,
-        treasury_arg
+        treasury_arg,
+        gateway_address_arg
     ]
     
     box_names = [
         b"state", b"mediator_address", b"treasury_address",
-        b"escrow_amount", b"bounty_id", b"creator_address"
+        b"escrow_amount", b"bounty_id", b"creator_address",
+        b"gateway_address"
     ]
     boxes = [(app_id, name) for name in box_names]
     

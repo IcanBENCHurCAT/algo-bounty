@@ -75,6 +75,7 @@ class EscrowContract(ARC4Contract):
         self.arbitrator_2_vote = Box(UInt64, key="arbitrator_2_vote")
         self.arbitrator_3_vote = Box(UInt64, key="arbitrator_3_vote")
         self.platform_fee = Box(UInt64, key="platform_fee")
+        self.gateway_address = Box(Account, key="gateway_address")
 
 
     def _get_candidate_count(self) -> UInt64:
@@ -150,13 +151,23 @@ class EscrowContract(ARC4Contract):
         mediator_addr: Account,
         is_dispute: UInt64 = UInt64(0),
     ) -> UInt64:
-        """Split the platform fee 50/50 between royalty and treasury,
+        """Split the platform fee 50/50 between royalty and treasury/gateway,
         pay the 0.25% mediator fee, and return the remaining balance.
         """
         platform_fee_val = TemplateVar[UInt64]("PLATFORM_FEE")
         fee_platform = escrow_amount * platform_fee_val // 10000  # Dynamic platform fee
         fee_creator = fee_platform // 2          # royalty
-        fee_treasury = fee_platform - fee_creator  # treasury
+        
+        gw_addr, gw_exists = self.gateway_address.maybe()
+        zero_addr = Account(Bytes(32 * b"\x00"))
+        
+        if gw_exists and gw_addr != zero_addr:
+            fee_gateway = fee_platform // 4
+            fee_treasury = fee_platform - fee_creator - fee_gateway
+        else:
+            fee_gateway = UInt64(0)
+            fee_treasury = fee_platform - fee_creator
+            
         fee_mediator = escrow_amount * 25 // 10000  # 0.25%
 
         # Dedup royalty when primary recipient is the creator
@@ -164,6 +175,9 @@ class EscrowContract(ARC4Contract):
 
         if not is_creator:
             self._send_payout(self.creator_address.value, fee_creator, asset_id)
+
+        if fee_gateway > 0:
+            self._send_payout(gw_addr, fee_gateway, asset_id)
 
         self._send_payout(self.treasury_address.value, fee_treasury, asset_id)
 
@@ -174,7 +188,7 @@ class EscrowContract(ARC4Contract):
         else:
             self._send_payout(mediator_addr, fee_mediator, asset_id)
 
-        return escrow_amount - fee_creator - fee_treasury - fee_mediator
+        return escrow_amount - fee_creator - fee_gateway - fee_treasury - fee_mediator
 
     @arc4.abimethod(create="require")
     def deploy(self) -> None:
@@ -190,6 +204,7 @@ class EscrowContract(ARC4Contract):
         review_days: UInt64,
         mediator: Account,
         treasury: Account,
+        gateway_address: Account,
     ) -> None:
         assert Txn.type_enum == TransactionType.ApplicationCall
         assert Txn.on_completion == OnCompleteAction.NoOp
@@ -233,6 +248,7 @@ class EscrowContract(ARC4Contract):
         self.escrow_amount.value = escrow_amount
         self.bounty_id.value = bounty_id
         self.creator_address.value = Txn.sender
+        self.gateway_address.value = gateway_address
 
         if is_hitm > 0:
             self.is_hitm.value = is_hitm

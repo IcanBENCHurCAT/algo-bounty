@@ -95,7 +95,8 @@ def list_bounties(
             "karma_requirement": b.karma_requirement,
             "created_at": b.created_at.replace(tzinfo=UTC).isoformat().replace("+00:00", "Z"),
             "rejection_count": b.rejection_count,
-            "treasury_altered": b.treasury_altered
+            "treasury_altered": b.treasury_altered,
+            "gateway_address": b.gateway_address
         })
     return {"bounties": result, "total": len(result)}
 
@@ -119,7 +120,8 @@ def get_bounty(bounty_id: str, db: Session = Depends(get_db)):
         "karma_requirement": b.karma_requirement,
         "created_at": b.created_at.replace(tzinfo=UTC).isoformat().replace("+00:00", "Z"),
         "rejection_count": b.rejection_count,
-        "treasury_altered": b.treasury_altered
+        "treasury_altered": b.treasury_altered,
+        "gateway_address": b.gateway_address
     }
 
 @router.post("", response_model=BountyCreateResponse, summary="Create a new bounty", description="Deploy a new bounty escrow on-chain (if not in sandbox) and create a database record. Deducts 1 karma from the creator.")
@@ -189,7 +191,7 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
 
             b64_list = body.signed_txn.split(",") if "," in body.signed_txn else [body.signed_txn]
             
-            method = Method.from_signature("create_bounty(byte[],uint64,uint64,uint64,uint64,address,address)void")
+            method = Method.from_signature("create_bounty(byte[],uint64,uint64,uint64,uint64,address,address,address)void")
             create_selector = method.get_selector()
 
             for b64 in b64_list:
@@ -227,6 +229,7 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
         pending_bounty.treasury_altered = is_custom_treasury
         pending_bounty.platform_fee = body.platform_fee
         pending_bounty.treasury_address = body.treasury_address or default_treasury
+        pending_bounty.gateway_address = body.gateway_address
         db.commit()
     else:
         new_bounty = Bounty(
@@ -243,7 +246,8 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
             hitm_review_days=body.hitm_review_days,
             treasury_altered=is_custom_treasury,
             platform_fee=body.platform_fee,
-            treasury_address=body.treasury_address or default_treasury
+            treasury_address=body.treasury_address or default_treasury,
+            gateway_address=body.gateway_address
         )
         db.add(new_bounty)
         db.commit()

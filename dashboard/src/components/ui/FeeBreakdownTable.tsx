@@ -41,11 +41,17 @@ export function FeeBreakdownTable({
       borderBottom: true,
     },
     {
-      label: 'Platform Treasury (1%)',
+      label: fee.gateway_fee && fee.gateway_fee > 0 ? 'Platform Treasury (0.5%)' : 'Platform Treasury (1%)',
       amount: display.platform_treasury,
       color: '#94a3b8',
       borderBottom: true,
     },
+    ...(fee.gateway_fee && fee.gateway_fee > 0 ? [{
+      label: 'Gateway Node Fee (0.5%)',
+      amount: display.gateway_fee,
+      color: '#3b82f6',
+      borderBottom: true,
+    }] : []),
     {
       label: (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>

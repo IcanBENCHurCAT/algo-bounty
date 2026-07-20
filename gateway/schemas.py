@@ -24,6 +24,8 @@ class BountyCreate(BaseModel):
     bounty_id: Optional[str] = None
     platform_fee: int = 200
     treasury_address: Optional[str] = None
+    gateway_address: Optional[str] = None
+
 
 class BountyDeployResponse(BaseModel):
     unsigned_txns: list[str]
@@ -138,6 +140,8 @@ class BountyResponse(BaseModel):
     created_at: str
     rejection_count: int
     treasury_altered: bool
+    gateway_address: Optional[str] = None
+
 
 class ListBountiesResponse(BaseModel):
     bounties: list[BountyResponse]

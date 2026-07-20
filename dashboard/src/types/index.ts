@@ -197,6 +197,7 @@ export interface FeeBreakdown {
   escrow_amount: number
   developer_royalty: number
   platform_treasury: number
+  gateway_fee?: number
   mediator_fee: number
   claimant_payout: number
 }
@@ -205,6 +206,7 @@ export interface FeeBreakdownDisplay {
   total: string
   developer_royalty: string
   platform_treasury: string
+  gateway_fee?: string
   mediator_fee: string
   claimant_payout: string
 }
