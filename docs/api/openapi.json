@@ -1783,6 +1783,17 @@
               }
             ],
             "title": "Treasury Address"
+          },
+          "gateway_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gateway Address"
           }
         },
         "type": "object",
@@ -2000,6 +2011,17 @@
           "treasury_altered": {
             "type": "boolean",
             "title": "Treasury Altered"
+          },
+          "gateway_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gateway Address"
           }
         },
         "type": "object",
