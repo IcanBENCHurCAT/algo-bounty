@@ -13,6 +13,7 @@ Usage:
 
 import os
 import re
+import secrets
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -147,7 +148,7 @@ class WebhookApiKeyAuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         # Validate API key
-        if api_key != self.required_key:
+        if not api_key or not secrets.compare_digest(api_key, self.required_key):
             return Response(
                 content='{"error": "Missing or invalid X-API-Key header"}',
                 status_code=401,
