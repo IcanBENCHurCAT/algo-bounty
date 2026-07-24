@@ -10,6 +10,8 @@ import { getNotifications } from '@/lib/api'
 import { WalletConnect } from '@/components/WalletConnect'
 import { NotificationsDrawer } from '@/components/NotificationsDrawer'
 
+import { useFallbackMode } from '@/hooks/useFallbackMode'
+
 const NAV_LINKS = [
   { href: '/',         label: 'Marketplace', id: 'nav-marketplace' },
   { href: '/create',   label: 'Post Bounty', id: 'nav-create' },
@@ -49,6 +51,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const { connected, jwt, karma, address } = useAuth()
   const { activeNetwork } = useNetwork()
+  const { isFallbackMode } = useFallbackMode()
   const [notifCount, setNotifCount] = useState(0)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -76,6 +79,31 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#070712' }}>
+
+      {isFallbackMode && (
+        <div
+          id="fallback-mode-banner"
+          style={{
+            background: 'linear-gradient(90deg, #991b1b, #7f1d1d)',
+            color: '#fecaca',
+            padding: '0.625rem 1rem',
+            textAlign: 'center',
+            fontSize: '0.875rem',
+            fontWeight: 600,
+            letterSpacing: '0.025em',
+            borderBottom: '1px solid rgba(220, 38, 38, 0.2)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '0.5rem',
+          }}
+        >
+          <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: '#ef4444' }} />
+          <span>Read-Only / Fallback Mode (Gateway API is offline. Reading directly from Algorand smart contracts)</span>
+        </div>
+      )}
+
+      {/* Header */}
 
       {/* Header */}
       <header

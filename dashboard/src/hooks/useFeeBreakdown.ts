@@ -14,6 +14,7 @@ export interface FeeBreakdown {
   escrow_amount: number    // microALGO
   developer_royalty: number
   platform_treasury: number
+  gateway_fee?: number
   mediator_fee: number
   claimant_payout: number
 }
@@ -22,6 +23,7 @@ export interface FeeBreakdownDisplay {
   total: string
   developer_royalty: string
   platform_treasury: string
+  gateway_fee?: string
   mediator_fee: string
   claimant_payout: string
 }
@@ -48,9 +50,19 @@ export function computeFeeBreakdown(
   isDispute: boolean = false,
   platformFeeBps: number = 200,
   developerFeeBps: number = 100,
+  gatewayAddress?: string,
 ): FeeBreakdown {
   const developer_royalty = Math.floor((escrowAmount * developerFeeBps) / 10000)
-  const platform_treasury = Math.floor((escrowAmount * Math.max(0, platformFeeBps - developerFeeBps)) / 10000)
+  const platform_treasury_total = Math.floor((escrowAmount * Math.max(0, platformFeeBps - developerFeeBps)) / 10000)
+  
+  let gateway_fee = 0
+  let platform_treasury = platform_treasury_total
+  
+  if (gatewayAddress && gatewayAddress !== '' && gatewayAddress !== 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAY5UXPM') {
+    gateway_fee = Math.floor(platform_treasury_total / 2)
+    platform_treasury = platform_treasury_total - gateway_fee
+  }
+  
   const mediatorTotal = Math.floor((escrowAmount * 25) / 10000) // 0.25%
   
   // Mediator fee is redirected to worker if HITM is enabled or if no dispute is raised.
@@ -60,8 +72,9 @@ export function computeFeeBreakdown(
     escrow_amount: escrowAmount,
     developer_royalty,
     platform_treasury,
+    gateway_fee,
     mediator_fee: mediator,
-    claimant_payout: escrowAmount - developer_royalty - platform_treasury - mediator,
+    claimant_payout: escrowAmount - developer_royalty - platform_treasury - gateway_fee - mediator,
   }
 }
 
@@ -71,6 +84,7 @@ export function formatFeeDisplay(fee: FeeBreakdown): FeeBreakdownDisplay {
     total: formatAlgoDisplay(fee.escrow_amount),
     developer_royalty: formatAlgoDisplay(fee.developer_royalty),
     platform_treasury: formatAlgoDisplay(fee.platform_treasury),
+    gateway_fee: fee.gateway_fee !== undefined ? formatAlgoDisplay(fee.gateway_fee) : undefined,
     mediator_fee: formatAlgoDisplay(fee.mediator_fee),
     claimant_payout: formatAlgoDisplay(fee.claimant_payout),
   }
@@ -88,9 +102,10 @@ export function useFeeBreakdown(
   isDispute: boolean = false,
   platformFeeBps: number = 200,
   developerFeeBps: number = 100,
+  gatewayAddress?: string,
 ): { breakdown: FeeBreakdown; display: FeeBreakdownDisplay } {
   return {
-    breakdown: computeFeeBreakdown(escrowAmount, hitmEnabled, isDispute, platformFeeBps, developerFeeBps),
-    display: formatFeeDisplay(computeFeeBreakdown(escrowAmount, hitmEnabled, isDispute, platformFeeBps, developerFeeBps)),
+    breakdown: computeFeeBreakdown(escrowAmount, hitmEnabled, isDispute, platformFeeBps, developerFeeBps, gatewayAddress),
+    display: formatFeeDisplay(computeFeeBreakdown(escrowAmount, hitmEnabled, isDispute, platformFeeBps, developerFeeBps, gatewayAddress)),
   }
 }

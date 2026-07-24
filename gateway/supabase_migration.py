@@ -188,6 +188,7 @@ CREATE_TABLES_SQL = """
 -- Agents: bounty hunters / workers
 CREATE TABLE IF NOT EXISTS agents (
     address            VARCHAR PRIMARY KEY,
+    github_username    VARCHAR UNIQUE,
     karma              INTEGER DEFAULT 25,
     completed_bounties INTEGER DEFAULT 0,
     disputes_lost      INTEGER DEFAULT 0,
@@ -211,9 +212,11 @@ CREATE TABLE IF NOT EXISTS bounties (
     deadline_round    INTEGER,
     hitm_review_days  INTEGER DEFAULT 7,
     rejection_count   INTEGER DEFAULT 0,
-    payout_type       VARCHAR,
     platform_fee      INTEGER DEFAULT 200,
-    treasury_address  VARCHAR DEFAULT 'RTCed54abc91f37d8d2d2cb2cf69ce60b0021fd67e5'
+    treasury_address  VARCHAR DEFAULT 'RTCed54abc91f37d8d2d2cb2cf69ce60b0021fd67e5',
+    gateway_address   VARCHAR,
+    authorized_app_id INTEGER,
+    hitm_enforced     BOOLEAN DEFAULT FALSE
 );
 
 -- GitHub Pull Requests linked to bounties
@@ -370,6 +373,7 @@ Base = declarative_base()
 class Agent(Base):
     __tablename__ = "agents"
     address = Column(String, primary_key=True, index=True)
+    github_username = Column(String, unique=True, nullable=True)
     karma = Column(Integer, default=25)
     completed_bounties = Column(Integer, default=0)
     disputes_lost = Column(Integer, default=0)
@@ -401,6 +405,10 @@ class Bounty(Base):
     treasury_altered = Column(Boolean, default=False, nullable=False)
     platform_fee = Column(Integer, default=200, nullable=False)
     treasury_address = Column(String(58), default="RTCed54abc91f37d8d2d2cb2cf69ce60b0021fd67e5", nullable=False)
+    gateway_address = Column(String(58), nullable=True)
+    authorized_app_id = Column(Integer, nullable=True)
+    hitm_enforced = Column(Boolean, default=False, nullable=False)
+
 
 
 class GitHubPR(Base):

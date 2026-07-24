@@ -1,15 +1,96 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="dark">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>API Docs</title>
+    <title>AlgoBounty API Reference — OpenAPI Specification</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-      body { margin: 0; padding: 0; }
+      body { margin: 0; padding: 0; background-color: #07090e; color: #cbd5e1; font-family: 'Inter', sans-serif; }
+      ::-webkit-scrollbar { width: 6px; height: 6px; }
+      ::-webkit-scrollbar-track { background: #07090e; }
+      ::-webkit-scrollbar-thumb { background: #1e2638; border-radius: 4px; }
+      ::-webkit-scrollbar-thumb:hover { background: #38bdf8; }
     </style>
   </head>
-  <body>
-    <redoc spec-url="./openapi.json"></redoc>
+  <body class="bg-[#07090e]">
+    <!-- Top Navigation Header Aligned with docs/index.html -->
+    <header class="fixed top-0 left-0 right-0 z-50 bg-[#0d111a]/90 backdrop-blur-md border-b border-[#1e2638] h-16 flex items-center px-4 sm:px-8 justify-between">
+        <div class="flex items-center space-x-4">
+            <a href="../index.html" class="flex items-center space-x-3 group">
+                <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-sky-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-sky-500/20 group-hover:scale-105 transition-transform">
+                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                </div>
+                <div>
+                    <span class="text-lg font-bold text-white tracking-tight group-hover:text-sky-400 transition-colors">AlgoBounty</span>
+                    <span class="text-xs font-semibold text-sky-400 bg-sky-900/60 border border-sky-500/30 px-2 py-0.5 rounded-full ml-2">API Reference</span>
+                </div>
+            </a>
+        </div>
+
+        <div class="flex items-center space-x-4">
+            <a href="../index.html" class="inline-flex items-center text-xs font-medium text-slate-300 hover:text-sky-400 px-3 py-1.5 rounded-lg border border-[#1e2638] hover:border-sky-500/50 bg-[#131824] transition-all">
+                <svg class="w-4 h-4 mr-1.5 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                </svg>
+                Documentation Home
+            </a>
+            <a href="https://github.com/IcanBENCHurCAT/algo-bounty" target="_blank" rel="noopener" class="inline-flex items-center text-xs font-medium text-white bg-sky-600 hover:bg-sky-500 px-3.5 py-1.5 rounded-lg shadow-sm shadow-sky-500/30 transition-all">
+                GitHub Repo
+            </a>
+        </div>
+    </header>
+
+    <!-- Redoc Spec Container -->
+    <div class="pt-16">
+      <redoc spec-url="./openapi.json"></redoc>
+    </div>
+
     <script src="https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js"></script>
+    <script>
+      Redoc.init('./openapi.json', {
+        theme: {
+          spacing: { unit: 5 },
+          colors: {
+            primary: { main: '#38bdf8' },
+            success: { main: '#10b981' },
+            warning: { main: '#f59e0b' },
+            error: { main: '#ef4444' },
+            text: { primary: '#e2e8f0', secondary: '#94a3b8' },
+            http: {
+              get: '#38bdf8',
+              post: '#10b981',
+              put: '#f59e0b',
+              delete: '#ef4444',
+            },
+            responses: {
+              success: { color: '#10b981' },
+              error: { color: '#ef4444' },
+            }
+          },
+          typography: {
+            fontSize: '14px',
+            fontFamily: 'Inter, sans-serif',
+            headings: { fontFamily: 'Inter, sans-serif', fontWeight: '700' },
+            code: { fontFamily: 'JetBrains Mono, monospace', fontSize: '13px' }
+          },
+          sidebar: {
+            backgroundColor: '#0d111a',
+            textColor: '#cbd5e1',
+            activeTextColor: '#38bdf8',
+            width: '260px'
+          },
+          rightPanel: {
+            backgroundColor: '#07090e',
+            textColor: '#e2e8f0'
+          }
+        }
+      }, document.querySelector('redoc'));
+    </script>
   </body>
 </html>

@@ -1,8 +1,10 @@
-﻿'use client'
+'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Bounty, BountyFilters } from '@/types'
 import { getBounties } from '@/lib/api'
+import { useFallbackMode } from '@/hooks/useFallbackMode'
+import { fetchBountiesFromChain } from '@/services/indexerFallback'
 
 interface UseBountiesReturn {
   bounties: Bounty[]
@@ -17,14 +19,6 @@ interface UseBountiesReturn {
 
 const DEFAULT_LIMIT = 20
 
-/**
- * useBounties — manages bounty list fetching with pagination.
- *
- * BUG FIX: The original page.tsx used `useState(() => loadBounties(1))` as the
- * initial state setter — this is broken because useState initializer returns
- * the initial state value synchronously (undefined here), not await the promise.
- * Fixed: proper useEffect with deps array.
- */
 export function useBounties(filters: BountyFilters = {}): UseBountiesReturn {
   const [bounties, setBounties] = useState<Bounty[]>([])
   const [loading, setLoading] = useState(false)
@@ -32,6 +26,8 @@ export function useBounties(filters: BountyFilters = {}): UseBountiesReturn {
   const [page, setPage] = useState(1)
   const [hasMore, setHasMore] = useState(false)
   const [total, setTotal] = useState(0)
+  
+  const { isFallbackMode, setFallbackMode } = useFallbackMode()
 
   // Stable ref for filters to avoid stale closures
   const filtersRef = useRef(filters)
@@ -40,6 +36,22 @@ export function useBounties(filters: BountyFilters = {}): UseBountiesReturn {
   const load = useCallback(async (targetPage: number, append = false) => {
     setLoading(true)
     setError(null)
+    
+    if (isFallbackMode) {
+      try {
+        const chainBounties = await fetchBountiesFromChain()
+        setBounties(chainBounties)
+        setHasMore(false)
+        setTotal(chainBounties.length)
+        setPage(1)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load bounties from chain')
+      } finally {
+        setLoading(false)
+      }
+      return
+    }
+
     try {
       const resp = await getBounties({
         ...filtersRef.current,
@@ -51,12 +63,35 @@ export function useBounties(filters: BountyFilters = {}): UseBountiesReturn {
       setTotal(resp.total)
       setPage(targetPage)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to load bounties'
-      setError(msg)
+      const errMsg = err instanceof Error ? err.message : ''
+      const isNetworkOr5xx = 
+        errMsg.includes('Failed to fetch') ||
+        errMsg.includes('NetworkError') ||
+        errMsg.includes('HTTP 5') ||
+        errMsg.includes('500') ||
+        errMsg.includes('502') ||
+        errMsg.includes('503') ||
+        errMsg.includes('504')
+
+      if (isNetworkOr5xx) {
+        setFallbackMode(true)
+        try {
+          const chainBounties = await fetchBountiesFromChain()
+          setBounties(chainBounties)
+          setHasMore(false)
+          setTotal(chainBounties.length)
+          setPage(1)
+        } catch (chainErr) {
+          setError('Gateway offline. Failed to fetch fallback data from Algorand: ' + (chainErr instanceof Error ? chainErr.message : 'unknown error'))
+        }
+      } else {
+        const msg = err instanceof Error ? err.message : 'Failed to load bounties'
+        setError(msg)
+      }
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [isFallbackMode, setFallbackMode])
 
   // Initial load and re-load when filters change
   useEffect(() => {

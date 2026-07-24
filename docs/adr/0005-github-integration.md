@@ -1,6 +1,7 @@
 # AlgoBounty v5: GitHub Integration Design Document
 
-**Status:** Design Complete  
+**Status:** Superseded by ADR 0011
+**Note:** Replaced by BYOA decentralized GitHub App architecture.
 **Date:** 2026-06-30  
 **Parent Card:** 4063bc1c (AlgoBounty Architecture)  
 **Related Docs:** v1 (TEAL Escrow), v2 (Karma), v4 (Dashboard/API), v6 (HITM Mode)  

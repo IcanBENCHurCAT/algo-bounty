@@ -57,4 +57,21 @@ describe('FeeBreakdownTable', () => {
     render(<FeeBreakdownTable fee={fee} display={display} hitm={true} label="Custom Label" />);
     expect(screen.getByRole('group')).toHaveAttribute('aria-label', 'Custom Label');
   });
+
+  it('renders gateway node fee and platform treasury at 0.5% when gateway_fee is present', () => {
+    const feeWithGateway = {
+      ...fee,
+      platform_treasury: 5_000_000,
+      gateway_fee: 5_000_000,
+    };
+    const displayWithGateway = {
+      ...display,
+      platform_treasury: '0.05 ALGO',
+      gateway_fee: '0.05 ALGO',
+    };
+    render(<FeeBreakdownTable fee={feeWithGateway} display={displayWithGateway} hitm={true} label="Test" />);
+    expect(screen.getByText('Platform Treasury (0.5%)')).toBeInTheDocument();
+    expect(screen.getByText('Gateway Node Fee (0.5%)')).toBeInTheDocument();
+    expect(screen.getAllByText('0.05 ALGO')).toHaveLength(2);
+  });
 });

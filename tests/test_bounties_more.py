@@ -215,7 +215,7 @@ def test_create_bounty_custom_treasury_deduction(client, db_session, seeded_agen
          patch("gateway.config.Config.TREASURY_ADDRESS", new_callable=PropertyMock, return_value="CREATOR_ADDR"):
          
         # 2. Build custom treasury transaction
-        method = Method.from_signature("create_bounty(byte[],uint64,uint64,uint64,uint64,address,address)void")
+        method = Method.from_signature("create_bounty(byte[],uint64,uint64,uint64,uint64,address,address,address,uint64)void")
         selector = method.get_selector()
         
         b_id = ABIType.from_string("byte[]").encode(b"b_custom_t")
@@ -225,8 +225,10 @@ def test_create_bounty_custom_treasury_deduction(client, db_session, seeded_agen
         days = ABIType.from_string("uint64").encode(7)
         med = algosdk.encoding.decode_address("CREATOR_ADDR")
         custom_treasury = algosdk.encoding.decode_address("WORKER_ADDR") # different treasury
+        gw = algosdk.encoding.decode_address("CREATOR_ADDR")
+        auth_app = ABIType.from_string("uint64").encode(12345)
         
-        app_args = [selector, b_id, amt, hitm, asset, days, med, custom_treasury]
+        app_args = [selector, b_id, amt, hitm, asset, days, med, custom_treasury, gw, auth_app]
         params = SuggestedParams(fee=1000, first=1, last=100, gh="Z2VuZXNpc19oYXNoXzMyX2J5dGVzX2xvbmdfcGFkZGVk")
         
         txn = ApplicationNoOpTxn(
