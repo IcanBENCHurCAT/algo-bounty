@@ -15,7 +15,78 @@ const DOCS_IMG_DIR = path.join(process.cwd(), '..', 'docs', 'images');
 test('Capture Full Rich UI Lifecycle Screenshots (Marketplace, Claim Modal, Submit View, Approve Modal)', async ({ context, page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
 
-  // Apply route mocks on context level so all new pages/tabs receive the mock
+  // Route mock responses for marketplace listing (only matching exact /api/v1/bounties endpoint)
+  await context.route(url => url.pathname === '/api/v1/bounties', async route => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          bounties: [
+            {
+              bounty_id: 'b_1001',
+              app_id: 1001,
+              status: 'open',
+              creator: 'CREATOR_ADDRESS_123456789',
+              worker: null,
+              amount: 150000000,
+              asset_id: 0,
+              asset_name: 'ALGO',
+              hitm: true,
+              description: 'Build a Next.js Landing Page & Wallet Verification Hook',
+              repo_url: 'https://github.com/IcanBENCHurCAT/algo-bounty',
+              karma_requirement: 10,
+              created_at: new Date().toISOString(),
+              rejection_count: 0,
+              treasury_altered: false
+            },
+            {
+              bounty_id: 'b_1002',
+              app_id: 1002,
+              status: 'claimed',
+              creator: 'CREATOR_ADDRESS_123456789',
+              worker: 'WORKER_ADDRESS_987654321',
+              amount: 250000000,
+              asset_id: 0,
+              asset_name: 'ALGO',
+              hitm: false,
+              description: 'Refactor Puya Smart Contract Escrow State Machine',
+              repo_url: 'https://github.com/IcanBENCHurCAT/algo-bounty',
+              karma_requirement: 25,
+              created_at: new Date().toISOString(),
+              rejection_count: 0,
+              treasury_altered: false
+            },
+            {
+              bounty_id: 'b_1003',
+              app_id: 1003,
+              status: 'submitted',
+              creator: 'CREATOR_ADDRESS_123456789',
+              worker: 'WORKER_ADDRESS_987654321',
+              amount: 500000000,
+              asset_id: 0,
+              asset_name: 'ALGO',
+              hitm: true,
+              description: 'Implement Automated GitHub OIDC Action Verification',
+              repo_url: 'https://github.com/IcanBENCHurCAT/algo-bounty',
+              karma_requirement: 15,
+              created_at: new Date().toISOString(),
+              rejection_count: 0,
+              treasury_altered: false
+            }
+          ],
+          total: 3,
+          page: 1,
+          limit: 20,
+          has_more: false
+        })
+      });
+    } else {
+      await route.continue();
+    }
+  });
+
+  // Route mock responses for transaction preparation so modals open cleanly with estimated mediator fee
   await context.route('**/api/v1/bounties/*/claim/txn', async route => {
     await route.fulfill({
       status: 200,
@@ -27,6 +98,7 @@ test('Capture Full Rich UI Lifecycle Screenshots (Marketplace, Claim Modal, Subm
           developer_royalty: 1500000,
           platform_treasury: 1500000,
           mediator_fee: 0,
+          estimated_mediator_fee: 375000,
           claimant_payout: 147000000
         },
         fee_breakdown_display: {
@@ -34,6 +106,7 @@ test('Capture Full Rich UI Lifecycle Screenshots (Marketplace, Claim Modal, Subm
           developer_royalty: "1.50 ALGO",
           platform_treasury: "1.50 ALGO",
           mediator_fee: "0 ALGO",
+          estimated_mediator_fee: "0.38 ALGO",
           claimant_payout: "147 ALGO"
         }
       })
@@ -51,6 +124,7 @@ test('Capture Full Rich UI Lifecycle Screenshots (Marketplace, Claim Modal, Subm
           developer_royalty: 5000000,
           platform_treasury: 5000000,
           mediator_fee: 0,
+          estimated_mediator_fee: 1250000,
           claimant_payout: 490000000
         },
         fee_breakdown_display: {
@@ -58,6 +132,7 @@ test('Capture Full Rich UI Lifecycle Screenshots (Marketplace, Claim Modal, Subm
           developer_royalty: "5.00 ALGO",
           platform_treasury: "5.00 ALGO",
           mediator_fee: "0 ALGO",
+          estimated_mediator_fee: "1.25 ALGO",
           claimant_payout: "490 ALGO"
         }
       })

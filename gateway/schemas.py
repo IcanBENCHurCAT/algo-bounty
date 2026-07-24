@@ -61,13 +61,16 @@ class FeeBreakdown(BaseModel):
     developer_royalty: int  # 1%: escrow * 2 // 100 // 2
     platform_treasury: int  # 1%: escrow * 2 // 100 // 2
     mediator_fee: int  # 0.25%: escrow * 25 // 10000 (only if HITM)
+    estimated_mediator_fee: Optional[int] = 0  # 0.25% cost if dispute is invoked
     claimant_payout: int  # escrow - royalty - treasury - mediator
+
 class FeeBreakdownDisplay(BaseModel):
     """Human-readable display strings for the frontend modal."""
     total: str
     developer_royalty: str
     platform_treasury: str
     mediator_fee: str
+    estimated_mediator_fee: Optional[str] = None
     claimant_payout: str
 
 

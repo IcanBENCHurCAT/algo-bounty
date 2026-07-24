@@ -363,8 +363,9 @@ async def get_claim_txn(
     fee_royalty = fee_platform // 2
     fee_treasury = fee_platform - fee_royalty
     
-    # Mediator Fee Safety Net (Constitution v2.1.0): always 0 unless active dispute
+    # Mediator Fee Safety Net (Constitution v2.1.0): 0 unless active dispute
     mediator_fee = 0
+    estimated_mediator_fee = (escrow_amount * 25) // 10000
     claimant_payout = escrow_amount - fee_royalty - fee_treasury - mediator_fee
 
     fee_breakdown = FeeBreakdown(
@@ -372,6 +373,7 @@ async def get_claim_txn(
         developer_royalty=fee_royalty,
         platform_treasury=fee_treasury,
         mediator_fee=mediator_fee,
+        estimated_mediator_fee=estimated_mediator_fee,
         claimant_payout=claimant_payout,
     )
 
@@ -387,6 +389,7 @@ async def get_claim_txn(
         developer_royalty=_fmt(fee_royalty),
         platform_treasury=_fmt(fee_treasury),
         mediator_fee=_fmt(mediator_fee),
+        estimated_mediator_fee=_fmt(estimated_mediator_fee),
         claimant_payout=_fmt(claimant_payout),
     )
 
@@ -606,8 +609,9 @@ async def get_approve_txn(
     fee_royalty = fee_platform // 2
     fee_treasury = fee_platform - fee_royalty
     
-    # Mediator Fee Safety Net (Constitution v2.1.0): always 0 unless active dispute
+    # Mediator Fee Safety Net (Constitution v2.1.0): 0 unless active dispute
     mediator_fee = 0
+    estimated_mediator_fee = (escrow_amount * 25) // 10000
     claimant_payout = escrow_amount - fee_royalty - fee_treasury - mediator_fee
 
     fee_breakdown = FeeBreakdown(
@@ -615,6 +619,7 @@ async def get_approve_txn(
         developer_royalty=fee_royalty,
         platform_treasury=fee_treasury,
         mediator_fee=mediator_fee,
+        estimated_mediator_fee=estimated_mediator_fee,
         claimant_payout=claimant_payout,
     )
 
@@ -630,6 +635,7 @@ async def get_approve_txn(
         developer_royalty=_fmt(fee_royalty),
         platform_treasury=_fmt(fee_treasury),
         mediator_fee=_fmt(mediator_fee),
+        estimated_mediator_fee=_fmt(estimated_mediator_fee),
         claimant_payout=_fmt(claimant_payout),
     )
 

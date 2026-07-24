@@ -199,6 +199,7 @@ export interface FeeBreakdown {
   platform_treasury: number
   gateway_fee?: number
   mediator_fee: number
+  estimated_mediator_fee?: number
   claimant_payout: number
 }
 
@@ -208,6 +209,7 @@ export interface FeeBreakdownDisplay {
   platform_treasury: string
   gateway_fee?: string
   mediator_fee: string
+  estimated_mediator_fee?: string
   claimant_payout: string
 }
 

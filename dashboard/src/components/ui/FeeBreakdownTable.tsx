@@ -27,6 +27,14 @@ export function FeeBreakdownTable({
   hitm,
   label = 'Fee Breakdown',
 }: FeeBreakdownTableProps) {
+  const estMediatorDisplay = display.estimated_mediator_fee ?? (
+    fee.escrow_amount != null
+      ? (fee.escrow_amount * 0.0025 / 1_000_000 % 1 === 0
+          ? `${(fee.escrow_amount * 0.0025 / 1_000_000).toFixed(0)} ALGO`
+          : `${(fee.escrow_amount * 0.0025 / 1_000_000).toFixed(2)} ALGO`)
+      : '0.25%'
+  )
+
   const rows = [
     {
       label: 'Total Released',
@@ -70,7 +78,7 @@ export function FeeBreakdownTable({
           </span>
           {fee.mediator_fee === 0 && (
             <span style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 500, lineHeight: '1.2' }}>
-              Redirected to Payout (would be {display.mediator_fee} if invoked)
+              Redirected to Payout (would be {estMediatorDisplay} if invoked)
             </span>
           )}
         </div>
