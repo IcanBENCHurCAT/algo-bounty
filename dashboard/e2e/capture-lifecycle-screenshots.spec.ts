@@ -13,23 +13,21 @@ const DOCS_IMG_DIR = path.join(process.cwd(), '..', 'docs', 'images');
 });
 
 test('Capture Bounty Lifecycle Screenshots (Claim, Submit, Approve)', async ({ page }) => {
-  console.log('--- Step 1: Navigate to Marketplace & Pick Open Bounty ---');
+  console.log('--- Step 1: Navigate to Marketplace Dashboard ---');
   await page.goto('http://localhost:3000/');
+  await page.waitForSelector('h1');
   await page.waitForTimeout(1000);
 
-  // Click first bounty card or link
-  const firstBountyLink = page.locator('a[href^="/bounties/"]').first();
-  if (await firstBountyLink.isVisible()) {
-    await firstBountyLink.click();
-  } else {
-    // Navigate directly to a bounty detail page or b_1
-    await page.goto('http://localhost:3000/bounties/b_1');
-  }
+  // Capture full marketplace homepage with loaded cards
+  await page.screenshot({ path: `${DOCS_IMG_DIR}/marketplace_dashboard.png` });
+  await page.screenshot({ path: `${BRAIN_DIR}/marketplace_dashboard.png` });
 
+  console.log('--- Step 2: Open Bounty Detail Page & Capture Detail View ---');
+  await page.goto('http://localhost:3000/bounties/b_12345');
+  await page.waitForSelector('h1');
   await page.waitForTimeout(1000);
 
-  // Inject Worker (Bob) Wallet Session to simulate worker claiming
-  console.log('--- Step 2: Simulate Worker Claim & Capture Claim Modal ---');
+  // Inject Worker (Bob) Wallet Session
   await page.evaluate(() => {
     window.localStorage.setItem('algobounty_jwt', 'mock_jwt_worker_token');
     window.localStorage.setItem('algobounty_address', 'WORKER_ADDRESS_987654321');
@@ -38,38 +36,32 @@ test('Capture Bounty Lifecycle Screenshots (Claim, Submit, Approve)', async ({ p
   });
 
   await page.reload();
+  await page.waitForSelector('h1');
   await page.waitForTimeout(1000);
 
-  // Take screenshot of Bounty Detail View as Worker
+  // Take screenshot of fully rendered Bounty Detail View as Worker
   await page.screenshot({ path: `${DOCS_IMG_DIR}/bounty_detail_view.png` });
   await page.screenshot({ path: `${BRAIN_DIR}/bounty_detail_view.png` });
 
+  console.log('--- Step 3: Trigger Claim Action / Capture Claim Interface ---');
   const claimBtn = page.locator('#claim-btn');
   if (await claimBtn.isVisible()) {
     await claimBtn.click();
     await page.waitForTimeout(600);
-    await page.screenshot({ path: `${DOCS_IMG_DIR}/claim_bounty_modal.png` });
-    await page.screenshot({ path: `${BRAIN_DIR}/claim_bounty_modal.png` });
-  } else {
-    // If claim button not visible due to state, take screenshot of the action section
-    await page.screenshot({ path: `${DOCS_IMG_DIR}/claim_bounty_modal.png` });
-    await page.screenshot({ path: `${BRAIN_DIR}/claim_bounty_modal.png` });
   }
+  await page.screenshot({ path: `${DOCS_IMG_DIR}/claim_bounty_modal.png` });
+  await page.screenshot({ path: `${BRAIN_DIR}/claim_bounty_modal.png` });
 
-  console.log('--- Step 3: Simulate Submitting Work (PR Link Input) ---');
+  console.log('--- Step 4: Simulate Submitting Work (PR Link Input) ---');
   const prInput = page.locator('#pr-url-input');
   if (await prInput.isVisible()) {
     await prInput.fill('https://github.com/IcanBENCHurCAT/algo-bounty/pull/42');
     await page.waitForTimeout(400);
-    await page.screenshot({ path: `${DOCS_IMG_DIR}/submit_work_view.png` });
-    await page.screenshot({ path: `${BRAIN_DIR}/submit_work_view.png` });
-  } else {
-    await page.screenshot({ path: `${DOCS_IMG_DIR}/submit_work_view.png` });
-    await page.screenshot({ path: `${BRAIN_DIR}/submit_work_view.png` });
   }
+  await page.screenshot({ path: `${DOCS_IMG_DIR}/submit_work_view.png` });
+  await page.screenshot({ path: `${BRAIN_DIR}/submit_work_view.png` });
 
-  console.log('--- Step 4: Simulate Creator Approval & Fee Breakdown Modal ---');
-  // Inject Creator session
+  console.log('--- Step 5: Simulate Creator Approval & Fee Breakdown ---');
   await page.evaluate(() => {
     window.localStorage.setItem('algobounty_jwt', 'mock_jwt_creator_token');
     window.localStorage.setItem('algobounty_address', 'CREATOR_ADDRESS_123456789');
@@ -77,18 +69,16 @@ test('Capture Bounty Lifecycle Screenshots (Claim, Submit, Approve)', async ({ p
   });
 
   await page.reload();
+  await page.waitForSelector('h1');
   await page.waitForTimeout(1000);
 
   const approveBtn = page.locator('#approve-btn');
   if (await approveBtn.isVisible()) {
     await approveBtn.click();
     await page.waitForTimeout(600);
-    await page.screenshot({ path: `${DOCS_IMG_DIR}/approve_payout_modal.png` });
-    await page.screenshot({ path: `${BRAIN_DIR}/approve_payout_modal.png` });
-  } else {
-    await page.screenshot({ path: `${DOCS_IMG_DIR}/approve_payout_modal.png` });
-    await page.screenshot({ path: `${BRAIN_DIR}/approve_payout_modal.png` });
   }
+  await page.screenshot({ path: `${DOCS_IMG_DIR}/approve_payout_modal.png` });
+  await page.screenshot({ path: `${BRAIN_DIR}/approve_payout_modal.png` });
 
   console.log('Lifecycle screenshots capture complete.');
 });

@@ -148,7 +148,7 @@ class BountyResponse(BaseModel):
     treasury_altered: bool
     gateway_address: Optional[str] = None
     authorized_app_id: Optional[int] = None
-    hitm_enforced: bool = False
+    hitm_enforced: Optional[bool] = False
 
 
 class ListBountiesResponse(BaseModel):
