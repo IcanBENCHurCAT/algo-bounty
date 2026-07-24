@@ -49,16 +49,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signTransactions,
   } = useWallet()
 
-  const isE2EOnInit = typeof window !== 'undefined' && window.localStorage.getItem('algobounty_connected') === 'true'
-  const initialAddr = isE2EOnInit ? window.localStorage.getItem('algobounty_address') : null
-  const initialJwt = isE2EOnInit ? window.localStorage.getItem('algobounty_jwt') : null
-
   const [state, setState] = useState<WalletAuthState>({
-    address: initialAddr,
-    connected: isE2EOnInit && Boolean(initialAddr),
-    walletType: isE2EOnInit ? (window.localStorage.getItem('algobounty_wallet_type') || 'pera') : null,
-    jwt: initialJwt,
-    karma: 25,
+    address: null,
+    connected: false,
+    walletType: null,
+    jwt: null,
+    karma: 0,
     profile: null,
     loading: false,
     error: null,

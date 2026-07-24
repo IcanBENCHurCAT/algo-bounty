@@ -72,9 +72,12 @@ test('Capture Full Rich UI Lifecycle Screenshots (Marketplace, Claim Modal, Subm
 
   console.log('--- Step 1: Marketplace Dashboard with Loaded Cards ---');
   await page.goto('http://localhost:3000/');
-  await page.waitForSelector('h1');
-  await page.waitForTimeout(2500);
+  
+  // Wait explicitly for .bounty-card element to mount (skipping skeleton boxes)
+  await page.waitForSelector('.bounty-card', { timeout: 10000 });
+  await page.waitForTimeout(1000);
 
+  // Capture full marketplace homepage with loaded cards
   await page.screenshot({ path: `${DOCS_IMG_DIR}/marketplace_dashboard.png` });
   await page.screenshot({ path: `${BRAIN_DIR}/marketplace_dashboard.png` });
 
@@ -89,14 +92,13 @@ test('Capture Full Rich UI Lifecycle Screenshots (Marketplace, Claim Modal, Subm
   }, worker);
 
   await workerPage.goto('http://localhost:3000/bounties/b_1001');
-  await workerPage.waitForSelector('h1');
-  await workerPage.waitForTimeout(1500);
+  await workerPage.waitForSelector('#claim-btn', { timeout: 10000 });
+  await workerPage.waitForTimeout(1000);
 
   await workerPage.screenshot({ path: `${DOCS_IMG_DIR}/bounty_detail_view.png` });
   await workerPage.screenshot({ path: `${BRAIN_DIR}/bounty_detail_view.png` });
 
   const claimBtn = workerPage.locator('#claim-btn');
-  await claimBtn.waitFor({ state: 'visible', timeout: 5000 });
   await claimBtn.click();
   await workerPage.waitForSelector('#claim-modal-title', { timeout: 5000 });
   await workerPage.waitForTimeout(800);
@@ -105,14 +107,12 @@ test('Capture Full Rich UI Lifecycle Screenshots (Marketplace, Claim Modal, Subm
 
   console.log('--- Step 3: Submitting Work View on Claimed Bounty (b_1002) ---');
   await workerPage.goto('http://localhost:3000/bounties/b_1002');
-  await workerPage.waitForSelector('h1');
-  await workerPage.waitForTimeout(1500);
+  await workerPage.waitForSelector('#pr-url-input', { timeout: 10000 });
+  await workerPage.waitForTimeout(1000);
 
   const prInput = workerPage.locator('#pr-url-input');
-  if (await prInput.isVisible()) {
-    await prInput.fill('https://github.com/IcanBENCHurCAT/algo-bounty/pull/42');
-    await workerPage.waitForTimeout(600);
-  }
+  await prInput.fill('https://github.com/IcanBENCHurCAT/algo-bounty/pull/42');
+  await workerPage.waitForTimeout(600);
   await workerPage.screenshot({ path: `${DOCS_IMG_DIR}/submit_work_view.png` });
   await workerPage.screenshot({ path: `${BRAIN_DIR}/submit_work_view.png` });
 
@@ -127,11 +127,10 @@ test('Capture Full Rich UI Lifecycle Screenshots (Marketplace, Claim Modal, Subm
   }, creator);
 
   await creatorPage.goto('http://localhost:3000/bounties/b_1003');
-  await creatorPage.waitForSelector('h1');
-  await creatorPage.waitForTimeout(1500);
+  await creatorPage.waitForSelector('#approve-btn', { timeout: 10000 });
+  await creatorPage.waitForTimeout(1000);
 
   const approveBtn = creatorPage.locator('#approve-btn');
-  await approveBtn.waitFor({ state: 'visible', timeout: 5000 });
   await approveBtn.click();
   await creatorPage.waitForSelector('#approve-modal-title', { timeout: 5000 });
   await creatorPage.waitForTimeout(800);
