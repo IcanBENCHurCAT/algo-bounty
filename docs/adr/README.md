@@ -11,3 +11,6 @@ This directory contains Architecture Decision Records for AlgoBounty.
 * [0007 - Handover](0007-handover.md)
 * [0008 - Redis Karma Bootstrap](0008-redis-karma-bootstrap.md)
 * [0009 - AP2 Integration](0009-ap2-integration.md)
+* [0010 - Direct-to-Chain Fallback](0010-direct-to-chain-fallback.md)
+* [0011 - BYOA GitHub Integration](0011-byoa-github-integration.md)
+* [0012 - Node Incentivization](0012-node-incentivization.md)

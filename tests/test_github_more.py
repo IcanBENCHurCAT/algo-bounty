@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
-from gateway.github import get_github_bot_token, verify_webhook_signature, post_github_comment_and_labels, log_bot_comment
+from gateway.github import get_github_bot_token, verify_webhook_signature, post_github_comment_and_labels, log_bot_comment, handle_pr_event
+from gateway.database import Agent, Bounty
 
 @pytest.mark.asyncio
 async def test_get_github_bot_token():
@@ -162,3 +163,135 @@ def test_validate_webhook():
     # 5. Success
     ok, reason = validate_webhook("issues", "secret", sig, "del1", b"body", "ip")
     assert ok is True
+
+
+@pytest.mark.asyncio
+async def test_link_github_username_api(client, db_session):
+    # Setup test agent
+    agent = Agent(address="TEST_AGENT_ADDR_1", karma=30)
+    db_session.add(agent)
+    db_session.commit()
+
+    # Generate JWT for authentication
+    from gateway.auth import create_jwt_token
+    token = create_jwt_token("TEST_AGENT_ADDR_1")
+
+    # Link GitHub username
+    response = client.put(
+        "/api/v1/agents/me/github",
+        json={"github_username": "coolworker"},
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["github_username"] == "coolworker"
+    assert data["address"] == "TEST_AGENT_ADDR_1"
+
+    # Query DB and verify
+    agent_db = db_session.query(Agent).filter(Agent.address == "TEST_AGENT_ADDR_1").first()
+    assert agent_db.github_username == "coolworker"
+
+
+@pytest.mark.asyncio
+async def test_handle_pr_event_linkage(db_session):
+    # Setup linked agent
+    agent = Agent(address="ALGO_WALLET_ADDR_123", github_username="coolworker", karma=50)
+    db_session.add(agent)
+
+    # Setup bounty in submitted state
+    bounty = Bounty(
+        bounty_id="b_999",
+        app_id=99999,
+        status="submitted",
+        creator="C1",
+        amount=10000000,
+        repo_url="https://github.com/owner/repo",
+        is_hitm=False,
+        authorized_app_id=123,
+        hitm_enforced=False
+    )
+    db_session.add(bounty)
+    db_session.commit()
+
+    # Case 1: Payout fails / blocked when worker has no linked wallet
+    payload_no_wallet = {
+        "action": "closed",
+        "pull_request": {
+            "number": 999,
+            "title": "Fix ALGO-999",
+            "body": "Fixes #ALGO-999",
+            "merged": True,
+            "user": {"login": "unregistered_worker"}
+        },
+        "repository": {"html_url": "https://github.com/owner/repo"}
+    }
+
+    from unittest.mock import PropertyMock
+    with patch("gateway.config.Config.ALGORAND_NETWORK", new_callable=PropertyMock, return_value="testnet"), \
+         patch.dict("os.environ", {"TESTING": "False"}), \
+         patch("gateway.github.post_github_comment_and_labels", new_callable=AsyncMock) as mock_post:
+        await handle_pr_event(db_session, payload_no_wallet)
+        # Should NOT trigger payout and should post warning comment
+        mock_post.assert_called_once()
+        assert "Auto-Release Blocked" in mock_post.call_args[1]["comment"]
+
+    # Case 2: Payout succeeds when worker username is linked to wallet
+    payload_success = {
+        "action": "closed",
+        "pull_request": {
+            "number": 999,
+            "title": "Fix ALGO-999",
+            "body": "Fixes #ALGO-999",
+            "merged": True,
+            "user": {"login": "coolworker"}
+        },
+        "repository": {"html_url": "https://github.com/owner/repo"}
+    }
+
+    with patch("gateway.github.release_trustless") as mock_release, \
+         patch("gateway.github.post_github_comment_and_labels", new_callable=AsyncMock) as mock_post:
+        mock_release.return_value = {"success": True, "tx_id": "REAL_TX_ID"}
+        await handle_pr_event(db_session, payload_success)
+
+        # release_trustless should be called with correct recipient wallet address
+        mock_release.assert_called_once_with(app_id=99999, worker_address="ALGO_WALLET_ADDR_123")
+        
+        # Bounty status should be closed
+        db_session.refresh(bounty)
+        assert bounty.status == "closed"
+
+
+@pytest.mark.asyncio
+async def test_bounty_creation_byoa_fields(client, db_session):
+    # Setup test agent
+    agent = Agent(address="CREATOR_ADDR_123", karma=50)
+    db_session.add(agent)
+    db_session.commit()
+
+    from gateway.auth import create_jwt_token
+    token = create_jwt_token("CREATOR_ADDR_123")
+
+    from unittest.mock import PropertyMock
+    with patch("gateway.routers.bounties.sandbox_active", True), \
+         patch("gateway.config.Config.GITHUB_APP_ID", new_callable=PropertyMock, return_value="98765"):
+        # Post request to create bounty
+        response = client.post(
+            "/api/v1/bounties",
+            json={
+                "description": "Test BYOA bounty",
+                "amount": 20000000,
+                "repo_url": "https://github.com/owner/repo",
+                "hitm": False
+            },
+            headers={"Authorization": f"Bearer {token}"}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        b_id = data["bounty_id"]
+
+        # Check DB columns
+        bounty = db_session.query(Bounty).filter(Bounty.bounty_id == b_id).first()
+        assert bounty is not None
+        assert bounty.authorized_app_id == 98765
+        assert bounty.hitm_enforced is False
+        assert bounty.is_hitm is False

@@ -95,7 +95,10 @@ def list_bounties(
             "karma_requirement": b.karma_requirement,
             "created_at": b.created_at.replace(tzinfo=UTC).isoformat().replace("+00:00", "Z"),
             "rejection_count": b.rejection_count,
-            "treasury_altered": b.treasury_altered
+            "treasury_altered": b.treasury_altered,
+            "gateway_address": b.gateway_address,
+            "authorized_app_id": b.authorized_app_id,
+            "hitm_enforced": b.hitm_enforced
         })
     return {"bounties": result, "total": len(result)}
 
@@ -119,7 +122,10 @@ def get_bounty(bounty_id: str, db: Session = Depends(get_db)):
         "karma_requirement": b.karma_requirement,
         "created_at": b.created_at.replace(tzinfo=UTC).isoformat().replace("+00:00", "Z"),
         "rejection_count": b.rejection_count,
-        "treasury_altered": b.treasury_altered
+        "treasury_altered": b.treasury_altered,
+        "gateway_address": b.gateway_address,
+        "authorized_app_id": b.authorized_app_id,
+        "hitm_enforced": b.hitm_enforced
     }
 
 @router.post("", response_model=BountyCreateResponse, summary="Create a new bounty", description="Deploy a new bounty escrow on-chain (if not in sandbox) and create a database record. Deducts 1 karma from the creator.")
@@ -189,7 +195,7 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
 
             b64_list = body.signed_txn.split(",") if "," in body.signed_txn else [body.signed_txn]
             
-            method = Method.from_signature("create_bounty(byte[],uint64,uint64,uint64,uint64,address,address)void")
+            method = Method.from_signature("create_bounty(byte[],uint64,uint64,uint64,uint64,address,address,address,uint64)void")
             create_selector = method.get_selector()
 
             for b64 in b64_list:
@@ -221,12 +227,34 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
         agent.karma -= 1
     db.commit()
 
+    authorized_app = None
+    if settings.GITHUB_APP_ID:
+        try:
+            authorized_app = int(settings.GITHUB_APP_ID)
+        except (ValueError, TypeError):
+            pass
+    if body.authorized_app_id is not None:
+        authorized_app = body.authorized_app_id
+
+    is_hitm_enforced = False
+    if not authorized_app:
+        is_hitm_enforced = True
+    elif body.hitm_enforced is not None:
+        is_hitm_enforced = body.hitm_enforced
+    elif body.hitm:
+        is_hitm_enforced = True
+
     default_treasury = settings.TREASURY_ADDRESS or "RTCed54abc91f37d8d2d2cb2cf69ce60b0021fd67e5"
     if body.bounty_id:
         pending_bounty.status = "open"
         pending_bounty.treasury_altered = is_custom_treasury
         pending_bounty.platform_fee = body.platform_fee
         pending_bounty.treasury_address = body.treasury_address or default_treasury
+        pending_bounty.gateway_address = body.gateway_address
+        pending_bounty.authorized_app_id = authorized_app
+        pending_bounty.hitm_enforced = is_hitm_enforced
+        if is_hitm_enforced:
+            pending_bounty.is_hitm = True
         db.commit()
     else:
         new_bounty = Bounty(
@@ -236,14 +264,17 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
             creator=current_user,
             amount=body.amount,
             asset_id=body.asset_id,
-            is_hitm=body.hitm,
+            is_hitm=body.hitm or is_hitm_enforced,
             description=body.description,
             repo_url=body.repo_url,
             karma_requirement=body.karma_requirement,
             hitm_review_days=body.hitm_review_days,
             treasury_altered=is_custom_treasury,
             platform_fee=body.platform_fee,
-            treasury_address=body.treasury_address or default_treasury
+            treasury_address=body.treasury_address or default_treasury,
+            gateway_address=body.gateway_address,
+            authorized_app_id=authorized_app,
+            hitm_enforced=is_hitm_enforced
         )
         db.add(new_bounty)
         db.commit()

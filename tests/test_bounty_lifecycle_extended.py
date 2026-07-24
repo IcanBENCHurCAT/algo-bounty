@@ -127,3 +127,35 @@ def test_dispute_unauthorized(client, seeded_agents):
     dispute_res = client.post(f"/api/v1/bounties/{bounty_id}/dispute", json={"reason": "none", "signed_txn": ""}, headers={"Authorization": f"Bearer {random_token}"})
     assert dispute_res.status_code == 403
     assert "Only bounty participants" in dispute_res.json()["detail"]
+
+
+def test_create_bounty_with_gateway_address(client, seeded_agents, db_session):
+    token = get_auth_token(client, "CREATOR_ADDR")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    bounty_payload = {
+        "description": "Bounty with Gateway Address",
+        "amount": 100,
+        "repo_url": "https://github.com/test/test",
+        "hitm": False,
+        "gateway_address": "WORKER_ADDR"
+    }
+    
+    with patch("gateway.routers.bounties.get_algod_client"), \
+         patch("gateway.routers.bounties.compile_escrow_contract"), \
+         patch("gateway.routers.bounties.is_sandbox", return_value=True):
+        res = client.post("/api/v1/bounties", json=bounty_payload, headers=headers)
+        
+    assert res.status_code == 200
+    bounty_id = res.json()["bounty_id"]
+
+    # Verify database
+    db_bounty = db_session.query(Bounty).filter(Bounty.bounty_id == bounty_id).first()
+    assert db_bounty is not None
+    assert db_bounty.gateway_address == "WORKER_ADDR"
+
+    # Verify GET API response
+    get_res = client.get(f"/api/v1/bounties/{bounty_id}")
+    assert get_res.status_code == 200
+    assert get_res.json()["gateway_address"] == "WORKER_ADDR"
+

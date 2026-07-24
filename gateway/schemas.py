@@ -24,6 +24,10 @@ class BountyCreate(BaseModel):
     bounty_id: Optional[str] = None
     platform_fee: int = 200
     treasury_address: Optional[str] = None
+    gateway_address: Optional[str] = None
+    authorized_app_id: Optional[int] = None
+    hitm_enforced: Optional[bool] = None
+
 
 class BountyDeployResponse(BaseModel):
     unsigned_txns: list[str]
@@ -69,9 +73,13 @@ class FeeBreakdownDisplay(BaseModel):
 
 class AgentProfileResponse(BaseModel):
     address: str
+    github_username: Optional[str] = None
     karma: int
     completed_bounties: int
     disputes_lost: int
+
+class AgentLinkGitHub(BaseModel):
+    github_username: str
 
 class AlgorandHealthResponse(BaseModel):
     status: str
@@ -138,6 +146,10 @@ class BountyResponse(BaseModel):
     created_at: str
     rejection_count: int
     treasury_altered: bool
+    gateway_address: Optional[str] = None
+    authorized_app_id: Optional[int] = None
+    hitm_enforced: bool = False
+
 
 class ListBountiesResponse(BaseModel):
     bounties: list[BountyResponse]

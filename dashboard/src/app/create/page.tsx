@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/Button'
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card'
 import { useFeeBreakdown } from '@/hooks/useFeeBreakdown'
 import { FeeBreakdownTable } from '@/components/ui/FeeBreakdownTable'
+import { useFallbackMode } from '@/hooks/useFallbackMode'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -103,6 +104,7 @@ export default function CreateBountyPage() {
   const router = useRouter()
   const { connected, jwt, karma } = useAuth()
   const toast = useToast()
+  const { isFallbackMode } = useFallbackMode()
 
   const [form, setForm] = useState<FormState>(INITIAL)
   const [loading, setLoading] = useState(false)
@@ -254,6 +256,23 @@ export default function CreateBountyPage() {
         gap: '1.5rem',
       }}
     >
+      {isFallbackMode && (
+        <div style={{
+          background: 'rgba(239, 68, 68, 0.1)',
+          border: '1px solid rgba(239, 68, 68, 0.2)',
+          borderRadius: '0.75rem',
+          padding: '1.25rem',
+          color: '#fecaca',
+          fontSize: '0.875rem',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '0.375rem'
+        }}>
+          <strong style={{ color: '#ef4444', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>⚠️ Fallback Mode Active</strong>
+          <p style={{ margin: 0 }}>The Gateway API is offline. You can view existing bounties on-chain, but creating new ones is disabled.</p>
+        </div>
+      )}
+
       {/* Header */}
       <div>
         <nav style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', color: 'var(--color-text-muted)', marginBottom: '1.25rem' }}>
@@ -617,7 +636,7 @@ export default function CreateBountyPage() {
             id="create-bounty-btn"
             type="submit"
             loading={loading}
-            disabled={!form.taxAccepted}
+            disabled={!form.taxAccepted || isFallbackMode}
           >
             🚀 Create &amp; Escrow
           </Button>

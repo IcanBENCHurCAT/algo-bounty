@@ -6,6 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 
 from .database import init_db
+from .config import settings
 from .rate_limiter import RateLimitMiddleware
 from .algod_client import NODE_ENV, is_sandbox
 # from .middleware.x402 import X402Middleware
@@ -43,6 +44,11 @@ ALLOWED_ORIGINS: list[str] = [
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Verify GitHub App configuration
+    if settings.ALGORAND_NETWORK != "sandbox" and not os.environ.get("TESTING") == "True":
+        if not settings.GITHUB_APP_ID or not settings.GITHUB_PRIVATE_KEY:
+            raise RuntimeError("GitHub App Configuration Error: GITHUB_APP_ID and GITHUB_PRIVATE_KEY must be set.")
+
     # Start SSE cleanup background task on app startup
     await broker.start_cleanup()
     print(f"[SSE] Started cleanup task (interval={broker.CLEANUP_INTERVAL_SECONDS}s, stale_timeout={broker.STALE_TIMEOUT_SECONDS}s)")

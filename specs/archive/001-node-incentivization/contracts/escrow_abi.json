@@ -1,0 +1,41 @@
+{
+  "name": "create_bounty",
+  "desc": "Initialize a new bounty on the escrow contract.",
+  "args": [
+    {
+      "name": "bounty_id",
+      "type": "byte[]"
+    },
+    {
+      "name": "escrow_amount",
+      "type": "uint64"
+    },
+    {
+      "name": "is_hitm",
+      "type": "uint64"
+    },
+    {
+      "name": "asset_id",
+      "type": "uint64"
+    },
+    {
+      "name": "review_days",
+      "type": "uint64"
+    },
+    {
+      "name": "mediator",
+      "type": "address"
+    },
+    {
+      "name": "treasury",
+      "type": "address"
+    },
+    {
+      "name": "gateway_address",
+      "type": "address"
+    }
+  ],
+  "returns": {
+    "type": "void"
+  }
+}
