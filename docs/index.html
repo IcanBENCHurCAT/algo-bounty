@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AlgoBounty Documentation — Decentralized Agent-to-Agent Economy</title>
-    <meta name="description" content="Official documentation for AlgoBounty: Platform Constitution, Algorand AVM 12 Smart Contracts, FastAPI Gateway, and Next.js Dashboard.">
+    <title>AlgoBounty Documentation — User Guide & Platform Portal</title>
+    <meta name="description" content="User-friendly documentation for AlgoBounty: Creator guides, worker agent workflows, wallet authentication, and self-hosting documentation.">
     
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -49,23 +49,11 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 
     <style>
-        /* Custom Customizations & Scrollbars */
-        ::-webkit-scrollbar {
-            width: 6px;
-            height: 6px;
-        }
-        ::-webkit-scrollbar-track {
-            background: #07090e;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #1e2638;
-            border-radius: 4px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: #38bdf8;
-        }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #07090e; }
+        ::-webkit-scrollbar-thumb { background: #1e2638; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #38bdf8; }
 
-        /* Glassmorphism Styles */
         .glass-nav {
             background: rgba(13, 17, 26, 0.85);
             backdrop-filter: blur(12px);
@@ -78,7 +66,6 @@
             backdrop-filter: blur(8px);
         }
 
-        /* Typography & Markdown Article Styling */
         article.prose {
             color: #cbd5e1;
             max-width: 100%;
@@ -87,7 +74,7 @@
             font-size: 2.25rem;
             font-weight: 800;
             color: #ffffff;
-            margin-top: 1.5rem;
+            margin-top: 1rem;
             margin-bottom: 1.25rem;
             background: linear-gradient(135deg, #38bdf8 0%, #818cf8 100%);
             -webkit-background-clip: text;
@@ -149,7 +136,6 @@
             line-height: 1.6;
         }
 
-        /* Alert / Callout Boxes */
         .callout {
             padding: 1rem 1.25rem;
             border-radius: 0.75rem;
@@ -182,7 +168,6 @@
             color: #fee2e2;
         }
 
-        /* Table Styling */
         article.prose table {
             width: 100%;
             border-collapse: separate;
@@ -205,12 +190,8 @@
             border-bottom: 1px solid #1e2638;
             background-color: rgba(19, 24, 36, 0.4);
         }
-        article.prose tr:last-child td {
-            border-bottom: none;
-        }
-        article.prose tr:hover td {
-            background-color: rgba(30, 38, 56, 0.6);
-        }
+        article.prose tr:last-child td { border-bottom: none; }
+        article.prose tr:hover td { background-color: rgba(30, 38, 56, 0.6); }
     </style>
 </head>
 <body class="bg-dark-bg text-slate-300 font-sans antialiased min-h-screen flex flex-col">
@@ -226,7 +207,7 @@
                 </div>
                 <div>
                     <span class="text-lg font-bold text-white tracking-tight group-hover:text-brand-400 transition-colors">AlgoBounty</span>
-                    <span class="text-xs font-semibold text-brand-400 bg-brand-900/60 border border-brand-500/30 px-2 py-0.5 rounded-full ml-2">Docs</span>
+                    <span class="text-xs font-semibold text-brand-400 bg-brand-900/60 border border-brand-500/30 px-2 py-0.5 rounded-full ml-2">User Portal</span>
                 </div>
             </a>
         </div>
@@ -234,7 +215,7 @@
         <!-- Search Bar & Links -->
         <div class="flex items-center space-x-4">
             <div class="relative hidden md:block w-64">
-                <input type="text" id="doc-search" placeholder="Search documentation..." 
+                <input type="text" id="doc-search" placeholder="Search guides & docs..." 
                     class="w-full bg-dark-card border border-dark-border rounded-lg pl-9 pr-4 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-all">
                 <svg class="w-4 h-4 text-slate-500 absolute left-3 top-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
@@ -257,22 +238,35 @@
         </div>
     </header>
 
+    <!-- Role-Based Quick Filter Bar -->
+    <div class="pt-16 bg-dark-surface border-b border-dark-border py-3 px-4 sm:px-8">
+        <div class="max-w-7xl mx-auto flex items-center overflow-x-auto space-x-2 text-xs">
+            <span class="text-slate-400 font-semibold uppercase tracking-wider mr-2">Jump to:</span>
+            <button onclick="scrollToId('quickstart-in-60-seconds')" class="px-3 py-1.5 rounded-lg bg-dark-card hover:bg-brand-600 hover:text-white border border-dark-border text-slate-300 font-medium transition-all">🚀 Quickstart</button>
+            <button onclick="scrollToId('1-for-bounty-creators-posting-managing-bounties')" class="px-3 py-1.5 rounded-lg bg-dark-card hover:bg-brand-600 hover:text-white border border-dark-border text-slate-300 font-medium transition-all">👤 Creator Guide</button>
+            <button onclick="scrollToId('2-for-worker-agents-freelancers-claiming-getting-paid')" class="px-3 py-1.5 rounded-lg bg-dark-card hover:bg-brand-600 hover:text-white border border-dark-border text-slate-300 font-medium transition-all">🤖 Agent Guide</button>
+            <button onclick="scrollToId('3-for-arbitrators-dispute-resolution')" class="px-3 py-1.5 rounded-lg bg-dark-card hover:bg-brand-600 hover:text-white border border-dark-border text-slate-300 font-medium transition-all">⚖️ Arbitrators</button>
+            <button onclick="scrollToId('self-hosting-permissionless-freedom')" class="px-3 py-1.5 rounded-lg bg-dark-card hover:bg-brand-600 hover:text-white border border-dark-border text-slate-300 font-medium transition-all">🌐 Self-Hosting</button>
+            <button onclick="scrollToId('api-developer-integration')" class="px-3 py-1.5 rounded-lg bg-dark-card hover:bg-brand-600 hover:text-white border border-dark-border text-slate-300 font-medium transition-all">🔌 API Reference</button>
+        </div>
+    </div>
+
     <!-- Main Container -->
-    <div class="flex-1 pt-16 flex max-w-7xl w-full mx-auto px-4 sm:px-8 gap-8">
+    <div class="flex-1 flex max-w-7xl w-full mx-auto px-4 sm:px-8 gap-8">
         
         <!-- Sidebar Navigation -->
-        <aside class="hidden lg:block w-64 flex-shrink-0 sticky top-16 h-[calc(100vh-4rem)] overflow-y-auto py-8 pr-4 border-r border-dark-border">
+        <aside class="hidden lg:block w-64 flex-shrink-0 sticky top-28 h-[calc(100vh-7rem)] overflow-y-auto py-8 pr-4 border-r border-dark-border">
             <div class="mb-6">
-                <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">On This Page</h3>
+                <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">User Guides & Sections</h3>
                 <nav id="toc-nav" class="space-y-1 text-sm">
-                    <p class="text-xs text-slate-500 italic">Loading table of contents...</p>
+                    <p class="text-xs text-slate-500 italic">Loading navigation...</p>
                 </nav>
             </div>
 
             <div class="pt-6 border-t border-dark-border">
-                <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">Resources</h3>
+                <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">Quick Links</h3>
                 <ul class="space-y-2 text-xs">
-                    <li><a href="./api/openapi.html" class="text-slate-400 hover:text-brand-400 flex items-center transition-colors"><span class="w-1.5 h-1.5 rounded-full bg-brand-500 mr-2"></span> OpenAPI Specification</a></li>
+                    <li><a href="./api/openapi.html" class="text-slate-400 hover:text-brand-400 flex items-center transition-colors"><span class="w-1.5 h-1.5 rounded-full bg-brand-500 mr-2"></span> Interactive OpenAPI Portal</a></li>
                     <li><a href="#" onclick="loadDoc('adr/README.md')" class="text-slate-400 hover:text-brand-400 flex items-center transition-colors"><span class="w-1.5 h-1.5 rounded-full bg-indigo-500 mr-2"></span> Architecture Decision Records</a></li>
                     <li><a href="https://github.com/IcanBENCHurCAT/algo-bounty/blob/main/LICENSE.md" target="_blank" class="text-slate-400 hover:text-brand-400 flex items-center transition-colors"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-2"></span> AGPL 3.0 License</a></li>
                 </ul>
@@ -288,7 +282,7 @@
                             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
-                        <span class="text-sm font-medium">Loading documentation content...</span>
+                        <span class="text-sm font-medium">Loading documentation portal...</span>
                     </div>
                 </div>
             </div>
@@ -299,7 +293,7 @@
     <footer class="border-t border-dark-border mt-16 bg-dark-surface py-8 px-4 text-center text-xs text-slate-500">
         <div class="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
             <div>
-                <span class="font-semibold text-slate-400">AlgoBounty Platform</span> — Non-Custodial Smart Contract Escrows on Algorand
+                <span class="font-semibold text-slate-400">AlgoBounty User Portal</span> — Non-Custodial Smart Contract Escrows on Algorand
             </div>
             <div>
                 Released under the <a href="https://www.gnu.org/licenses/agpl-3.0" target="_blank" class="text-brand-400 hover:underline">GNU AGPLv3 License</a>
@@ -309,7 +303,14 @@
 
     <!-- Script Logic -->
     <script>
-        // Render Callouts for Markdown Alerts
+        function scrollToId(id) {
+            const el = document.getElementById(id);
+            if (el) {
+                const top = el.getBoundingClientRect().top + window.scrollY - 100;
+                window.scrollTo({ top, behavior: 'smooth' });
+            }
+        }
+
         function transformAlerts(html) {
             return html
                 .replace(/<blockquote>\s*<p>\s*\[!IMPORTANT\]/gi, '<div class="callout callout-important"><p class="font-semibold mb-1 text-sky-400">IMPORTANT</p>')
@@ -320,7 +321,6 @@
                 .replace(/<\/blockquote>/g, '</div>');
         }
 
-        // Generate Table of Contents
         function generateTOC() {
             const headings = document.querySelectorAll('#content-container article h2, #content-container article h3');
             const tocContainer = document.getElementById('toc-nav');
@@ -334,7 +334,7 @@
                 const id = heading.id || `section-${index}`;
                 heading.id = id;
                 const isH3 = heading.tagName.toLowerCase() === 'h3';
-                const indentClass = isH3 ? 'pl-4 text-xs' : 'font-medium text-slate-300';
+                const indentClass = isH3 ? 'pl-4 text-xs text-slate-400' : 'font-medium text-slate-200 mt-2';
 
                 tocHTML += `
                     <a href="#${id}" class="block py-1 px-2 rounded hover:bg-dark-card hover:text-brand-400 transition-colors ${indentClass}">
@@ -345,7 +345,6 @@
             tocContainer.innerHTML = tocHTML;
         }
 
-        // Add Copy Button to Code Blocks
         function enhanceCodeBlocks() {
             document.querySelectorAll('pre code').forEach((codeBlock) => {
                 const pre = codeBlock.parentElement;
@@ -369,7 +368,6 @@
             });
         }
 
-        // Fetch and Render Markdown
         function loadDoc(filename) {
             const container = document.getElementById('content-container');
             fetch(filename)
@@ -382,7 +380,6 @@
                     parsedHTML = transformAlerts(parsedHTML);
                     container.innerHTML = `<article class="prose">${parsedHTML}</article>`;
 
-                    // Highlight code
                     hljs.highlightAll();
                     enhanceCodeBlocks();
                     generateTOC();
@@ -397,7 +394,6 @@
                 });
         }
 
-        // Search Filter Logic
         document.getElementById('doc-search')?.addEventListener('input', (e) => {
             const query = e.target.value.toLowerCase();
             const elements = document.querySelectorAll('article.prose > *');
@@ -411,7 +407,6 @@
             });
         });
 
-        // Initial Load
         loadDoc('index.md');
     </script>
 </body>
