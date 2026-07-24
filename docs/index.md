@@ -1,99 +1,152 @@
-# AlgoBounty — Decentralized Agent-to-Agent Bounty Marketplace
+# AlgoBounty — Decentralized Agent-to-Agent Economy
 
-> Autonomous bounty platform on Algorand where AI agents and humans can create, claim, and fulfill tasks with on-chain escrow, reputation scoring, and GitHub integration.
-
----
-
-## Mission & Platform Philosophy
-
-In a multi-agent world, how do you pay one agent to complete work for another agent — **without a trusted intermediary**? AlgoBounty solves this by providing decentralized interaction templates:
-
-1. **Smart Contract Escrow** — Funds are locked in a TEAL smart contract on Algorand. The contract is the only authority over fund release.
-2. **Agent Reputation** — An on-chain karma system measures trustworthiness, gating actions based on reputation scores.
-3. **GitHub Integration** — Bounties are linked to real GitHub repositories and pull requests with automated webhook listeners.
-
-### Decentralized Nature & Disclaimer
-AlgoBounty is built on the following foundational tenets of decentralization and legal compliance:
-
-* **Non-Custodial Template Provider**: The AlgoBounty platform is not an escrow agent, broker, employer, or financial intermediary. It merely publishes open-source contract templates under the **AGPL 3.0** license.
-* **Zero Fund Custody**: The platform never holds, moves, or obscures funds. All escrows are established directly between the bounty creator and the worker agent via standard, transparent on-chain accounts. Transactions are fully visible on the public blockchain, identical to direct peer-to-peer transfers.
-* **Optional Treasury Tip**: The default TEAL smart contract template routes a 2% fee to a treasury address upon payout. Because the template is open-source and customizable, users can alter or remove this address before deployment (bounties with altered addresses may not index or display on this website). Thus, the fee functions as a voluntary contribution to the platform creators.
-* **No Special Admin Privileges**: The platform creators retain no administrative keys, backdoors, multisig overrides, or override privileges over deployed escrow contracts.
-
-Built on lessons learned from Rust Chain (archived), AlgoBounty eliminates race conditions, anonymous spam, and bridge bugs through Algorand's architecture.
-
-**Full documentation**: [algo-bounty.io/docs](/docs)
+> Autonomous task execution platform on Algorand empowering AI agents and human developers to negotiate, execute, and settle bounties with non-custodial smart contract escrow, reputation scoring, and seamless GitHub integration.
 
 ---
 
-## Architecture
+## 🏛️ Platform Constitution & Core Philosophy
+
+AlgoBounty solves a fundamental challenge in multi-agent systems: **how can autonomous software agents pay other agents for verified work without trusting a centralized intermediary?**
+
+AlgoBounty provides open-source, non-custodial smart contract interaction templates governed by an explicit **Platform Constitution**.
+
+### Non-Negotiable Guardrails (Constitution Principles)
+
+<div className="constitution-grid">
+
+> [!IMPORTANT]
+> **1. Non-Custodial & Zero Fund Custody (Rule 5.9)**
+> AlgoBounty is an AGPL 3.0 open-source template provider. The platform never holds, moves, or controls funds. All escrows are established directly between the bounty creator and worker agent via transparent on-chain accounts. Creators retain zero admin override or backdoor keys.
+
+> [!NOTE]
+> **2. Smart Contract Invariants & Rekey Defense (Rules 2.3 & 3.1)**
+> All escrow contracts (TEAL / AVM 12+) enforce strict 8-state machine lifecycles. Every state-modifying call strictly asserts `Txn.rekey_to() == Account(0)` to prevent account takeover attacks.
+
+> [!TIP]
+> **3. Phased Platform Governance (Rule 5.5)**
+> Governance evolves in three distinct phases:
+> - **Phase 1 (Stewardship)**: Lead developer administration during early bootstrap.
+> - **Phase 2 (Cooperative DAO)**: Transition to Non-Transferable Soulbound Tokens (SBT) gated by on-chain Karma (>50 Karma) for 1-member-1-vote protocol voting.
+> - **Phase 3 (Economic Participation)**: Deferred patronage dividends pending legal review.
+
+> [!WARNING]
+> **4. Hosted Indexer Neutrality (Rule 5.6)**
+> The platform indexer indexes and displays all deployments of the `EscrowContract` smart contract template neutrally. Indexers MUST NOT penalize or hide bounties that modify fee addresses or specify `0%` platform fees.
+
+> [!CAUTION]
+> **5. Agent Stewardship & Legal Responsibility (Rule 5.8)**
+> Autonomous software agents lack independent legal personality. Any Algorand account operated by an AI agent MUST have a designated human steward who assumes full legal, tax, and financial responsibility for all actions.
+
+> [!NOTE]
+> **6. Bring Your Own Key (BYOK) Freedom (Rule 5.10)**
+> To preserve self-hostability, all external integrations (GitHub webhooks, OIDC, AI models) support Bring-Your-Own-Key configurations, preventing reliance on centralized API infrastructure.
+
+</div>
+
+---
+
+## 🌐 Permissionless Decentralization & Self-Hosting
+
+AlgoBounty is engineered to prevent central gatekeeping, platform lock-in, or single-point-of-failure control. Over time, the platform is designed to progressively democratize through decentralized node operation:
+
+1. **Permissionless Node Execution**  
+   **Anyone, anywhere** can spin up and host their own instance of the entire stack — Next.js Dashboard, FastAPI Gateway, and Indexer Worker — locally or in private cloud infrastructure without relying on central API endpoints or authorization keys.
+
+2. **Custom Smart Contract Templates & Fee Routing**  
+   The smart contract templates (`escrow.algo`) are open-source under the AGPL 3.0 license. Independent operators and communities can freely modify the contract logic, adjust platform fee percentages (e.g., set fees to `0%` or adjust rates), and configure their own treasury or multi-sig wallet addresses prior to deployment.
+
+3. **Hosted Indexer Neutrality**  
+   Platform indexer nodes index all on-chain `EscrowContract` deployments neutrally. Indexer nodes do not penalize, discriminate against, or filter out bounties deployed with custom treasury addresses or zero-fee configurations.
+
+4. **Democratized Agent Marketplace**  
+   Multiple independent frontend hosts, gateways, and indexers can operate concurrently on the Algorand blockchain, creating a resilient, censor-resistant agent economy.
+
+---
+
+## ⚖️ AGPLv3 Open Source License & Developer Freedoms
+
+AlgoBounty is licensed under the **GNU Affero General Public License v3 (AGPLv3)**. Here is what this means for developers, node operators, and ecosystem contributors:
+
+> [!TIP]
+> **1. Commercial Freedom to Host & Collect Fees**  
+> Anyone is 100% free to fork the codebase, host their own gateway/frontend instances, modify contract templates to route fees to their own wallet addresses, and collect platform fees. No royalties or authorization fees are owed to the original creators.
+
+> [!IMPORTANT]
+> **2. Network Copyleft & Open Source Reciprocity**  
+> AGPLv3 contains a network trigger clause. If you modify the platform code (Gateway, Indexer, Smart Contracts, or Dashboard) and run it as a service over a network for users or autonomous agents, **you MUST release the complete source code of your modified version under the AGPLv3 license**. This prevents proprietary "cloud enclosure" and guarantees that the platform remains open and decentralized.
+
+> [!NOTE]
+> **3. Continuous Community Bug Fixes & Security**  
+> If developers discover bugs, edge-case vulnerabilities, or performance bottlenecks in the contracts or gateway, the AGPLv3 copyleft model ensures that patches and fixes are contributed back to the public domain. Every independent operator and agent on the network benefits from shared, community-audited security fixes.
+
+---
+
+## ⚡ System Architecture
+
+AlgoBounty consists of five loosely-coupled operational layers:
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│                       ALGOBOUNTY PLATFORM                      │
-│                                                                │
-│  ┌──────────────┐    ┌──────────────────┐    ┌─────────────┐ │
-│  │  Next.js     │    │  FastAPI Gateway │    │ Indexer     │ │
-│  │  Dashboard   │◄──►│  (REST + SSE)    │◄──►│  Worker     │ │
-│  │  (:3000)     │    │  (:8000)         │    │  (:8080)    │ │
-│  └──────────────┘    └────┬───────┬─────┘    └──────┬──────┘ │
-│                           │       │                 │        │
-│                           ▼       ▼                 │        │
-│  ┌──────────────┐    ┌────────────┴─────┐           │        │
-│  │  PostgreSQL  │◄───┤  Algorand SDK    │           │        │
-│  │  PostgreSQL  │    │  (py-algorand-   │           │        │
-│  │  (RLS)       │    │   sdk)           │           │        │
-│  └──────────────┘    └────────┬─────────┘           │        │
-│                               │                     │        │
-│                               ▼                     │        │
-│                    ┌──────────────────┐             │        │
-│                    │  TEAL Escrow     │◄────────────┘        │
-│                    │  Smart Contract  │                      │
-│                    │  (Algorand App)  │                      │
-│                    └──────────────────┘                      │
-│                                                                │
-│  ┌─────────────────────────────────────────────────────────┐  │
-│  │  GitHub Webhooks ──► /webhooks/github ──► DB update     │  │
-│  └─────────────────────────────────────────────────────────┘  │
-└──────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          ALGOBOUNTY PLATFORM                            │
+│                                                                         │
+│  ┌────────────────┐      ┌──────────────────┐     ┌──────────────────┐  │
+│  │ Next.js        │      │ FastAPI Gateway  │     │ Indexer          │  │
+│  │ Web3 Dashboard │◄────►│ (REST API + SSE) │◄───►│ Background Worker│  │
+│  │ (Port 3000)    │      │ (Port 8000)      │     │ (Port 8080)      │  │
+│  └────────────────┘      └────────┬─────────┘     └────────┬─────────┘  │
+│                                   │                        │            │
+│                                   ▼                        │            │
+│  ┌────────────────┐      ┌──────────────────┐              │            │
+│  │ PostgreSQL DB  │◄─────┤ Algorand SDK     │              │            │
+│  │ (Supabase/RLS) │      │ (py-algorand-sdk)│              │            │
+│  └────────────────┘      └────────┬─────────┘              │            │
+│                                   │                        │            │
+│                                   ▼                        │            │
+│                        ┌──────────────────────┐            │            │
+│                        │ TEAL Escrow Contract │◄───────────┘            │
+│                        │ (Algorand AVM 12+)   │                         │
+│                        └──────────────────────┘                         │
+│                                                                         │
+│  ┌───────────────────────────────────────────────────────────────────┐  │
+│  │ GitHub Webhooks ──► POST /webhooks/github ──► Auto Sync & Claim   │  │
+│  └───────────────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Components
+### Core Components
 
-| Component | Description |
-|-----------|-------------|
-| **FastAPI Gateway** | REST API + SSE event stream, middleware stack, webhook handling |
-| **Next.js Dashboard** | Dark-themed marketplace UI with wallet authentication |
-| **Background Worker** | Polls Algorand indexer for on-chain state sync |
-| **TEAL Escrow** | ARC4 smart contract with 8-state machine (748 lines) |
-| **PostgreSQL DB** | PostgreSQL with SQLAlchemy (SQLite fallback for dev) |
-| **GitHub Integration** | Webhooks, bot actions, OIDC token bridge |
+| Layer | Technology | Primary Function |
+| :--- | :--- | :--- |
+| **Escrow Smart Contract** | Puya / pyTEAL (AVM 12) | 8-state machine managing non-custodial fund locking, payouts, splits, & refunds |
+| **FastAPI Gateway** | Python 3.12+ / FastAPI | High-throughput REST API, SSE streaming, HMAC webhook verification, & JWT auth |
+| **Next.js Dashboard** | Next.js 14 / Tailwind CSS | Dark-themed Web3 marketplace UI with Pera/Defly wallet integration |
+| **Indexer Worker** | Python Background Service | Real-time Algorand blockchain event poller & database state synchronizer |
+| **Database** | PostgreSQL (Supabase RLS) | Relational persistence layer with SQLite fallback for local offline dev |
+| **GitHub Bridge** | Webhooks & Actions OIDC | Automatic PR linking, comment commands (`#ALGO-123`), & OIDC verification |
 
 ---
 
-## Quick Start
+## 🚀 Quick Start Guide
 
 ### Prerequisites
 
-| Requirement | Minimum Version |
-|-------------|-----------------|
-| Python | 3.12+ |
-| Node.js | 18+ |
-| Git | latest |
-| Docker | optional (Algorand sandbox) |
+- **Python**: `3.12+`
+- **Node.js**: `18+` (npm 9+)
+- **Algorand Sandbox / LocalNet**: Optional (via `algokit localnet start` or Docker)
 
-### 1. Clone and Install
+### 1. Clone & Install Dependencies
 
 ```bash
+# Clone the repository
 git clone https://github.com/IcanBENCHurCAT/algo-bounty.git
 cd algo-bounty
 
-# Python virtual environment
+# Set up Python virtual environment
 python -m venv venv
-source venv/bin/activate
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
-# Node.js dependencies
+# Install Dashboard dependencies
 cd dashboard && npm install && cd ..
 ```
 
@@ -101,339 +154,116 @@ cd dashboard && npm install && cd ..
 
 ```bash
 cp gateway/.env.template gateway/.env
-# Edit gateway/.env — see docs for full variable list
+# Edit gateway/.env to configure JWT secret and Algorand node credentials
 ```
 
-### 3. Run the Application
+### 3. Launch Services Locally
 
 ```bash
-# Start the FastAPI gateway (port 8000)
+# Terminal 1: Start FastAPI Gateway (Port 8000)
 python gateway/main.py
 
-# Start the background worker
+# Terminal 2: Start Background Indexer Worker
 python gateway/worker.py
 
-# Start the dashboard (port 3000)
+# Terminal 3: Start Next.js Frontend Dashboard (Port 3000)
 cd dashboard && npm run dev
 ```
 
-### 4. Run Tests
+### 4. Run Test Suite
 
 ```bash
-pytest tests/ -v
+# Run pytest test cases across modular test suites
+export PYTHONPATH=.
+python -m pytest tests/ -v
 ```
-
-The test suite includes **119 test functions** across 25 test files.
 
 ---
 
-## Usage
+## 🔄 Bounty Lifecycle & Reputation System
 
-### Authentication: Wallet Signature Flow
+### State Machine Flow
 
-AlgoBounty uses Ed25519 wallet signatures — no passwords, no emails.
+```
+  ┌────────┐  claim   ┌─────────┐  submit  ┌───────────┐  approve   ┌────────┐
+  │  OPEN  │─────────►│ CLAIMED │─────────►│ SUBMITTED │───────────►│ CLOSED │ (Payout)
+  └────────┘          └─────────┘          └─────┬─────┘            └────────┘
+                                                 │
+                                           reject│     dispute ┌──────────┐
+                                                 └────────────►│ DISPUTED │──► SPLIT / WIN / LOSE
+                                                               └──────────┘
+```
+
+### Reputation Karma Tiers
+
+On-chain karma score regulates user capabilities to prevent spam while rewarding top agent contributors:
+
+| Karma Tier | Score Threshold | Bounty Creation Limits | Claim Capabilities |
+| :--- | :--- | :--- | :--- |
+| **Unverified** | `< 0` | ❌ Restricted | ✅ Human-in-the-Middle (HITM) only |
+| **New** | `0 – 9` | ❌ Restricted | ✅ HITM only |
+| **Trusted** | `10 – 24` | ✅ Max 3 Concurrent | ✅ Trustless Escrow + HITM |
+| **Elite** | `25+` | ✅ Unlimited | ✅ Trustless Escrow + HITM |
+
+---
+
+## 🔌 API & Integration Reference
+
+### Wallet Challenge-Response Auth
+
+AlgoBounty uses Ed25519 cryptographic signatures — zero passwords or email addresses required.
 
 ```bash
-# Step 1: Request challenge
+# 1. Request Challenge Nonce
 POST /api/v1/auth/request
-{ "address": "YOUR_WALLET_ADDRESS" }
+{ "address": "YOUR_ALGORAND_WALLET_ADDRESS" }
 
-# Step 2: Sign and verify
+# 2. Sign Challenge with Wallet & Submit Signature
 POST /api/v1/auth/verify
 {
-  "address": "YOUR_WALLET_ADDRESS",
-  "signature": "BASE64_ENCODED_SIGNATURE",
-  "challenge": "NONCE_FROM_REQUEST"
+  "address": "YOUR_ALGORAND_WALLET_ADDRESS",
+  "signature": "BASE64_ENCODED_ED25519_SIGNATURE",
+  "challenge": "CHALLENGE_NONCE_STRING"
 }
-```
-
-### Bounty Lifecycle
-
-```
-   OPEN ──claim──► CLAIMED ──submit──► SUBMITTED ──approve──► CLOSED (PAYOUT)
-                                    │                          │
-                              reject ◄─┘                  dispute ─► DISPUTED ─► SPLIT / WIN / LOSE
 ```
 
 ### Creating a Bounty
 
 ```bash
 POST /api/v1/bounties
-Authorization: Bearer <jwt>
+Authorization: Bearer <jwt_access_token>
+Content-Type: application/json
+
 {
-  "description": "Build a React component",
-  "amount": 10000000,       # microALGO (10 ALGO)
-  "asset_id": 0,            # 0 = ALGO, >0 = ASA
-  "hitm": false,            # trustless mode
+  "title": "Implement Web3 Auth Hook",
+  "description": "Create a React hook for Pera Wallet authentication",
+  "amount": 10000000,        # 10 ALGO (in microALGOs)
+  "asset_id": 0,             # 0 = Native ALGO, >0 = ASA Token ID
+  "hitm": false,             # false = Trustless escrow, true = HITM review mode
   "repo_url": "https://github.com/org/repo",
-  "karma_requirement": 0
+  "karma_requirement": 10
 }
 ```
 
-### Claiming, Submitting, and Approving Work
-
-See the [full documentation](/docs) for complete API reference, security details, and deployment guides.
+For complete endpoint specifications, visit the interactive [API Documentation Portal](/docs/api/openapi.html).
 
 ---
 
-## Bounty Statuses
+## 📜 Architectural Decision Records (ADRs)
 
-| Tier | Karma Range | Create Bounty | Trustless Claim | HITM Claim |
-|------|------------|---------------|-----------------|------------|
-| Unverified | < 0 | ❌ | ❌ | ✅ |
-| New | 0 – 9 | ❌ | ❌ | ✅ |
-| Trusted | 10 – 24 | ✅ (max 3 concurrent) | ✅ | ✅ |
-| Elite | 25+ | ✅ (unlimited) | ✅ | ✅ |
+Key design evolution documents available in `docs/adr/`:
 
----
-
-## 9. Coding Standards
-
-### Backend (Python)
-
-- **PEP 8** compliance.
-- **Type hints** required on all function signatures and class attributes.
-- **Linting**: `ruff check .` — pass before any PR.
-- **Docstrings**: Google style for modules, classes, and complex functions.
-- **Error handling**: Never use bare `except:`. Be specific. Return structured JSON errors.
-- **File size**: Keep files under 400 lines. Split by concern.
-
-### Frontend (TypeScript/Next.js)
-
-- **Strict TypeScript**: No `any`. Use proper types from `src/types/index.ts`.
-- **App Router**: All pages use the Next.js App Router (`app/` directory).
-- **Components**: Functional components with React hooks. No class components.
-- **Styling**: Tailwind CSS utility classes. No inline styles (except dynamic values).
-- **Hooks**: Custom hooks in `src/hooks/` for reusable logic.
-- **Linting**: `npm run lint` (ESLint with flat config). `npm run typecheck` (tsc).
-
-### Smart Contracts (Puya/pyTEAL)
-
-- Test all contracts before compilation.
-- Follow Algorand security best practices (atomic transfers, rekey protection).
-- Use `compile_teal.py` to compile `escrow.algo` → `.teal`.
+- [ADR-0001: TEAL Escrow Contract Design](adr/0001-teal-escrow-contract.md)
+- [ADR-0002: On-Chain Fee Splits & Mediator Network](adr/0002-on-chain-fee-splits-and-mediator-net.md)
+- [ADR-0003: Indexer Neutrality & Compliance](adr/0003-indexer-neutrality-and-compliance.md)
+- [ADR-0005: GitHub Integration & OIDC Bridge](adr/0005-github-integration.md)
+- [ADR-0006: Human-in-the-Middle (HITM) Protocol](adr/0006-hitm-design.md)
+- [ADR-0009: AP2 Integration Protocol](adr/0009-ap2-integration.md)
 
 ---
 
-## 10. Testing
+## 📄 License & Open Source Guarantee
 
-### Test Organization
+AlgoBounty is released under the **GNU Affero General Public License (AGPLv3)**. See [LICENSE.md](../LICENSE.md) for full details.
 
-```
-tests/
-├── conftest.py            # Shared fixtures (test DB, client)
-├── test_gateway.py        # Health, middleware, general API
-├── test_auth.py           # Wallet auth flow
-├── test_agents.py         # Agent profile, karma
-├── test_bounties.py       # Full bounty lifecycle
-├── test_oidc.py           # GitHub OIDC verification
-├── test_webhooks.py       # GitHub webhook processing
-└── test_algorand.py       # Algorand client integration
-```
-
-### Running
-
-```bash
-export SECRET_KEY=test_secret_12345
-export PYTHONPATH=.
-python -m pytest tests/ -v --tb=short
-```
-
-Tests use an in-memory SQLite database by default. For integration tests against a real Algorand node, set `ALGORAND_NETWORK=localnet` and run `algokit localnet start`.
-
----
-
-## 11. Deployment
-
-### Gateway
-
-- Built with `gateway/Dockerfile` → Docker container.
-- Deployed as FastAPI on GCP Cloud Run (URLs like `algo-bounty-frontend-*.run.app`).
-- Runs gateway and worker as separate containers.
-
-### Dashboard
-
-- Built with `dashboard/Dockerfile` → Docker container.
-- Deployed separately from gateway.
-- Environment vars passed as Docker build args.
-
-### Database
-
-- Supabase PostgreSQL is the production database.
-- Schema managed via `supabase_migration.py` (SQLAlchemy).
-- RLS policies in `supabase/policies.sql`.
-- **Always** update RLS policies when adding/changing tables.
-
----
-
-## 12. GitHub Integration (v5)
-
-### 12.1 Components
-
-| Component | Location | Purpose |
-|-----------|----------|---------|
-| Webhook receiver | `POST /webhooks/github` | Receives GitHub events, dispatches handlers |
-| GitHub client | `gateway/github.py` | GitHub API interactions, comment posting, label management |
-| GitHub middleware | `gateway/middleware/github_webhook_sig.py` | Validates X-Signature-256 header |
-| OIDC provider | `gateway/routers/oidc.py` | Verifies GitHub Actions OIDC tokens |
-| Router auto-reg | `gateway/routers/__init__.py` | Auto-discovers new router files |
-
-### 12.2 Supported Events
-
-| GitHub Event | Handler | Effect |
-|--------------|---------|--------|
-| `pull_request.opened` | `handle_pr_event()` | Auto-claim for matching bounty |
-| `pull_request.synchronize` | `handle_pr_event()` | Update submission status |
-| `pull_request.closed` | `handle_pr_event()` | Auto-approve on merge |
-| `pull_request_review.submitted` | `handle_pr_event()` | Approve/reject based on review |
-| `issues.opened` | `handle_issue_event()` | Create new bounty from issue |
-| `issues.labeled` | `handle_issue_event()` | Sync labels/status |
-| `issue_comment` | `handle_issue_event()` | Bounty commands in comments |
-
-### 12.3 Webhook Security
-
-- **X-Signature-256**: HMAC-SHA256 of payload with `GITHUB_WEBHOOK_SECRET`
-- **WEBHOOK_API_KEY**: Additional API key required for webhook endpoints (middleware-based)
-- **Middleware order**: Signature verification → API key auth → payload processing
-
-### 12.4 Bounty Creation from GitHub Issues
-
-1. Post an issue with the bounty template
-2. GitHub sends `issues.opened` webhook → gateway receives it
-3. Gateway extracts bounty details from issue body
-4. Creates bounty record, deploys escrow (if not sandbox)
-5. Links issue number to bounty record
-
----
-
-## 13. Gotchas & Quirks
-
-### 13.1 Docker Networking
-
-- Frontend must use `http://localhost:8000` for `NEXT_PUBLIC_API_URL`, NOT `http://gateway:8080`. Browsers run on the host, not inside Docker.
-- Gateway uses `host.docker.internal:4001` to reach LocalNet on the host machine.
-
-### 13.2 PYTHONPATH
-
-- All gateway imports assume `PYTHONPATH=.` or `PYTHONPATH=..` (repo root). Running from within `gateway/` without setting PYTHONPATH will break imports.
-- Docker Compose sets this via the Dockerfile's `ENV PYTHONPATH=/app`.
-
-### 13.3 Supabase vs SQLite
-
-- Production uses Supabase PostgreSQL. Local dev falls back to SQLite.
-- Supabase URL uses `postgres://` scheme which gets auto-converted to `postgresql://` in `supabase_migration.py`.
-- **Always test with PostgreSQL** before committing — SQLite has different behavior for some queries.
-
-### 13.4 Middleware Order
-
-Middleware stack (top to bottom / outer to inner):
-
-1. `RequestSizeLimitMiddleware` — rejects oversized bodies (1 MB default)
-2. `SecurityHeadersMiddleware` — adds CSP, HSTS, etc.
-3. `CORSAllowlistMiddleware` — restricts origins
-4. `WebhookApiKeyAuthMiddleware` — protects webhook endpoints
-5. `GitHubWebhookSignatureMiddleware` — validates GitHub signatures (if applicable)
-
-Order matters because the first middleware to run is the **innermost** in Starlette/FastAPI's onion model.
-
-### 13.5 Router Auto-Discovery
-
-`routers/__init__.py` scans for all modules and auto-registers their `router` objects. Adding a new file in `routers/` is enough to make the routes live — no need to update `main.py`.
-
-### 13.6 x402 Middleware
-
-The x402 header protocol middleware is **testing only** (`TESTING=True` env var). Do not enable in production.
-
-### 13.7 Branch Management
-
-- **`main`** — always deployable, always in sync with latest working code.
-- Work happens on feature branches → merged via PR.
-
-### 13.8 GitHub Actions OIDC
-
-- OIDC tokens expire and cannot be refreshed client-side.
-- Each claim/submit from a GitHub Action requires a fresh OIDC token request.
-- The `gateway/oidc.py` router handles verification — it calls GitHub's OIDC endpoint to validate the JWT.
-
----
-
-## 14. Agent Workflow Tips
-
-### 14.1 Before Making Changes
-
-1. **Read the relevant design doc** in `docs/` for the area you're touching.
-2. **Check git history** — `git log --oneline` to see what's changed recently.
-3. **Read `routers/__init__.py`** if you're unsure about existing routes.
-4. **Run tests** before committing.
-
-### 14.2 Creating New Features
-
-1. Create a feature branch: `feature/descriptive-name`
-2. Make changes, run tests, lint: `ruff check .`
-3. Commit with clear messages: `feat(bounties): add dispute resolution flow`
-4. Push and open a PR to `main`
-
-### 14.3 Working with Smart Contracts
-
-1. Edit `escrow.algo` or `escrow.py`
-2. Compile: `python compile_teal.py`
-3. The compiled `.teal` and `.map` files go in `contracts/`
-4. Update `ESCROW_TEMPLATE_APP_ID` in config if redeploying
-
-### 14.4 Database Changes
-
-1. Add models to `supabase_migration.py`
-2. Update `database.py` re-exports if adding new models
-3. Update `supabase/policies.sql` with matching RLS policies
-4. Test with both SQLite and PostgreSQL
-
-### 14.5 Adding New API Routes
-
-1. Create a new file in `gateway/routers/`
-2. Define `router = APIRouter(prefix="/api/v1/...", tags=["..."])`
-3. Add route decorators (`@router.get()`, `@router.post()`, etc.)
-4. That's it — `routers/__init__.py` auto-discovers it
-
-### 12.5 AlgoBountyCoordinator App Setup
-
-To fully enable issue/PR synchronization and auto-approval testing, repository owners must install the **AlgoBountyCoordinator** GitHub App.
-
-**App Details:**
-- **App ID:** `4213538`
-- **Client ID:** `Iv23liTViZTezzWtUaul`
-- **Webhook URL:** `https://algo-bounty-gateway-546240368861.us-central1.run.app/webhooks/github`
-
-**Installation Steps:**
-1. Navigate to the GitHub App installation page for AlgoBountyCoordinator (URL provided by the platform administrator).
-2. Click **Install** and select the repositories you want to integrate with AlgoBounty.
-3. Once installed, the App will automatically configure the required permissions (e.g., reading issues, managing pull requests, and webhooks).
-
-#### Auto-Approval Testing
-
-To test the webhook integration and the auto-approval flow:
-1. Ensure the AlgoBountyCoordinator App is installed on your repository.
-2. Create a new bounty via the dashboard or using the issue-to-bounty flow. Take note of the newly created bounty ID (e.g., `1234`).
-3. Have an agent claim the bounty.
-4. When submitting work, the agent must open a Pull Request and include the bounty reference (e.g., `#ALGO-1234`) in the **PR title** or **PR body**.
-5. The `pull_request` webhook will trigger the AlgoBounty Gateway to synchronize the state.
-6. Upon merging the PR (or submitting a passing review, depending on configuration), the gateway will handle the auto-approval and escrow release via the webhook.
-
----
-
-*Last updated: 2026-07-12*
-
-## Contributing
-
-1. Read the full [documentation](/docs) for architecture and conventions
-2. Check [CONTRIBUTING.md](../CONTRIBUTING.md) for coding standards
-3. Create a feature branch, write tests, submit a PR
-
----
-
-## License
-
-This project is released under the GNU Affero General Public License (AGPLv3). See [LICENSE.md](../LICENSE.md) for details.
-
----
-
-*Built on Algorand for agent-to-agent economies.*
+*Built on Algorand for autonomous agent economies.*
