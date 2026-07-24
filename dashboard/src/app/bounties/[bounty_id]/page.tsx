@@ -25,6 +25,8 @@ import { FullPageSpinner } from '@/components/ui/Spinner'
 import { Modal } from '@/components/ui/Modal'
 import { FeeBreakdownTable } from '@/components/ui/FeeBreakdownTable'
 import { AlgoBountyError } from '@/types'
+import { useFallbackMode } from '@/hooks/useFallbackMode'
+import { fetchBountyFromChain } from '@/services/indexerFallback'
 
 function formatAlgo(micro: number) {
   const a = micro / 1_000_000
@@ -42,6 +44,7 @@ export default function BountyDetailPage() {
 
   const { connected, address, jwt, signTransaction } = useAuth()
   const toast = useToast()
+  const { isFallbackMode, setFallbackMode } = useFallbackMode()
 
   const [bounty, setBounty] = useState<Bounty | null>(null)
   const [escrow, setEscrow] = useState<EscrowState | null>(null)
@@ -56,6 +59,26 @@ export default function BountyDetailPage() {
   const [claimTxn, setClaimTxn] = useState<TxnGenWithBreakdown | null>(null)
 
   const fetchBounty = useCallback(async () => {
+    if (isFallbackMode) {
+      try {
+        let appId = parseInt(bountyId)
+        if (isNaN(appId) && bountyId.startsWith('b_')) {
+          appId = parseInt(bountyId.substring(2))
+        }
+        if (!isNaN(appId)) {
+          const b = await fetchBountyFromChain(appId)
+          setBounty(b)
+        } else {
+          throw new Error('Invalid App ID format for fallback mode')
+        }
+      } catch (err) {
+        toast.error('Failed to fetch bounty from chain: ' + (err instanceof Error ? err.message : 'unknown error'))
+      } finally {
+        setLoading(false)
+      }
+      return
+    }
+
     try {
       const b = await getBounty(bountyId)
       setBounty(b)
@@ -65,13 +88,39 @@ export default function BountyDetailPage() {
           .catch(() => null) // escrow may not be indexed yet
       }
     } catch (err) {
-      if (err instanceof AlgoBountyError && err.code === 'BountyNotFound') {
+      const errMsg = err instanceof Error ? err.message : ''
+      const isNetworkOr5xx = 
+        errMsg.includes('Failed to fetch') ||
+        errMsg.includes('NetworkError') ||
+        errMsg.includes('HTTP 5') ||
+        errMsg.includes('500') ||
+        errMsg.includes('502') ||
+        errMsg.includes('503') ||
+        errMsg.includes('504')
+
+      if (isNetworkOr5xx) {
+        setFallbackMode(true)
+        try {
+          let appId = parseInt(bountyId)
+          if (isNaN(appId) && bountyId.startsWith('b_')) {
+            appId = parseInt(bountyId.substring(2))
+          }
+          if (!isNaN(appId)) {
+            const b = await fetchBountyFromChain(appId)
+            setBounty(b)
+          } else {
+            throw new Error('Invalid App ID format for fallback mode')
+          }
+        } catch (chainErr) {
+          toast.error('Gateway offline. Failed to fetch fallback data: ' + (chainErr instanceof Error ? chainErr.message : 'unknown error'))
+        }
+      } else if (err instanceof AlgoBountyError && err.code === 'BountyNotFound') {
         router.push('/')
       }
     } finally {
       setLoading(false)
     }
-  }, [bountyId, router])
+  }, [bountyId, router, isFallbackMode, setFallbackMode, toast])
 
   useEffect(() => {
     void fetchBounty()
@@ -93,11 +142,11 @@ export default function BountyDetailPage() {
 
   const isCreator = address === bounty.creator
   const isWorker = address === bounty.worker
-  const canClaim = bounty.status === 'open' && connected && !isCreator
-  const canSubmit = bounty.status === 'claimed' && isWorker
-  const canApprove = bounty.status === 'submitted' && isCreator
-  const canReject = bounty.status === 'submitted' && isCreator
-  const canDispute = (bounty.status === 'submitted' || bounty.status === 'claimed') && (isCreator || isWorker)
+  const canClaim = bounty.status === 'open' && connected && !isCreator && !isFallbackMode
+  const canSubmit = bounty.status === 'claimed' && isWorker && !isFallbackMode
+  const canApprove = bounty.status === 'submitted' && isCreator && !isFallbackMode
+  const canReject = bounty.status === 'submitted' && isCreator && !isFallbackMode
+  const canDispute = (bounty.status === 'submitted' || bounty.status === 'claimed') && (isCreator || isWorker) && !isFallbackMode
 
   const handleClaim = async () => {
     if (!jwt) return

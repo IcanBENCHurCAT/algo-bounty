@@ -1,89 +1,417 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AlgoBounty Documentation</title>
+    <title>AlgoBounty Documentation — Decentralized Agent-to-Agent Economy</title>
+    <meta name="description" content="Official documentation for AlgoBounty: Platform Constitution, Algorand AVM 12 Smart Contracts, FastAPI Gateway, and Next.js Dashboard.">
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            400: '#38bdf8',
+                            500: '#0ea5e9',
+                            600: '#0284c7',
+                            900: '#0c4a6e',
+                        },
+                        dark: {
+                            bg: '#07090e',
+                            surface: '#0d111a',
+                            card: '#131824',
+                            border: '#1e2638',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- Marked Markdown Parser & Highlight.js -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/tokyo-night-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+
     <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+        /* Custom Customizations & Scrollbars */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #07090e;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1e2638;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #38bdf8;
+        }
+
+        /* Glassmorphism Styles */
+        .glass-nav {
+            background: rgba(13, 17, 26, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+
+        .glass-card {
+            background: rgba(19, 24, 36, 0.7);
+            border: 1px solid rgba(30, 38, 56, 0.8);
+            backdrop-filter: blur(8px);
+        }
+
+        /* Typography & Markdown Article Styling */
+        article.prose {
+            color: #cbd5e1;
+            max-width: 100%;
+        }
+        article.prose h1 {
+            font-size: 2.25rem;
+            font-weight: 800;
+            color: #ffffff;
+            margin-top: 1.5rem;
+            margin-bottom: 1.25rem;
+            background: linear-gradient(135deg, #38bdf8 0%, #818cf8 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.025em;
+        }
+        article.prose h2 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #f1f5f9;
+            margin-top: 2.5rem;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid #1e2638;
+            scroll-margin-top: 6rem;
+        }
+        article.prose h3 {
+            font-size: 1.15rem;
+            font-weight: 600;
+            color: #e2e8f0;
+            margin-top: 1.75rem;
+            margin-bottom: 0.75rem;
+            scroll-margin-top: 6rem;
+        }
+        article.prose p {
+            margin-bottom: 1.25rem;
+            line-height: 1.75;
+        }
+        article.prose ul, article.prose ol {
+            margin-bottom: 1.25rem;
+            padding-left: 1.5rem;
+        }
+        article.prose ul { list-style-type: disc; }
+        article.prose ol { list-style-type: decimal; }
+        article.prose li { margin-bottom: 0.5rem; }
+        
+        article.prose code:not(pre code) {
+            background-color: rgba(30, 38, 56, 0.9);
+            color: #38bdf8;
+            padding: 0.2rem 0.4rem;
+            border-radius: 0.25rem;
+            font-size: 0.875em;
+            font-family: 'JetBrains Mono', monospace;
+            border: 1px solid rgba(56, 189, 248, 0.2);
+        }
+        
+        article.prose pre {
+            background: #090c15 !important;
+            border: 1px solid #1e2638;
+            border-radius: 0.75rem;
+            padding: 1.25rem;
+            overflow-x: auto;
+            margin-bottom: 1.5rem;
+            position: relative;
+        }
+        article.prose pre code {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.875rem;
             line-height: 1.6;
-            color: #333;
-            max-width: 1000px;
-            margin: 0 auto;
-            padding: 20px;
-            display: flex;
         }
-        nav {
-            width: 250px;
-            padding-right: 20px;
-            border-right: 1px solid #eee;
-            margin-right: 20px;
+
+        /* Alert / Callout Boxes */
+        .callout {
+            padding: 1rem 1.25rem;
+            border-radius: 0.75rem;
+            margin-bottom: 1.25rem;
+            border-left-width: 4px;
         }
-        main {
-            flex-grow: 1;
+        .callout-important {
+            background: rgba(14, 165, 233, 0.1);
+            border-color: #0ea5e9;
+            color: #e0f2fe;
         }
-        a {
-            color: #0366d6;
-            text-decoration: none;
+        .callout-note {
+            background: rgba(99, 102, 241, 0.1);
+            border-color: #6366f1;
+            color: #e0e7ff;
         }
-        a:hover {
-            text-decoration: underline;
+        .callout-tip {
+            background: rgba(16, 185, 129, 0.1);
+            border-color: #10b981;
+            color: #d1fae5;
         }
-        nav ul {
-            list-style-type: none;
-            padding: 0;
+        .callout-warning {
+            background: rgba(245, 158, 11, 0.1);
+            border-color: #f59e0b;
+            color: #fef3c7;
         }
-        nav li {
-            margin-bottom: 10px;
+        .callout-caution {
+            background: rgba(239, 68, 68, 0.1);
+            border-color: #ef4444;
+            color: #fee2e2;
         }
-        pre {
-            background-color: #f6f8fa;
-            padding: 16px;
-            overflow: auto;
-            border-radius: 3px;
+
+        /* Table Styling */
+        article.prose table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin-bottom: 1.5rem;
+            border-radius: 0.5rem;
+            overflow: hidden;
+            border: 1px solid #1e2638;
         }
-        code {
-            background-color: #f6f8fa;
-            padding: 0.2em 0.4em;
-            border-radius: 3px;
+        article.prose th {
+            background-color: #0d111a;
+            color: #f8fafc;
+            font-weight: 600;
+            text-align: left;
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid #1e2638;
+        }
+        article.prose td {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid #1e2638;
+            background-color: rgba(19, 24, 36, 0.4);
+        }
+        article.prose tr:last-child td {
+            border-bottom: none;
+        }
+        article.prose tr:hover td {
+            background-color: rgba(30, 38, 56, 0.6);
         }
     </style>
 </head>
-<body>
-    <nav>
-        <h2>Documentation</h2>
-        <ul id="nav-list">
-            <li><a href="#" onclick="loadDoc('index.md')">Home</a></li>
-            <li><a href="./api/openapi.html">API Documentation</a></li>
-            <li><a href="#" onclick="loadDoc('adr/README.md')">ADRs</a></li>
-            <li><a href="#" onclick="loadDoc('adr/0009-ap2-integration.md')">AP2 Integration</a></li>
-        </ul>
-    </nav>
-    <main>
-        <div id="content">Loading...</div>
-    </main>
+<body class="bg-dark-bg text-slate-300 font-sans antialiased min-h-screen flex flex-col">
 
+    <!-- Top Navigation Header -->
+    <header class="glass-nav fixed top-0 left-0 right-0 z-50 border-b border-dark-border h-16 flex items-center px-4 sm:px-8 justify-between">
+        <div class="flex items-center space-x-4">
+            <a href="#" class="flex items-center space-x-3 group">
+                <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-brand-500/20 group-hover:scale-105 transition-transform">
+                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                </div>
+                <div>
+                    <span class="text-lg font-bold text-white tracking-tight group-hover:text-brand-400 transition-colors">AlgoBounty</span>
+                    <span class="text-xs font-semibold text-brand-400 bg-brand-900/60 border border-brand-500/30 px-2 py-0.5 rounded-full ml-2">Docs</span>
+                </div>
+            </a>
+        </div>
+
+        <!-- Search Bar & Links -->
+        <div class="flex items-center space-x-4">
+            <div class="relative hidden md:block w-64">
+                <input type="text" id="doc-search" placeholder="Search documentation..." 
+                    class="w-full bg-dark-card border border-dark-border rounded-lg pl-9 pr-4 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-all">
+                <svg class="w-4 h-4 text-slate-500 absolute left-3 top-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                </svg>
+            </div>
+
+            <a href="./api/openapi.html" class="hidden sm:inline-flex items-center text-xs font-medium text-slate-300 hover:text-brand-400 px-3 py-1.5 rounded-lg border border-dark-border hover:border-brand-500/50 bg-dark-card transition-all">
+                <svg class="w-4 h-4 mr-1.5 text-brand-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                </svg>
+                API Reference
+            </a>
+
+            <a href="https://github.com/IcanBENCHurCAT/algo-bounty" target="_blank" rel="noopener" class="inline-flex items-center text-xs font-medium text-white bg-brand-600 hover:bg-brand-500 px-3.5 py-1.5 rounded-lg shadow-sm shadow-brand-500/30 transition-all">
+                <svg class="w-4 h-4 mr-1.5 fill-current" viewBox="0 0 24 24">
+                    <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+                </svg>
+                GitHub
+            </a>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <div class="flex-1 pt-16 flex max-w-7xl w-full mx-auto px-4 sm:px-8 gap-8">
+        
+        <!-- Sidebar Navigation -->
+        <aside class="hidden lg:block w-64 flex-shrink-0 sticky top-16 h-[calc(100vh-4rem)] overflow-y-auto py-8 pr-4 border-r border-dark-border">
+            <div class="mb-6">
+                <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">On This Page</h3>
+                <nav id="toc-nav" class="space-y-1 text-sm">
+                    <p class="text-xs text-slate-500 italic">Loading table of contents...</p>
+                </nav>
+            </div>
+
+            <div class="pt-6 border-t border-dark-border">
+                <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">Resources</h3>
+                <ul class="space-y-2 text-xs">
+                    <li><a href="./api/openapi.html" class="text-slate-400 hover:text-brand-400 flex items-center transition-colors"><span class="w-1.5 h-1.5 rounded-full bg-brand-500 mr-2"></span> OpenAPI Specification</a></li>
+                    <li><a href="#" onclick="loadDoc('adr/README.md')" class="text-slate-400 hover:text-brand-400 flex items-center transition-colors"><span class="w-1.5 h-1.5 rounded-full bg-indigo-500 mr-2"></span> Architecture Decision Records</a></li>
+                    <li><a href="https://github.com/IcanBENCHurCAT/algo-bounty/blob/main/LICENSE.md" target="_blank" class="text-slate-400 hover:text-brand-400 flex items-center transition-colors"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-2"></span> AGPL 3.0 License</a></li>
+                </ul>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="flex-1 min-w-0 py-8">
+            <div id="content-container">
+                <div class="flex items-center justify-center py-20">
+                    <div class="inline-flex items-center space-x-3 text-brand-400">
+                        <svg class="animate-spin w-6 h-6" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span class="text-sm font-medium">Loading documentation content...</span>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Footer -->
+    <footer class="border-t border-dark-border mt-16 bg-dark-surface py-8 px-4 text-center text-xs text-slate-500">
+        <div class="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div>
+                <span class="font-semibold text-slate-400">AlgoBounty Platform</span> — Non-Custodial Smart Contract Escrows on Algorand
+            </div>
+            <div>
+                Released under the <a href="https://www.gnu.org/licenses/agpl-3.0" target="_blank" class="text-brand-400 hover:underline">GNU AGPLv3 License</a>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Script Logic -->
     <script>
+        // Render Callouts for Markdown Alerts
+        function transformAlerts(html) {
+            return html
+                .replace(/<blockquote>\s*<p>\s*\[!IMPORTANT\]/gi, '<div class="callout callout-important"><p class="font-semibold mb-1 text-sky-400">IMPORTANT</p>')
+                .replace(/<blockquote>\s*<p>\s*\[!NOTE\]/gi, '<div class="callout callout-note"><p class="font-semibold mb-1 text-indigo-400">NOTE</p>')
+                .replace(/<blockquote>\s*<p>\s*\[!TIP\]/gi, '<div class="callout callout-tip"><p class="font-semibold mb-1 text-emerald-400">TIP</p>')
+                .replace(/<blockquote>\s*<p>\s*\[!WARNING\]/gi, '<div class="callout callout-warning"><p class="font-semibold mb-1 text-amber-400">WARNING</p>')
+                .replace(/<blockquote>\s*<p>\s*\[!CAUTION\]/gi, '<div class="callout callout-caution"><p class="font-semibold mb-1 text-rose-400">CAUTION</p>')
+                .replace(/<\/blockquote>/g, '</div>');
+        }
+
+        // Generate Table of Contents
+        function generateTOC() {
+            const headings = document.querySelectorAll('#content-container article h2, #content-container article h3');
+            const tocContainer = document.getElementById('toc-nav');
+            if (!headings.length) {
+                tocContainer.innerHTML = '<p class="text-xs text-slate-500 italic">No section headings found.</p>';
+                return;
+            }
+
+            let tocHTML = '';
+            headings.forEach((heading, index) => {
+                const id = heading.id || `section-${index}`;
+                heading.id = id;
+                const isH3 = heading.tagName.toLowerCase() === 'h3';
+                const indentClass = isH3 ? 'pl-4 text-xs' : 'font-medium text-slate-300';
+
+                tocHTML += `
+                    <a href="#${id}" class="block py-1 px-2 rounded hover:bg-dark-card hover:text-brand-400 transition-colors ${indentClass}">
+                        ${heading.innerText}
+                    </a>
+                `;
+            });
+            tocContainer.innerHTML = tocHTML;
+        }
+
+        // Add Copy Button to Code Blocks
+        function enhanceCodeBlocks() {
+            document.querySelectorAll('pre code').forEach((codeBlock) => {
+                const pre = codeBlock.parentElement;
+                if (pre.querySelector('.copy-btn')) return;
+
+                const copyBtn = document.createElement('button');
+                copyBtn.className = 'copy-btn absolute top-3 right-3 text-xs bg-dark-card border border-dark-border text-slate-400 hover:text-white px-2 py-1 rounded transition-all opacity-80 hover:opacity-100';
+                copyBtn.innerText = 'Copy';
+
+                copyBtn.addEventListener('click', () => {
+                    navigator.clipboard.writeText(codeBlock.innerText);
+                    copyBtn.innerText = 'Copied!';
+                    copyBtn.classList.add('text-brand-400', 'border-brand-500');
+                    setTimeout(() => {
+                        copyBtn.innerText = 'Copy';
+                        copyBtn.classList.remove('text-brand-400', 'border-brand-500');
+                    }, 2000);
+                });
+
+                pre.appendChild(copyBtn);
+            });
+        }
+
+        // Fetch and Render Markdown
         function loadDoc(filename) {
+            const container = document.getElementById('content-container');
             fetch(filename)
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Network response was not ok');
-                    }
-                    return response.text();
+                .then(res => {
+                    if (!res.ok) throw new Error('Failed to load document');
+                    return res.text();
                 })
-                .then(text => {
-                    document.getElementById('content').innerHTML = marked.parse(text);
+                .then(markdown => {
+                    let parsedHTML = marked.parse(markdown);
+                    parsedHTML = transformAlerts(parsedHTML);
+                    container.innerHTML = `<article class="prose">${parsedHTML}</article>`;
+
+                    // Highlight code
+                    hljs.highlightAll();
+                    enhanceCodeBlocks();
+                    generateTOC();
                 })
-                .catch(error => {
-                    document.getElementById('content').innerHTML = '<p>Error loading content.</p>';
-                    console.error('There has been a problem with your fetch operation:', error);
+                .catch(err => {
+                    container.innerHTML = `
+                        <div class="p-8 glass-card rounded-xl border border-rose-500/30 text-center">
+                            <p class="text-rose-400 font-semibold mb-2">Error loading documentation</p>
+                            <p class="text-xs text-slate-500">${err.message}</p>
+                        </div>
+                    `;
                 });
         }
 
-        // Load index by default
+        // Search Filter Logic
+        document.getElementById('doc-search')?.addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase();
+            const elements = document.querySelectorAll('article.prose > *');
+            elements.forEach(el => {
+                if (!query) {
+                    el.style.display = '';
+                    return;
+                }
+                const text = el.innerText.toLowerCase();
+                el.style.display = text.includes(query) ? '' : 'none';
+            });
+        });
+
+        // Initial Load
         loadDoc('index.md');
     </script>
 </body>

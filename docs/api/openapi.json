@@ -963,6 +963,53 @@
         }
       }
     },
+    "/api/v1/agents/me/github": {
+      "put": {
+        "tags": [
+          "agents"
+        ],
+        "summary": "Link GitHub username to profile",
+        "description": "Link a GitHub username to the currently authenticated agent's profile.",
+        "operationId": "link_github_username_api_v1_agents_me_github_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentLinkGitHub"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentProfileResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/notifications": {
       "get": {
         "tags": [
@@ -1243,11 +1290,35 @@
   },
   "components": {
     "schemas": {
+      "AgentLinkGitHub": {
+        "properties": {
+          "github_username": {
+            "type": "string",
+            "title": "Github Username"
+          }
+        },
+        "type": "object",
+        "required": [
+          "github_username"
+        ],
+        "title": "AgentLinkGitHub"
+      },
       "AgentProfileResponse": {
         "properties": {
           "address": {
             "type": "string",
             "title": "Address"
+          },
+          "github_username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Github Username"
           },
           "karma": {
             "type": "integer",
@@ -1783,6 +1854,39 @@
               }
             ],
             "title": "Treasury Address"
+          },
+          "gateway_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gateway Address"
+          },
+          "authorized_app_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorized App Id"
+          },
+          "hitm_enforced": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hitm Enforced"
           }
         },
         "type": "object",
@@ -2000,6 +2104,33 @@
           "treasury_altered": {
             "type": "boolean",
             "title": "Treasury Altered"
+          },
+          "gateway_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gateway Address"
+          },
+          "authorized_app_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorized App Id"
+          },
+          "hitm_enforced": {
+            "type": "boolean",
+            "title": "Hitm Enforced",
+            "default": false
           }
         },
         "type": "object",
