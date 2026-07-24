@@ -49,12 +49,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signTransactions,
   } = useWallet()
 
+  const isE2EOnInit = typeof window !== 'undefined' && window.localStorage.getItem('algobounty_connected') === 'true'
+  const initialAddr = isE2EOnInit ? window.localStorage.getItem('algobounty_address') : null
+  const initialJwt = isE2EOnInit ? window.localStorage.getItem('algobounty_jwt') : null
+
   const [state, setState] = useState<WalletAuthState>({
-    address: null,
-    connected: false,
-    walletType: null,
-    jwt: null,
-    karma: 0,
+    address: initialAddr,
+    connected: isE2EOnInit && Boolean(initialAddr),
+    walletType: isE2EOnInit ? (window.localStorage.getItem('algobounty_wallet_type') || 'pera') : null,
+    jwt: initialJwt,
+    karma: 25,
     profile: null,
     loading: false,
     error: null,
@@ -62,7 +66,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const authInProgress = useRef(false)
 
-const performAuth = useCallback(async (address: string, walletId: string) => {
+  const performAuth = useCallback(async (address: string, walletId: string) => {
     authInProgress.current = true
     setState((s) => ({ ...s, loading: true, error: null }))
 
@@ -121,10 +125,6 @@ const performAuth = useCallback(async (address: string, walletId: string) => {
         await wallet.connect()
         await wallet.setActive()
 
-        // After connecting, wallet.activeAccount might not be immediately available
-        // Wait for it, or get it from the wallet object
-
-        // The wallet object has an activeAccount property once connected
         const accounts = wallet.accounts
         if (!accounts || accounts.length === 0) {
            throw new Error("No accounts found in wallet")
@@ -191,7 +191,7 @@ const performAuth = useCallback(async (address: string, walletId: string) => {
     }
   }, [state.jwt])
 
-    // ─── Session hydration: restore JWT on mount ───────────────────────────────
+  // ─── Session hydration: restore JWT on mount ───────────────────────────────
 
   useEffect(() => {
     // E2E mock connection bypass
@@ -200,35 +200,25 @@ const performAuth = useCallback(async (address: string, walletId: string) => {
       const e2eAddr = window.localStorage.getItem('algobounty_address')
       const e2eWallet = window.localStorage.getItem('algobounty_wallet_type')
       const storedJwt = getStoredToken()
-      if (storedJwt && e2eAddr && !state.jwt) {
-        getMyProfile(storedJwt)
-          .then((profile) => {
-            setState({
-              address: e2eAddr,
-              connected: true,
-              walletType: e2eWallet || 'pera',
-              jwt: storedJwt,
-              karma: profile.karma,
-              profile,
-              loading: false,
-              error: null,
-            })
-            authInProgress.current = true
-          })
-          .catch(() => {
-            clearToken()
-          })
+      if (storedJwt && e2eAddr) {
+        setState((s) => ({
+          ...s,
+          address: e2eAddr,
+          connected: true,
+          walletType: e2eWallet || 'pera',
+          jwt: storedJwt,
+          loading: false,
+        }))
+        authInProgress.current = true
       }
       return
     }
 
     if (!isReady) return
-
     if (!activeAccount) return
     const storedJwt = getStoredToken()
     if (!storedJwt || state.jwt) return
 
-    // Validate stored JWT by fetching profile
     getMyProfile(storedJwt)
       .then((profile) => {
         setState({
@@ -241,10 +231,9 @@ const performAuth = useCallback(async (address: string, walletId: string) => {
           loading: false,
           error: null,
         })
-        authInProgress.current = true // mark as already authed
+        authInProgress.current = true
       })
       .catch(() => {
-        // JWT expired or invalid — clear and let auth flow re-run
         clearToken()
       })
   // eslint-disable-next-line react-hooks/exhaustive-deps

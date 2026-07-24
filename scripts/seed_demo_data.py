@@ -1,26 +1,32 @@
 import sys
 import os
+import time
+import json
+import jwt
 
 # Set root PYTHONPATH
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from gateway.database import SessionLocal, init_db, Bounty, Agent
 
+SECRET_KEY = os.getenv("SECRET_KEY", "test_secret_12345")
+
 def seed():
     init_db()
     db = SessionLocal()
     try:
-        # Seed test agents
         creator_addr = "CREATOR_ADDRESS_123456789"
         worker_addr = "WORKER_ADDRESS_987654321"
 
+        # Seed agents
         if not db.query(Agent).filter(Agent.address == creator_addr).first():
             db.add(Agent(address=creator_addr, karma=50))
         if not db.query(Agent).filter(Agent.address == worker_addr).first():
             db.add(Agent(address=worker_addr, karma=30))
 
-        # Check or add open bounty
-        if not db.query(Bounty).filter(Bounty.bounty_id == "b_1001").first():
+        # Seed open bounty for Claiming
+        b1 = db.query(Bounty).filter(Bounty.bounty_id == "b_1001").first()
+        if not b1:
             db.add(Bounty(
                 bounty_id="b_1001",
                 app_id=1001,
@@ -36,8 +42,13 @@ def seed():
                 platform_fee=200,
                 hitm_enforced=False
             ))
+        else:
+            b1.status = "open"
+            b1.worker = None
 
-        if not db.query(Bounty).filter(Bounty.bounty_id == "b_1002").first():
+        # Seed claimed bounty for Submitting
+        b2 = db.query(Bounty).filter(Bounty.bounty_id == "b_1002").first()
+        if not b2:
             db.add(Bounty(
                 bounty_id="b_1002",
                 app_id=1002,
@@ -54,8 +65,13 @@ def seed():
                 platform_fee=200,
                 hitm_enforced=False
             ))
+        else:
+            b2.status = "claimed"
+            b2.worker = worker_addr
 
-        if not db.query(Bounty).filter(Bounty.bounty_id == "b_1003").first():
+        # Seed submitted bounty for Approving
+        b3 = db.query(Bounty).filter(Bounty.bounty_id == "b_1003").first()
+        if not b3:
             db.add(Bounty(
                 bounty_id="b_1003",
                 app_id=1003,
@@ -72,9 +88,36 @@ def seed():
                 platform_fee=200,
                 hitm_enforced=False
             ))
+        else:
+            b3.status = "submitted"
+            b3.worker = worker_addr
 
         db.commit()
         print("Successfully seeded demo bounties: b_1001, b_1002, b_1003")
+
+        # Generate valid JWT tokens for Playwright E2E simulation
+        now = int(time.time())
+        creator_jwt = jwt.encode({"sub": creator_addr, "iat": now, "exp": now + 86400}, SECRET_KEY, algorithm="HS256")
+        worker_jwt = jwt.encode({"sub": worker_addr, "iat": now, "exp": now + 86400}, SECRET_KEY, algorithm="HS256")
+
+        session_tokens = {
+            "CREATOR": {
+                "address": creator_addr,
+                "jwt": creator_jwt,
+                "role": "CREATOR"
+            },
+            "WORKER": {
+                "address": worker_addr,
+                "jwt": worker_jwt,
+                "role": "WORKER"
+            }
+        }
+
+        tokens_file = os.path.join(os.path.dirname(__file__), "..", "dashboard", "session_tokens.json")
+        with open(tokens_file, "w", encoding="utf-8") as f:
+            json.dump(session_tokens, f, indent=2)
+        print(f"Generated valid session tokens at: {tokens_file}")
+
     except Exception as e:
         print(f"Error seeding DB: {e}")
         db.rollback()

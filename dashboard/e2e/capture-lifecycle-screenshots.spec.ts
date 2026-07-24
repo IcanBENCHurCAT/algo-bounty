@@ -12,87 +12,131 @@ const DOCS_IMG_DIR = path.join(process.cwd(), '..', 'docs', 'images');
   }
 });
 
-test('Capture Full Rich UI Lifecycle Screenshots (Marketplace, Claim, Submit, Approve)', async ({ page }) => {
-  console.log('--- Step 1: Marketplace Dashboard with Loaded Cards ---');
-  await page.goto('http://localhost:3000/', { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('h1');
-  await page.waitForTimeout(2000); // Wait for React useEffect fetch to complete
+test('Capture Full Rich UI Lifecycle Screenshots (Marketplace, Claim Modal, Submit View, Approve Modal)', async ({ context, page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
 
-  // Capture full marketplace homepage with loaded cards
+  // Apply route mocks on context level so all new pages/tabs receive the mock
+  await context.route('**/api/v1/bounties/*/claim/txn', async route => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        unsigned_txn: "MOCK_CLAIM_TXN",
+        fee_breakdown: {
+          escrow_amount: 150000000,
+          developer_royalty: 1500000,
+          platform_treasury: 1500000,
+          mediator_fee: 0,
+          claimant_payout: 147000000
+        },
+        fee_breakdown_display: {
+          total: "150 ALGO",
+          developer_royalty: "1.50 ALGO",
+          platform_treasury: "1.50 ALGO",
+          mediator_fee: "0 ALGO",
+          claimant_payout: "147 ALGO"
+        }
+      })
+    });
+  });
+
+  await context.route('**/api/v1/bounties/*/approve/txn', async route => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        unsigned_txn: "MOCK_APPROVE_TXN",
+        fee_breakdown: {
+          escrow_amount: 500000000,
+          developer_royalty: 5000000,
+          platform_treasury: 5000000,
+          mediator_fee: 0,
+          claimant_payout: 490000000
+        },
+        fee_breakdown_display: {
+          total: "500 ALGO",
+          developer_royalty: "5.00 ALGO",
+          platform_treasury: "5.00 ALGO",
+          mediator_fee: "0 ALGO",
+          claimant_payout: "490 ALGO"
+        }
+      })
+    });
+  });
+
+  // Load session tokens
+  const tokensPath = path.join(process.cwd(), 'session_tokens.json');
+  const tokens = JSON.parse(fs.readFileSync(tokensPath, 'utf-8'));
+  const creator = tokens.CREATOR;
+  const worker = tokens.WORKER;
+
+  console.log('--- Step 1: Marketplace Dashboard with Loaded Cards ---');
+  await page.goto('http://localhost:3000/');
+  await page.waitForSelector('h1');
+  await page.waitForTimeout(2500);
+
   await page.screenshot({ path: `${DOCS_IMG_DIR}/marketplace_dashboard.png` });
   await page.screenshot({ path: `${BRAIN_DIR}/marketplace_dashboard.png` });
 
-  console.log('--- Step 2: Bounty Detail View & Claim Modal ---');
-  await page.goto('http://localhost:3000/bounties/b_1001', { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('h1');
-
-  // Inject Worker (Bob) Wallet Session
-  await page.evaluate(() => {
-    window.localStorage.setItem('algobounty_jwt', 'mock_jwt_worker_token');
-    window.localStorage.setItem('algobounty_address', 'WORKER_ADDRESS_987654321');
+  console.log('--- Step 2: Open Claim Modal on Open Bounty (b_1001) ---');
+  const workerPage = await context.newPage();
+  await workerPage.setViewportSize({ width: 1280, height: 800 });
+  await workerPage.addInitScript((creds) => {
+    window.localStorage.setItem('algobounty_jwt', creds.jwt);
+    window.localStorage.setItem('algobounty_address', creds.address);
     window.localStorage.setItem('algobounty_connected', 'true');
     window.localStorage.setItem('algobounty_wallet_type', 'pera');
-  });
+  }, worker);
 
-  await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('h1');
-  await page.waitForTimeout(1500);
+  await workerPage.goto('http://localhost:3000/bounties/b_1001');
+  await workerPage.waitForSelector('h1');
+  await workerPage.waitForTimeout(1500);
 
-  await page.screenshot({ path: `${DOCS_IMG_DIR}/bounty_detail_view.png` });
-  await page.screenshot({ path: `${BRAIN_DIR}/bounty_detail_view.png` });
+  await workerPage.screenshot({ path: `${DOCS_IMG_DIR}/bounty_detail_view.png` });
+  await workerPage.screenshot({ path: `${BRAIN_DIR}/bounty_detail_view.png` });
 
-  // Click Claim button to trigger Claim Confirmation Modal with Fee Breakdown
-  const claimBtn = page.locator('#claim-btn');
-  if (await claimBtn.isVisible()) {
-    await claimBtn.click();
-    await page.waitForTimeout(800);
-    await page.screenshot({ path: `${DOCS_IMG_DIR}/claim_bounty_modal.png` });
-    await page.screenshot({ path: `${BRAIN_DIR}/claim_bounty_modal.png` });
-  }
+  const claimBtn = workerPage.locator('#claim-btn');
+  await claimBtn.waitFor({ state: 'visible', timeout: 5000 });
+  await claimBtn.click();
+  await workerPage.waitForSelector('#claim-modal-title', { timeout: 5000 });
+  await workerPage.waitForTimeout(800);
+  await workerPage.screenshot({ path: `${DOCS_IMG_DIR}/claim_bounty_modal.png` });
+  await workerPage.screenshot({ path: `${BRAIN_DIR}/claim_bounty_modal.png` });
 
-  console.log('--- Step 3: Submitting Work (PR Link Input) ---');
-  await page.goto('http://localhost:3000/bounties/b_1002', { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('h1');
+  console.log('--- Step 3: Submitting Work View on Claimed Bounty (b_1002) ---');
+  await workerPage.goto('http://localhost:3000/bounties/b_1002');
+  await workerPage.waitForSelector('h1');
+  await workerPage.waitForTimeout(1500);
 
-  await page.evaluate(() => {
-    window.localStorage.setItem('algobounty_jwt', 'mock_jwt_worker_token');
-    window.localStorage.setItem('algobounty_address', 'WORKER_ADDRESS_987654321');
-    window.localStorage.setItem('algobounty_connected', 'true');
-  });
-
-  await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('h1');
-  await page.waitForTimeout(1500);
-
-  const prInput = page.locator('#pr-url-input');
+  const prInput = workerPage.locator('#pr-url-input');
   if (await prInput.isVisible()) {
     await prInput.fill('https://github.com/IcanBENCHurCAT/algo-bounty/pull/42');
-    await page.waitForTimeout(600);
+    await workerPage.waitForTimeout(600);
   }
-  await page.screenshot({ path: `${DOCS_IMG_DIR}/submit_work_view.png` });
-  await page.screenshot({ path: `${BRAIN_DIR}/submit_work_view.png` });
+  await workerPage.screenshot({ path: `${DOCS_IMG_DIR}/submit_work_view.png` });
+  await workerPage.screenshot({ path: `${BRAIN_DIR}/submit_work_view.png` });
 
-  console.log('--- Step 4: Creator Approval & Fee Breakdown Modal ---');
-  await page.goto('http://localhost:3000/bounties/b_1003', { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('h1');
-
-  await page.evaluate(() => {
-    window.localStorage.setItem('algobounty_jwt', 'mock_jwt_creator_token');
-    window.localStorage.setItem('algobounty_address', 'CREATOR_ADDRESS_123456789');
+  console.log('--- Step 4: Open Approval Modal on Submitted Bounty (b_1003) ---');
+  const creatorPage = await context.newPage();
+  await creatorPage.setViewportSize({ width: 1280, height: 800 });
+  await creatorPage.addInitScript((creds) => {
+    window.localStorage.setItem('algobounty_jwt', creds.jwt);
+    window.localStorage.setItem('algobounty_address', creds.address);
     window.localStorage.setItem('algobounty_connected', 'true');
-  });
+    window.localStorage.setItem('algobounty_wallet_type', 'pera');
+  }, creator);
 
-  await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('h1');
-  await page.waitForTimeout(1500);
+  await creatorPage.goto('http://localhost:3000/bounties/b_1003');
+  await creatorPage.waitForSelector('h1');
+  await creatorPage.waitForTimeout(1500);
 
-  const approveBtn = page.locator('#approve-btn');
-  if (await approveBtn.isVisible()) {
-    await approveBtn.click();
-    await page.waitForTimeout(800);
-    await page.screenshot({ path: `${DOCS_IMG_DIR}/approve_payout_modal.png` });
-    await page.screenshot({ path: `${BRAIN_DIR}/approve_payout_modal.png` });
-  }
+  const approveBtn = creatorPage.locator('#approve-btn');
+  await approveBtn.waitFor({ state: 'visible', timeout: 5000 });
+  await approveBtn.click();
+  await creatorPage.waitForSelector('#approve-modal-title', { timeout: 5000 });
+  await creatorPage.waitForTimeout(800);
+  await creatorPage.screenshot({ path: `${DOCS_IMG_DIR}/approve_payout_modal.png` });
+  await creatorPage.screenshot({ path: `${BRAIN_DIR}/approve_payout_modal.png` });
 
   console.log('Full rich UI lifecycle screenshots captured successfully.');
 });
