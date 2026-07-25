@@ -113,11 +113,27 @@ class AlgorandAssetHoldersResponse(BaseModel):
     holders: list[AssetHolderRecord]
     error: Optional[str] = None
 
-class ArbitratorRegistrationResponse(BaseModel):
+class EvaluatorRegistrationResponse(BaseModel):
     status: str
     address: str
 
-class ArbitratorVoteResponse(BaseModel):
+class EvaluatorResponse(BaseModel):
+    address: str
+    status: str
+    karma: Optional[int] = 0
+    disputes_lost: Optional[int] = 0
+
+class EvaluatorListResponse(BaseModel):
+    evaluators: list[EvaluatorResponse]
+    total: int
+    
+class EvaluatorMeResponse(BaseModel):
+    address: str
+    status: str
+    karma: int
+    can_register: bool
+
+class EvaluatorVoteResponse(BaseModel):
     status: str
     bounty_id: str
     vote: str
@@ -210,3 +226,30 @@ class HealthResponse(BaseModel):
 
 class EventStreamResponse(BaseModel):
     pass # SSE endpoint, returns a text/event-stream
+
+class SyncGithubResponse(BaseModel):
+    status: str
+    bounty_id: str
+    github_state: str
+    previous_status: Optional[str] = None
+    current_status: Optional[str] = None
+    payout_ready: bool
+    message: str
+
+class ClaimPayoutResponse(BaseModel):
+    status: str
+    bounty_id: str
+    tx_id: Optional[str] = None
+    amount: Optional[int] = None
+    message: str
+
+class AdminResolveRequest(BaseModel):
+    resolution: str  # "worker_win", "creator_win", or "split"
+    reason: Optional[str] = "Admin dispute resolution"
+
+class AdminResolveResponse(BaseModel):
+    status: str
+    bounty_id: str
+    resolution: str
+    tx_id: Optional[str] = None
+    message: str

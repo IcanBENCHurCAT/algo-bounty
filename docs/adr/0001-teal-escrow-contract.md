@@ -2,6 +2,8 @@
 
 **State machine contract that powers every bounty — deposits, claims, releases, refunds, disputes, and GitHub verification. Implementation-ready reference synced with escrow.algo (Puya/pyTEAL source).**
 
+> **Status: Updated by ADR 0013** (Platform fees parameterized in Box Storage; 30-day dispute timeout fallback added).
+
 ---
 
 ## 1. Implementation Framework

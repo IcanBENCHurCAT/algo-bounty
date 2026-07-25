@@ -1,8 +1,9 @@
 from ..schemas import ListBountiesResponse, BountyResponse, BountyCreateResponse, BountyActionResponse, BountyOnchainResponse
 import re
-from datetime import datetime, UTC
+from datetime import datetime, UTC, timezone
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Body
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from ..database import Bounty, Agent, GitHubPR, Notification
@@ -54,9 +55,22 @@ def list_bounties(
     hitm: Optional[bool] = None,
     creator: Optional[str] = None,
     worker: Optional[str] = None,
+    admin_address: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     query = db.query(Bounty)
+
+    # Deployment Scoping: Filter bounties matching this instance's ADMIN_ADDRESS / TREASURY_ADDRESS
+    if admin_address != "all":
+        target_admin = admin_address or settings.ADMIN_ADDRESS or settings.TREASURY_ADDRESS
+        if target_admin:
+            query = query.filter(
+                or_(
+                    Bounty.treasury_address == target_admin,
+                    Bounty.creator == target_admin
+                )
+            )
+
     if creator:
         query = query.filter(Bounty.creator == creator)
     if worker:
@@ -130,6 +144,18 @@ def get_bounty(bounty_id: str, db: Session = Depends(get_db)):
 
 @router.post("", response_model=BountyCreateResponse, summary="Create a new bounty", description="Deploy a new bounty escrow on-chain (if not in sandbox) and create a database record. Deducts 1 karma from the creator.")
 def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_user: str = Depends(get_current_user)):
+    from ..database import AccountQuarantine
+    quarantine = db.query(AccountQuarantine).filter(
+        AccountQuarantine.address == current_user,
+        AccountQuarantine.status == "active",
+        AccountQuarantine.expires_at > datetime.now(timezone.utc)
+    ).first()
+    if quarantine:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Account is quarantined until {quarantine.expires_at.isoformat()}. Reason: {quarantine.reason}"
+        )
+
     if body.platform_fee > 1000:
         raise HTTPException(status_code=400, detail="Platform fee cannot exceed 10% (1000 basis points)")
 
@@ -236,15 +262,11 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
     if body.authorized_app_id is not None:
         authorized_app = body.authorized_app_id
 
-    is_hitm_enforced = False
-    if not authorized_app:
-        is_hitm_enforced = True
-    elif body.hitm_enforced is not None:
-        is_hitm_enforced = body.hitm_enforced
-    elif body.hitm:
-        is_hitm_enforced = True
+    # Pre-Mainnet Phase: HITM mode is strictly ON by default and cannot be disabled
+    is_hitm_enforced = True
+    is_hitm = True
 
-    default_treasury = settings.TREASURY_ADDRESS or "RTCed54abc91f37d8d2d2cb2cf69ce60b0021fd67e5"
+    default_treasury = settings.ADMIN_ADDRESS or settings.TREASURY_ADDRESS or "RTCed54abc91f37d8d2d2cb2cf69ce60b0021fd67e5"
     if body.bounty_id:
         pending_bounty.status = "open"
         pending_bounty.treasury_altered = is_custom_treasury
@@ -252,9 +274,8 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
         pending_bounty.treasury_address = body.treasury_address or default_treasury
         pending_bounty.gateway_address = body.gateway_address
         pending_bounty.authorized_app_id = authorized_app
-        pending_bounty.hitm_enforced = is_hitm_enforced
-        if is_hitm_enforced:
-            pending_bounty.is_hitm = True
+        pending_bounty.hitm_enforced = True
+        pending_bounty.is_hitm = True
         db.commit()
     else:
         new_bounty = Bounty(
@@ -264,7 +285,7 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
             creator=current_user,
             amount=body.amount,
             asset_id=body.asset_id,
-            is_hitm=body.hitm or is_hitm_enforced,
+            is_hitm=True,
             description=body.description,
             repo_url=body.repo_url,
             karma_requirement=body.karma_requirement,
@@ -274,7 +295,7 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
             treasury_address=body.treasury_address or default_treasury,
             gateway_address=body.gateway_address,
             authorized_app_id=authorized_app,
-            hitm_enforced=is_hitm_enforced
+            hitm_enforced=True
         )
         db.add(new_bounty)
         db.commit()
@@ -888,3 +909,145 @@ def get_bounty_onchain(bounty_id: str, db: Session = Depends(get_db)):
             "error": str(e),
             "status": b.status,
         }
+
+
+from ..schemas import SyncGithubResponse, ClaimPayoutResponse
+from ..database import SyncRecord, AccountQuarantine
+
+@router.post("/{bounty_id}/sync-github", response_model=SyncGithubResponse, summary="Manual GitHub Sync")
+async def sync_github_endpoint(
+    bounty_id: str,
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user)
+):
+    bounty = db.query(Bounty).filter(Bounty.bounty_id == bounty_id).first()
+    if not bounty:
+        raise HTTPException(status_code=404, detail="Bounty not found")
+    if not bounty.repo_url:
+        raise HTTPException(status_code=422, detail="Bounty has no linked GitHub repository")
+
+    from ..github import check_github_contribution_state
+    res = await check_github_contribution_state(bounty, db)
+    state = res.get("state")
+    sha = res.get("sha", "")
+    event_id = res.get("event_id", "")
+
+    if state == "merged":
+        idempotency_key = f"{bounty_id}:{sha or event_id}"
+        existing_sync = db.query(SyncRecord).filter(SyncRecord.idempotency_key == idempotency_key).first()
+        if existing_sync:
+            return {
+                "status": "already_processed",
+                "bounty_id": bounty_id,
+                "github_state": state,
+                "previous_status": bounty.status,
+                "current_status": bounty.status,
+                "payout_ready": bounty.payout_ready,
+                "message": "This state change has already been processed."
+            }
+
+        prev_status = bounty.status
+        bounty.payout_ready = True
+        bounty.payout_ready_at = datetime.now(timezone.utc)
+        
+        sync_rec = SyncRecord(
+            bounty_id=bounty_id,
+            triggered_by=current_user,
+            triggered_at=datetime.now(timezone.utc),
+            github_state=state,
+            action_taken="payout_ready",
+            idempotency_key=idempotency_key
+        )
+        db.add(sync_rec)
+        db.commit()
+
+        return {
+            "status": "synced",
+            "bounty_id": bounty_id,
+            "github_state": state,
+            "previous_status": prev_status,
+            "current_status": bounty.status,
+            "payout_ready": True,
+            "message": f"Contribution state detected as {state}. Worker can now claim payout."
+        }
+
+    return {
+        "status": "no_change",
+        "bounty_id": bounty_id,
+        "github_state": state,
+        "previous_status": bounty.status,
+        "current_status": bounty.status,
+        "payout_ready": bounty.payout_ready,
+        "message": "GitHub state has not changed."
+    }
+
+
+@router.post("/{bounty_id}/claim-payout", response_model=ClaimPayoutResponse, summary="Worker Claim Payout")
+def claim_payout_endpoint(
+    bounty_id: str,
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user)
+):
+    bounty = db.query(Bounty).filter(Bounty.bounty_id == bounty_id).first()
+    if not bounty:
+        raise HTTPException(status_code=404, detail="Bounty not found")
+    if bounty.worker and bounty.worker != current_user:
+        raise HTTPException(status_code=403, detail="Only the assigned worker can claim the payout.")
+    if bounty.status == "closed":
+        raise HTTPException(status_code=409, detail="Bounty is already closed.")
+    if not bounty.payout_ready:
+        raise HTTPException(status_code=409, detail="Payout is not ready. Run sync-github first.")
+
+    from ..algod_client import release_trustless
+    payout_res = release_trustless(app_id=bounty.app_id or 0, worker_address=current_user)
+    if not payout_res.get("success"):
+        raise HTTPException(status_code=500, detail=f"Payout release failed: {payout_res.get('error')}")
+
+    bounty.status = "closed"
+    bounty.payout_type = "PAYOUT"
+    bounty.worker = current_user
+    db.commit()
+
+    # Reward worker karma
+    worker_agent = db.query(Agent).filter(Agent.address == current_user).first()
+    if worker_agent:
+        worker_agent.karma += 5
+        worker_agent.completed_bounties += 1
+        db.commit()
+
+    return {
+        "status": "payout_complete",
+        "bounty_id": bounty_id,
+        "tx_id": payout_res.get("tx_id"),
+        "amount": bounty.amount,
+        "message": f"Payout of {bounty.amount} released to wallet {current_user}."
+    }
+
+
+@router.get("/account/quarantine-status", summary="Get Current Account Quarantine Status")
+def get_quarantine_status(
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user)
+):
+    quarantine = db.query(AccountQuarantine).filter(
+        AccountQuarantine.address == current_user,
+        AccountQuarantine.status == "active",
+        AccountQuarantine.expires_at > datetime.now(timezone.utc)
+    ).first()
+
+    if not quarantine:
+        return {
+            "is_quarantined": False,
+            "address": current_user,
+            "status": "normal"
+        }
+
+    return {
+        "is_quarantined": True,
+        "address": current_user,
+        "status": quarantine.status,
+        "reason": quarantine.reason,
+        "details": quarantine.details,
+        "quarantined_at": quarantine.quarantined_at.isoformat(),
+        "expires_at": quarantine.expires_at.isoformat()
+    }

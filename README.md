@@ -40,6 +40,21 @@ AlgoBounty provides open-source, non-custodial smart contract interaction templa
 
 ---
 
+## 🛡️ Rules of the Game & Safety Guarantees
+
+Every bounty on AlgoBounty is governed by 6 clear smart contract rules to ensure complete safety for both Creators and Workers:
+
+1. **Escrow Refund Lock**: Once work is submitted, creator refunds are locked on-chain. Code cannot be inspected and stolen without payment.
+2. **3-Rejection Revision Cap**: Creators can request up to 3 revisions. A 3rd rejection automatically escalates the bounty to `DISPUTED` state.
+3. **7-Day Review Timers**: Creator inactivity auto-releases funds to the worker. Creators must wait 7 days post-rejection before reclaiming abandoned escrow funds.
+4. **30-Day Automated Timeout**: If a dispute remains inactive for 30 days, any participant can trigger a trustless **50/50 Split** on-chain. Funds are never frozen permanently.
+5. **72-Hour Account Quarantine**: Merging a pull request post-refund triggers a 72-hour quarantine and a **-100 Karma** penalty.
+6. **Sync with GitHub Fallback**: Manual sync endpoints guarantee payout execution even if GitHub webhooks drop.
+
+*Read the complete [Rules of the Game Guide](docs/rules_of_the_game.md).*
+
+---
+
 ## 🌐 Permissionless Decentralization & Self-Hosting
 
 AlgoBounty is engineered to prevent central gatekeeping, platform lock-in, or single-point-of-failure control. Over time, the platform is designed to progressively democratize through decentralized node operation:

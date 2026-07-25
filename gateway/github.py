@@ -680,3 +680,51 @@ async def handle_pr_event(db: Session, payload: dict):
                         f"Creator @{bounty.creator} must sign the release transaction on the dashboard to pay the worker."
                     )
                     await post_github_comment_and_labels(bounty.repo_url, int(issue_number), comment=comment_text)
+
+
+async def check_github_contribution_state(bounty, db: Optional[Session] = None) -> dict:
+    """
+    Checks GitHub API for the status of linked PRs or issue close events.
+    Returns: { "state": "merged"|"closed"|"open", "sha": str, "event_id": str }
+    """
+    if not bounty.repo_url:
+        return {"state": "open", "sha": "", "event_id": ""}
+
+    # Extract owner and repo from repo_url
+    match = re.search(r"github\.com/([^/]+)/([^/]+)", bounty.repo_url)
+    if not match:
+        return {"state": "open", "sha": "", "event_id": ""}
+
+    owner, repo = match.group(1), match.group(2).rstrip(".git")
+    token = await get_github_bot_token(owner=owner, repo=repo)
+    headers = {"Accept": "application/vnd.github+json"}
+    if token:
+        headers["Authorization"] = f"token {token}"
+
+    async with httpx.AsyncClient() as client:
+        # Check linked GitHubPRs from DB first if db provided
+        if db:
+            pr_records = db.query(GitHubPR).filter(GitHubPR.bounty_id == bounty.bounty_id).all()
+            for pr in pr_records:
+                url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr.pr_number}"
+                res = await client.get(url, headers=headers)
+                if res.status_code == 200:
+                    data = res.json()
+                    if data.get("merged"):
+                        sha = data.get("merge_commit_sha") or f"pr_{pr.pr_number}_merged"
+                        return {"state": "merged", "sha": sha, "event_id": f"pr_{pr.pr_number}"}
+
+        # Fallback: query PRs for repo matching bounty_id or status
+        url = f"https://api.github.com/repos/{owner}/{repo}/pulls?state=closed"
+        res = await client.get(url, headers=headers)
+        if res.status_code == 200:
+            prs = res.json()
+            for pr in prs:
+                title = pr.get("title", "")
+                body = pr.get("body", "") or ""
+                if bounty.bounty_id in title or bounty.bounty_id in body:
+                    if pr.get("merged_at"):
+                        sha = pr.get("merge_commit_sha") or f"pr_{pr['number']}_merged"
+                        return {"state": "merged", "sha": sha, "event_id": f"pr_{pr['number']}"}
+
+    return {"state": "open", "sha": "", "event_id": ""}

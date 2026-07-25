@@ -45,7 +45,7 @@ const INITIAL: FormState = {
   description: '',
   amountAlgo: '',
   assetId: 0,
-  hitm: false,
+  hitm: true,
   deadlineRounds: String(DEFAULT_DEADLINE_ROUNDS),
   repoUrl: '',
   repoLabels: '',
@@ -440,40 +440,39 @@ export default function CreateBountyPage() {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
             <div>
               <h2 style={{ margin: '0 0 0.25rem', fontSize: '1rem', fontWeight: 700, color: 'var(--color-text-primary)' }}>
-                Human-in-the-Middle (HITM) Mode
+                Human-in-the-Middle (HITM) Mode <span style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '4px', background: 'rgba(245,158,11,0.15)', color: '#f59e0b', marginLeft: '6px' }}>Mandatory (Pre-Mainnet)</span>
               </h2>
               <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>
-                Require manual creator review before payout. Adds a review deadline.
+                Requires creator review & approval before escrow payout release. Mandatory for all bounties in Phase 1.
               </p>
             </div>
             <button
               type="button"
               id="hitm-toggle"
               role="switch"
-              aria-checked={form.hitm}
-              onClick={() => set('hitm', !form.hitm)}
+              disabled
+              aria-checked={true}
               style={{
                 width: '3rem',
                 height: '1.625rem',
                 borderRadius: '999px',
-                background: form.hitm ? 'var(--color-accent)' : 'rgba(255,255,255,0.1)',
+                background: 'var(--color-accent)',
                 border: 'none',
-                cursor: 'pointer',
+                cursor: 'not-allowed',
                 position: 'relative',
                 flexShrink: 0,
-                transition: 'background 0.2s',
+                opacity: 0.8,
               }}
             >
               <span
                 style={{
                   position: 'absolute',
                   top: '3px',
-                  left: form.hitm ? 'calc(100% - 22px)' : '3px',
+                  left: 'calc(100% - 22px)',
                   width: '19px',
                   height: '19px',
                   borderRadius: '50%',
                   background: '#fff',
-                  transition: 'left 0.2s',
                 }}
               />
             </button>

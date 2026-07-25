@@ -36,14 +36,28 @@ def setup_database():
 def clean_db():
     db = TestingSessionLocal()
     try:
-        # Tables might have foreign key constraints
-        db.execute(Base.metadata.tables['dispute_arbitrators'].delete())
-        db.execute(Base.metadata.tables['notifications'].delete())
-        db.execute(Base.metadata.tables['github_prs'].delete())
-        db.execute(Base.metadata.tables['bounties'].delete())
-        db.execute(Base.metadata.tables['arbitrators'].delete())
-        db.execute(Base.metadata.tables['agents'].delete())
-        db.execute(Base.metadata.tables['webhook_delivery_records'].delete())
+        if 'dispute_evaluators' in Base.metadata.tables:
+            db.execute(Base.metadata.tables['dispute_evaluators'].delete())
+        if 'dispute_arbitrators' in Base.metadata.tables:
+            db.execute(Base.metadata.tables['dispute_arbitrators'].delete())
+        if 'notifications' in Base.metadata.tables:
+            db.execute(Base.metadata.tables['notifications'].delete())
+        if 'github_prs' in Base.metadata.tables:
+            db.execute(Base.metadata.tables['github_prs'].delete())
+        if 'bounties' in Base.metadata.tables:
+            db.execute(Base.metadata.tables['bounties'].delete())
+        if 'evaluators' in Base.metadata.tables:
+            db.execute(Base.metadata.tables['evaluators'].delete())
+        if 'arbitrators' in Base.metadata.tables:
+            db.execute(Base.metadata.tables['arbitrators'].delete())
+        if 'account_quarantines' in Base.metadata.tables:
+            db.execute(Base.metadata.tables['account_quarantines'].delete())
+        if 'sync_records' in Base.metadata.tables:
+            db.execute(Base.metadata.tables['sync_records'].delete())
+        if 'agents' in Base.metadata.tables:
+            db.execute(Base.metadata.tables['agents'].delete())
+        if 'webhook_delivery_records' in Base.metadata.tables:
+            db.execute(Base.metadata.tables['webhook_delivery_records'].delete())
         db.commit()
     finally:
         db.close()

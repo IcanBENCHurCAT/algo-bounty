@@ -49,6 +49,7 @@ class EscrowContract(ARC4Contract):
         self.is_hitm = Box(UInt64, key="is_hitm")
         self.review_deadline = Box(UInt64, key="review_deadline")
         self.rejection_count = Box(UInt64, key="rejection_count")
+        self.last_rejection_timestamp = Box(UInt64, key="last_rejection_timestamp")
         self.escrow_amount = Box(UInt64, key="escrow_amount")
         self.asset_id = Box(UInt64, key="asset_id")
         self.creator_address = Box(Account, key="creator_address")
@@ -68,12 +69,12 @@ class EscrowContract(ARC4Contract):
         self.treasury_address = Box(Account, key="treasury_address")
         self.oidc_token = Box(Bytes, key="oidc_token")
         self.candidate_count = Box(UInt64, key="candidate_count")
-        self.arbitrator_1 = Box(Account, key="arbitrator_1")
-        self.arbitrator_2 = Box(Account, key="arbitrator_2")
-        self.arbitrator_3 = Box(Account, key="arbitrator_3")
-        self.arbitrator_1_vote = Box(UInt64, key="arbitrator_1_vote")
-        self.arbitrator_2_vote = Box(UInt64, key="arbitrator_2_vote")
-        self.arbitrator_3_vote = Box(UInt64, key="arbitrator_3_vote")
+        self.evaluator_1 = Box(Account, key="evaluator_1")
+        self.evaluator_2 = Box(Account, key="evaluator_2")
+        self.evaluator_3 = Box(Account, key="evaluator_3")
+        self.evaluator_1_vote = Box(UInt64, key="evaluator_1_vote")
+        self.evaluator_2_vote = Box(UInt64, key="evaluator_2_vote")
+        self.evaluator_3_vote = Box(UInt64, key="evaluator_3_vote")
         self.platform_fee = Box(UInt64, key="platform_fee")
         self.gateway_address = Box(Account, key="gateway_address")
         self.authorized_app_id = Box(UInt64, key="authorized_app_id")
@@ -155,7 +156,11 @@ class EscrowContract(ARC4Contract):
         """Split the platform fee 50/50 between royalty and treasury/gateway,
         pay the 0.25% mediator fee, and return the remaining balance.
         """
-        platform_fee_val = TemplateVar[UInt64]("PLATFORM_FEE")
+        pf_val, pf_exists = self.platform_fee.maybe()
+        if pf_exists and pf_val > UInt64(0):
+            platform_fee_val = pf_val
+        else:
+            platform_fee_val = TemplateVar[UInt64]("PLATFORM_FEE")
         fee_platform = escrow_amount * platform_fee_val // 10000  # Dynamic platform fee
         fee_creator = fee_platform // 2          # royalty
         
@@ -392,6 +397,7 @@ class EscrowContract(ARC4Contract):
         assert self._get_rejection_count() < MAX_REJECTIONS
 
         self.rejection_count.value = self._get_rejection_count() + 1
+        self.last_rejection_timestamp.value = Global.latest_timestamp
         self.state_box.value = UInt64(REJECTED)
 
         log(Bytes(b"work_rejected"))
@@ -414,7 +420,10 @@ class EscrowContract(ARC4Contract):
         self.state_box.value = UInt64(DISPUTED)
         self.dispute_timestamp.value = Global.latest_timestamp
 
-        # Select 3 arbitrators (fallback to treasury if pool size is too small)
+        self._select_evaluators()
+
+    def _select_evaluators(self) -> None:
+        # Select 3 evaluators (fallback to treasury if pool size is too small)
         count = self._get_candidate_count()
         treasury = self.treasury_address.value
         creator = self.creator_address.value
@@ -462,18 +471,36 @@ class EscrowContract(ARC4Contract):
                 idx = (idx + 1) % count
                 searched = searched + 1
 
-        self.arbitrator_1.value = arb1
-        self.arbitrator_2.value = arb2
-        self.arbitrator_3.value = arb3
+        self.evaluator_1.value = arb1
+        self.evaluator_2.value = arb2
+        self.evaluator_3.value = arb3
 
-        self.arbitrator_1_vote.value = UInt64(0)
-        self.arbitrator_2_vote.value = UInt64(0)
-        self.arbitrator_3_vote.value = UInt64(0)
+        self.evaluator_1_vote.value = UInt64(0)
+        self.evaluator_2_vote.value = UInt64(0)
+        self.evaluator_3_vote.value = UInt64(0)
 
         log(Bytes(b"dispute_submitted"))
         log(arb1.bytes)
         log(arb2.bytes)
         log(arb3.bytes)
+
+    @arc4.abimethod
+    def escalate_to_dispute(self) -> None:
+        assert Txn.type_enum == TransactionType.ApplicationCall
+        assert Txn.on_completion == OnCompleteAction.NoOp
+        assert Txn.rekey_to == Account(Bytes(32 * b"\x00"))
+
+        assert self.state_box.value == REJECTED
+        assert self._get_rejection_count() >= MAX_REJECTIONS
+        assert Txn.sender == self._get_agent_address(), "Only assigned worker can escalate"
+
+        self.dispute_reason.value = Bytes(b"max_rejections_escalation")
+        self.dispute_initiator.value = Txn.sender
+        self.state_box.value = UInt64(DISPUTED)
+        self.dispute_timestamp.value = Global.latest_timestamp
+
+        self._select_evaluators()
+        log(Bytes(b"dispute_escalated"))
 
     @arc4.abimethod
     def vote_dispute(self, vote_option: UInt64) -> None:
@@ -486,26 +513,26 @@ class EscrowContract(ARC4Contract):
 
         sender = Txn.sender
         voted = False
-        if sender == self.arbitrator_1.value and self.arbitrator_1_vote.value == UInt64(0):
-            self.arbitrator_1_vote.value = vote_option
+        if sender == self.evaluator_1.value and self.evaluator_1_vote.value == UInt64(0):
+            self.evaluator_1_vote.value = vote_option
             voted = True
-        elif sender == self.arbitrator_2.value and self.arbitrator_2_vote.value == UInt64(0):
-            self.arbitrator_2_vote.value = vote_option
+        elif sender == self.evaluator_2.value and self.evaluator_2_vote.value == UInt64(0):
+            self.evaluator_2_vote.value = vote_option
             voted = True
-        elif sender == self.arbitrator_3.value and self.arbitrator_3_vote.value == UInt64(0):
-            self.arbitrator_3_vote.value = vote_option
+        elif sender == self.evaluator_3.value and self.evaluator_3_vote.value == UInt64(0):
+            self.evaluator_3_vote.value = vote_option
             voted = True
 
-        assert voted, "Sender is not an assigned arbitrator with a pending vote"
+        assert voted, "Sender is not an assigned evaluator with a pending vote"
 
-        log(Bytes(b"arbitrator_voted"))
+        log(Bytes(b"evaluator_voted"))
         log(sender.bytes)
         log(op.itob(vote_option))
 
         # Check consensus
-        v1 = self.arbitrator_1_vote.value
-        v2 = self.arbitrator_2_vote.value
-        v3 = self.arbitrator_3_vote.value
+        v1 = self.evaluator_1_vote.value
+        v2 = self.evaluator_2_vote.value
+        v3 = self.evaluator_3_vote.value
 
         consensus_option = UInt64(0)
         if v1 != UInt64(0) and v1 == v2:
@@ -527,9 +554,9 @@ class EscrowContract(ARC4Contract):
 
         fee_arbitration = escrow_amount * 5 // 10000
 
-        v1 = self.arbitrator_1_vote.value
-        v2 = self.arbitrator_2_vote.value
-        v3 = self.arbitrator_3_vote.value
+        v1 = self.evaluator_1_vote.value
+        v2 = self.evaluator_2_vote.value
+        v3 = self.evaluator_3_vote.value
 
         voted_count = UInt64(0)
         if v1 != UInt64(0):
@@ -555,11 +582,11 @@ class EscrowContract(ARC4Contract):
 
             # Pay voting arbitrators
             if v1 != UInt64(0):
-                self._send_payout(self.arbitrator_1.value, fee_per_arbitrator, asset_id)
+                self._send_payout(self.evaluator_1.value, fee_per_arbitrator, asset_id)
             if v2 != UInt64(0):
-                self._send_payout(self.arbitrator_2.value, fee_per_arbitrator, asset_id)
+                self._send_payout(self.evaluator_2.value, fee_per_arbitrator, asset_id)
             if v3 != UInt64(0):
-                self._send_payout(self.arbitrator_3.value, fee_per_arbitrator, asset_id)
+                self._send_payout(self.evaluator_3.value, fee_per_arbitrator, asset_id)
 
             self._send_payout(self._get_agent_address(), remaining_amount, asset_id)
             log(Bytes(b"dispute_resolved_agent_win"))
@@ -575,11 +602,11 @@ class EscrowContract(ARC4Contract):
 
             # Pay voting arbitrators
             if v1 != UInt64(0):
-                self._send_payout(self.arbitrator_1.value, fee_per_arbitrator, asset_id)
+                self._send_payout(self.evaluator_1.value, fee_per_arbitrator, asset_id)
             if v2 != UInt64(0):
-                self._send_payout(self.arbitrator_2.value, fee_per_arbitrator, asset_id)
+                self._send_payout(self.evaluator_2.value, fee_per_arbitrator, asset_id)
             if v3 != UInt64(0):
-                self._send_payout(self.arbitrator_3.value, fee_per_arbitrator, asset_id)
+                self._send_payout(self.evaluator_3.value, fee_per_arbitrator, asset_id)
 
             self._send_payout(self.creator_address.value, remaining_amount, asset_id)
             log(Bytes(b"dispute_resolved_creator_win"))
@@ -593,13 +620,13 @@ class EscrowContract(ARC4Contract):
             self.payout_type.value = Bytes(SPLIT)
             self.state_box.value = UInt64(CLOSED)
 
-            # Pay voting arbitrators
+            # Pay voting evaluators
             if v1 != UInt64(0):
-                self._send_payout(self.arbitrator_1.value, fee_per_arbitrator, asset_id)
+                self._send_payout(self.evaluator_1.value, fee_per_arbitrator, asset_id)
             if v2 != UInt64(0):
-                self._send_payout(self.arbitrator_2.value, fee_per_arbitrator, asset_id)
+                self._send_payout(self.evaluator_2.value, fee_per_arbitrator, asset_id)
             if v3 != UInt64(0):
-                self._send_payout(self.arbitrator_3.value, fee_per_arbitrator, asset_id)
+                self._send_payout(self.evaluator_3.value, fee_per_arbitrator, asset_id)
 
             half_amount = remaining_amount // 2
             self._send_payout(self.creator_address.value, half_amount, asset_id)
@@ -681,8 +708,8 @@ class EscrowContract(ARC4Contract):
         assert self.state_box.value == DISPUTED
 
         dispute_ts = self.dispute_timestamp.value
-        dispute_timeout = TemplateVar[UInt64]("DISPUTE_TIMEOUT")
-        assert Global.latest_timestamp > dispute_ts + dispute_timeout, "Dispute timeout not yet reached"
+        dispute_timeout = UInt64(30 * 24 * 60 * 60)  # 30 days (2,592,000 seconds)
+        assert Global.latest_timestamp > dispute_ts + dispute_timeout, "30-day dispute timeout has not elapsed"
 
         escrow_amount = self.escrow_amount.value
         asset_id = self._get_asset_id()
@@ -739,6 +766,9 @@ class EscrowContract(ARC4Contract):
         assert self.state_box.value == REJECTED
         assert self._get_rejection_count() >= MAX_REJECTIONS
         assert Txn.sender == self.creator_address.value
+
+        abandonment_timeout = TemplateVar[UInt64]("ABANDONMENT_TIMEOUT")
+        assert Global.latest_timestamp > self.last_rejection_timestamp.value + abandonment_timeout, "Abandonment timeout not yet reached"
 
         escrow_amount = self.escrow_amount.value
         asset_id = self._get_asset_id()
@@ -831,7 +861,7 @@ class EscrowContract(ARC4Contract):
         log(op.itob(self.rejection_count.value))
 
     @arc4.abimethod
-    def register_arbitrator(self, address: Account) -> None:
+    def register_evaluator(self, address: Account) -> None:
         assert Txn.type_enum == TransactionType.ApplicationCall
         assert Txn.on_completion == OnCompleteAction.NoOp
         assert Txn.rekey_to == Account(Bytes(32 * b"\x00"))
@@ -841,7 +871,7 @@ class EscrowContract(ARC4Contract):
         # Check if already registered
         key_idx = Bytes(b"cand_idx_") + address.bytes
         dummy, exists = op.Box.get(key_idx)
-        assert not exists, "Arbitrator already registered"
+        assert not exists, "Evaluator already registered"
 
         count = self._get_candidate_count()
 
@@ -852,11 +882,11 @@ class EscrowContract(ARC4Contract):
         # Increment count
         self.candidate_count.value = count + 1
 
-        log(Bytes(b"arbitrator_registered"))
+        log(Bytes(b"evaluator_registered"))
         log(address.bytes)
 
     @arc4.abimethod
-    def deregister_arbitrator(self, address: Account) -> None:
+    def deregister_evaluator(self, address: Account) -> None:
         assert Txn.type_enum == TransactionType.ApplicationCall
         assert Txn.on_completion == OnCompleteAction.NoOp
         assert Txn.rekey_to == Account(Bytes(32 * b"\x00"))
@@ -866,7 +896,7 @@ class EscrowContract(ARC4Contract):
         # Check if registered
         key_idx = Bytes(b"cand_idx_") + address.bytes
         dummy, exists = op.Box.get(key_idx)
-        assert exists, "Arbitrator not registered"
+        assert exists, "Evaluator not registered"
 
         idx_box = Box(UInt64, key=key_idx)
         count = self._get_candidate_count()
@@ -886,7 +916,7 @@ class EscrowContract(ARC4Contract):
 
         self.candidate_count.value = last_idx
 
-        log(Bytes(b"arbitrator_deregistered"))
+        log(Bytes(b"evaluator_deregistered"))
         log(address.bytes)
 
     @arc4.abimethod(allow_actions=["DeleteApplication"])

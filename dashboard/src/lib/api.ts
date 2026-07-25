@@ -13,6 +13,7 @@ import type {
   ApiError,
   TxnGenWithBreakdown,
 } from '@/types'
+export type { Bounty }
 import { AlgoBountyError } from '@/types'
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -94,6 +95,7 @@ export async function getBounties(
   if (filters.limit) params.set('limit', String(filters.limit))
   if (filters.creator) params.set('creator', filters.creator)
   if (filters.worker) params.set('worker', filters.worker)
+  if (filters.adminAddress) params.set('admin_address', filters.adminAddress)
 
   const qs = params.toString()
   return apiFetch<BountyListResponse>(`/api/v1/bounties${qs ? `?${qs}` : ''}`)
@@ -273,3 +275,100 @@ export async function getEscrowTransactions(
 ): Promise<EscrowTransaction[]> {
   return apiFetch<EscrowTransaction[]>(`/api/v1/escrows/${appId}/transactions`)
 }
+
+// ─── Evaluator endpoints ─────────────────────────────────────────────────────
+
+export interface Evaluator {
+  address: string
+  status: string
+  registered_at: string
+  karma: number
+  disputes_assigned: number
+  disputes_voted: number
+}
+
+export interface EvaluatorStatusResponse {
+  is_registered: boolean
+  status: string
+  karma: number
+  can_register: boolean
+  min_karma_required: number
+}
+
+// Backward-compatibility aliases
+export type Arbitrator = Evaluator
+export type ArbitratorStatusResponse = EvaluatorStatusResponse
+
+export async function getEvaluators(): Promise<Evaluator[]> {
+  const res = await apiFetch<{ evaluators: Evaluator[]; total: number }>('/api/v1/evaluators')
+  return res.evaluators || []
+}
+
+export async function getArbitrators(): Promise<Evaluator[]> {
+  return getEvaluators()
+}
+
+export async function getMyEvaluatorStatus(token: string): Promise<EvaluatorStatusResponse> {
+  return apiFetch<EvaluatorStatusResponse>('/api/v1/evaluators/me', {}, token)
+}
+
+export async function getMyArbitratorStatus(token: string): Promise<EvaluatorStatusResponse> {
+  return getMyEvaluatorStatus(token)
+}
+
+export async function registerEvaluator(token: string): Promise<{ address: string; status: string }> {
+  return apiFetch('/api/v1/evaluators/register', { method: 'POST' }, token)
+}
+
+export async function registerArbitrator(token: string): Promise<{ address: string; status: string }> {
+  return registerEvaluator(token)
+}
+
+export async function deregisterEvaluator(token: string): Promise<{ address: string; status: string }> {
+  return apiFetch('/api/v1/evaluators/deregister', { method: 'POST' }, token)
+}
+
+export async function deregisterArbitrator(token: string): Promise<{ address: string; status: string }> {
+  return deregisterEvaluator(token)
+}
+
+export async function syncGithub(bountyId: string, token: string): Promise<{ status: string; payout_ready: boolean; message: string }> {
+  return apiFetch(`/api/v1/bounties/${bountyId}/sync-github`, { method: 'POST' }, token)
+}
+
+export async function claimPayout(bountyId: string, token: string): Promise<{ status: string; tx_id?: string; amount?: number; message: string }> {
+  return apiFetch(`/api/v1/bounties/${bountyId}/claim-payout`, { method: 'POST' }, token)
+}
+
+// ─── Admin Endpoints ─────────────────────────────────────────────────────────
+
+export async function adminResolveDispute(
+  bountyId: string,
+  resolution: 'worker_win' | 'creator_win' | 'split',
+  reason: string,
+  token: string
+): Promise<{ status: string; bounty_id: string; resolution: string }> {
+  return apiFetch(`/api/v1/admin/disputes/${bountyId}/resolve`, {
+    method: 'POST',
+    body: JSON.stringify({ resolution, reason }),
+  }, token)
+}
+
+export async function getQuarantines(token: string): Promise<{ quarantines: any[]; total: number }> {
+  return apiFetch('/api/v1/admin/quarantines', {}, token)
+}
+
+export async function resolveQuarantine(
+  quarantineId: number,
+  action: 'clear' | 'penalize',
+  resolutionNote: string,
+  karmaPenalty: number,
+  token: string
+): Promise<{ status: string; quarantine_id: number; message: string }> {
+  return apiFetch(`/api/v1/admin/quarantines/${quarantineId}/resolve`, {
+    method: 'POST',
+    body: JSON.stringify({ action, resolution_note: resolutionNote, karma_penalty: karmaPenalty }),
+  }, token)
+}
+
+

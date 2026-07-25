@@ -9,6 +9,7 @@ import { useEvents } from '@/hooks/useEvents'
 import { getNotifications } from '@/lib/api'
 import { WalletConnect } from '@/components/WalletConnect'
 import { NotificationsDrawer } from '@/components/NotificationsDrawer'
+import { TermsModal } from '@/components/TermsModal'
 
 import { useFallbackMode } from '@/hooks/useFallbackMode'
 
@@ -16,6 +17,8 @@ const NAV_LINKS = [
   { href: '/',         label: 'Marketplace', id: 'nav-marketplace' },
   { href: '/create',   label: 'Post Bounty', id: 'nav-create' },
   { href: '/profile',  label: 'Profile',     id: 'nav-profile' },
+  { href: '/mediators',label: 'Mediators',   id: 'nav-mediators' },
+  { href: '/admin',    label: 'Admin',       id: 'nav-admin' },
   { href: '/docs',     label: 'Docs',        id: 'nav-docs' },
 ]
 
@@ -79,6 +82,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#070712' }}>
+      <TermsModal />
 
       {isFallbackMode && (
         <div

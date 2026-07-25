@@ -23,8 +23,10 @@ from .supabase_migration import (
     Bounty,
     GitHubPR,
     Notification,
-    Arbitrator,
-    DisputeArbitrator,
+    Evaluator,
+    DisputeEvaluator,
+    AccountQuarantine,
+    SyncRecord,
     WebhookDeliveryRecord,
     sync_engine,
     async_engine,
@@ -33,6 +35,10 @@ from .supabase_migration import (
     SessionLocal,
 )
 from .supabase_migration import async_get_session
+
+# Backward-compatibility aliases
+Arbitrator = Evaluator
+DisputeArbitrator = DisputeEvaluator
 
 # ---------------------------------------------------------------------------
 # Re-export for compatibility with gateway/main.py and other callers.
@@ -46,6 +52,10 @@ __all__ = [
     "Bounty",
     "GitHubPR",
     "Notification",
+    "Evaluator",
+    "DisputeEvaluator",
+    "AccountQuarantine",
+    "SyncRecord",
     "Arbitrator",
     "DisputeArbitrator",
     "WebhookDeliveryRecord",

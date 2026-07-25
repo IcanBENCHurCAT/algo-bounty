@@ -102,4 +102,11 @@ class Config:
         except ValueError:
             return 0
 
+    @property
+    def ADMIN_ADDRESS(self) -> str:
+        addr = self.get_secret("ADMIN_ADDRESS")
+        if addr:
+            return addr
+        return self.TREASURY_ADDRESS
+
 settings = Config()

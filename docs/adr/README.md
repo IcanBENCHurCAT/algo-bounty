@@ -14,3 +14,4 @@ This directory contains Architecture Decision Records for AlgoBounty.
 * [0010 - Direct-to-Chain Fallback](0010-direct-to-chain-fallback.md)
 * [0011 - BYOA GitHub Integration](0011-byoa-github-integration.md)
 * [0012 - Node Incentivization](0012-node-incentivization.md)
+* [0013 - Pre-Mainnet Launch Prep & Hardening](0013-premainnet-launch-prep-and-hardening.md)
