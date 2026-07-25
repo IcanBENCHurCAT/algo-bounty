@@ -3,83 +3,74 @@ import os
 import signal
 import base64
 from datetime import datetime, timezone, timedelta
-from gateway.database import SessionLocal, Bounty, Agent, Arbitrator, DisputeArbitrator
+from gateway.database import SessionLocal, Bounty, Agent, Evaluator, DisputeEvaluator, Arbitrator, DisputeArbitrator
 from gateway.indexer import (
     poll_bounty_events, fetch_app_logs, read_box_value, sync_bounty_from_chain,
     read_box_uint64, read_box_address
 )
 
-# Arbitrators who fail to vote within this window are penalised and marked inactive.
-ARBITRATOR_VOTE_DEADLINE_HOURS: int = int(os.environ.get("ARBITRATOR_VOTE_DEADLINE_HOURS", "48"))
+# Evaluators who fail to vote within this window are penalised and marked inactive.
+EVALUATOR_VOTE_DEADLINE_HOURS: int = int(os.environ.get("EVALUATOR_VOTE_DEADLINE_HOURS", os.environ.get("ARBITRATOR_VOTE_DEADLINE_HOURS", "48")))
+ARBITRATOR_VOTE_DEADLINE_HOURS = EVALUATOR_VOTE_DEADLINE_HOURS
 
 
-def check_inactive_arbitrators(db) -> bool:
-    """Penalise arbitrators who have not voted within ARBITRATOR_VOTE_DEADLINE_HOURS.
+def check_inactive_evaluators(db) -> bool:
+    """Penalise evaluators who have not voted within EVALUATOR_VOTE_DEADLINE_HOURS.
 
-    For every disputed bounty that has at least one DisputeArbitrator assignment
-    with no vote and whose bounty was created more than ARBITRATOR_VOTE_DEADLINE_HOURS
+    For every disputed bounty that has at least one DisputeEvaluator assignment
+    with no vote and whose bounty was created more than EVALUATOR_VOTE_DEADLINE_HOURS
     ago (or whose assignment was created that long ago), we:
-      1. Apply a -5 karma penalty to the arbitrator agent.
+      1. Apply a -5 karma penalty to the evaluator agent.
       2. Record the missed vote as 'abstained' so the slot is treated as resolved.
       3. Return True if any changes were made.
     """
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=ARBITRATOR_VOTE_DEADLINE_HOURS)
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=EVALUATOR_VOTE_DEADLINE_HOURS)
     changes = False
 
-    # Fetch all open dispute assignments with no vote where the assignment is old enough.
-    # We use the Arbitrator.registered_at as a proxy for when they were assigned; in
-    # production the DisputeArbitrator row is created at assignment time so we can
-    # compare voted_at IS NULL AND assignment was before cutoff.
     pending = (
-        db.query(DisputeArbitrator)
+        db.query(DisputeEvaluator)
         .filter(
-            DisputeArbitrator.vote == None,  # noqa: E711
+            DisputeEvaluator.vote == None,  # noqa: E711
         )
-        .join(Bounty, Bounty.bounty_id == DisputeArbitrator.bounty_id)
+        .join(Bounty, Bounty.bounty_id == DisputeEvaluator.bounty_id)
         .filter(Bounty.status == "disputed")
         .all()
     )
 
     for assignment in pending:
-        # Determine when the assignment was created. Fall back to the bounty's
-        # created_at field if no per-assignment timestamp is available.
         bounty = db.query(Bounty).filter(Bounty.bounty_id == assignment.bounty_id).first()
         if not bounty:
             continue
 
-        # Use a heuristic: if the bounty entered disputed status long enough ago.
-        # We don't store assignment timestamp separately, so we use the Arbitrator
-        # row's registered_at as an upper bound — if registered_at < cutoff the
-        # assignment is definitely old enough.
-        arb_row = db.query(Arbitrator).filter(Arbitrator.address == assignment.arbitrator_address).first()
-        if not arb_row:
+        ev_row = db.query(Evaluator).filter(Evaluator.address == assignment.evaluator_address).first()
+        if not ev_row:
             continue
 
-        registered_at = arb_row.registered_at
+        registered_at = ev_row.registered_at
         if registered_at and registered_at.tzinfo is None:
             registered_at = registered_at.replace(tzinfo=timezone.utc)
 
         if registered_at and registered_at > cutoff:
-            # Not yet past deadline — skip.
             continue
 
-        # Mark the assignment as abstained.
         assignment.vote = "abstained"
         assignment.voted_at = datetime.now(timezone.utc)
 
-        # Apply karma penalty to the arbitrator.
-        agent = db.query(Agent).filter(Agent.address == assignment.arbitrator_address).first()
+        agent = db.query(Agent).filter(Agent.address == assignment.evaluator_address).first()
         if agent:
             agent.karma = max(0, agent.karma - 5)
             print(
-                f"[WORKER] Arbitrator {assignment.arbitrator_address} failed to vote on "
-                f"bounty {assignment.bounty_id} within {ARBITRATOR_VOTE_DEADLINE_HOURS}h — "
+                f"[WORKER] Evaluator {assignment.evaluator_address} failed to vote on "
+                f"bounty {assignment.bounty_id} within {EVALUATOR_VOTE_DEADLINE_HOURS}h — "
                 f"karma penalised (-5, now {agent.karma})."
             )
 
         changes = True
 
     return changes
+
+
+check_inactive_arbitrators = check_inactive_evaluators
 
 
 async def indexer_worker():
@@ -231,8 +222,8 @@ async def indexer_worker():
                                         changes_made = True
                                         print(f"[WORKER] Bounty {bounty.bounty_id} claim expired. Reopened.")
 
-                                # Handle Dispute Submitted and Arbitrator Selection
-                                elif log_bytes == b"dispute_submitted":
+                                # Handle Dispute Submitted and Evaluator Selection
+                                elif log_bytes in (b"dispute_submitted", b"dispute_escalated"):
                                     from algosdk.encoding import encode_address
                                     logs_in_tx = log_entry["logs"]
                                     idx_in_tx = log_entry["logs"].index(log_b64)
@@ -249,21 +240,21 @@ async def indexer_worker():
                                         
                                         # Ensure they exist in DB and update assignment
                                         for addr in [arb1_addr, arb2_addr, arb3_addr]:
-                                            if not db.query(Arbitrator).filter(Arbitrator.address == addr).first():
-                                                db.add(Arbitrator(address=addr, status="active"))
+                                            if not db.query(Evaluator).filter(Evaluator.address == addr).first():
+                                                db.add(Evaluator(address=addr, status="active"))
                                             
-                                            assignment = db.query(DisputeArbitrator).filter(
-                                                DisputeArbitrator.bounty_id == bounty.bounty_id,
-                                                DisputeArbitrator.arbitrator_address == addr
+                                            assignment = db.query(DisputeEvaluator).filter(
+                                                DisputeEvaluator.bounty_id == bounty.bounty_id,
+                                                DisputeEvaluator.evaluator_address == addr
                                             ).first()
                                             if not assignment:
-                                                db.add(DisputeArbitrator(bounty_id=bounty.bounty_id, arbitrator_address=addr))
+                                                db.add(DisputeEvaluator(bounty_id=bounty.bounty_id, evaluator_address=addr))
                                         
                                         changes_made = True
-                                        print(f"[WORKER] Bounty {bounty.bounty_id} disputed. Assigned: {arb1_addr}, {arb2_addr}, {arb3_addr}")
+                                        print(f"[WORKER] Bounty {bounty.bounty_id} disputed/escalated. Assigned evaluators: {arb1_addr}, {arb2_addr}, {arb3_addr}")
 
-                                # Handle Arbitrator Voted
-                                elif log_bytes == b"arbitrator_voted":
+                                # Handle Evaluator Voted
+                                elif log_bytes in (b"evaluator_voted", b"arbitrator_voted"):
                                     from algosdk.encoding import encode_address
                                     import struct
                                     logs_in_tx = log_entry["logs"]
@@ -279,15 +270,15 @@ async def indexer_worker():
                                         vote_str = vote_map.get(vote_opt_val)
                                         
                                         if vote_str:
-                                            assignment = db.query(DisputeArbitrator).filter(
-                                                DisputeArbitrator.bounty_id == bounty.bounty_id,
-                                                DisputeArbitrator.arbitrator_address == voter_addr
+                                            assignment = db.query(DisputeEvaluator).filter(
+                                                DisputeEvaluator.bounty_id == bounty.bounty_id,
+                                                DisputeEvaluator.evaluator_address == voter_addr
                                             ).first()
                                             if assignment and assignment.vote is None:
                                                 assignment.vote = vote_str
                                                 assignment.voted_at = datetime.now(timezone.utc)
                                                 changes_made = True
-                                                print(f"[WORKER] Arbitrator {voter_addr} voted {vote_str} on {bounty.bounty_id}")
+                                                print(f"[WORKER] Evaluator {voter_addr} voted {vote_str} on {bounty.bounty_id}")
 
                                 # Handle Dispute Resolved Win/Loss/Split
                                 elif log_bytes == b"dispute_resolved_agent_win":

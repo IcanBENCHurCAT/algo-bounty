@@ -402,12 +402,43 @@ class Bounty(Base):
     hitm_review_days = Column(Integer, default=7)
     rejection_count = Column(Integer, default=0)
     payout_type = Column(String, nullable=True)
+    payout_ready = Column(Boolean, default=False, nullable=False)
+    payout_ready_at = Column(DateTime, nullable=True)
     treasury_altered = Column(Boolean, default=False, nullable=False)
     platform_fee = Column(Integer, default=200, nullable=False)
     treasury_address = Column(String(58), default="RTCed54abc91f37d8d2d2cb2cf69ce60b0021fd67e5", nullable=False)
     gateway_address = Column(String(58), nullable=True)
     authorized_app_id = Column(Integer, nullable=True)
     hitm_enforced = Column(Boolean, default=False, nullable=False)
+
+
+class AccountQuarantine(Base):
+    __tablename__ = "account_quarantines"
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    address = Column(String, index=True, nullable=False)
+    reason = Column(String, nullable=False)
+    details = Column(String, nullable=True)
+    quarantined_at = Column(
+        DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+    expires_at = Column(DateTime, nullable=False)
+    status = Column(String, default="active", nullable=False)
+    resolved_by = Column(String, nullable=True)
+    resolved_at = Column(DateTime, nullable=True)
+    resolution_note = Column(String, nullable=True)
+
+
+class SyncRecord(Base):
+    __tablename__ = "sync_records"
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    bounty_id = Column(String, ForeignKey("bounties.bounty_id", ondelete="CASCADE"), nullable=False)
+    triggered_by = Column(String, nullable=False)
+    triggered_at = Column(
+        DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+    github_state = Column(String, nullable=False)
+    action_taken = Column(String, nullable=False)
+    idempotency_key = Column(String, unique=True, index=True, nullable=False)
 
 
 
@@ -435,8 +466,8 @@ class Notification(Base):
     )
 
 
-class Arbitrator(Base):
-    __tablename__ = "arbitrators"
+class Evaluator(Base):
+    __tablename__ = "evaluators"
     address = Column(String, primary_key=True, index=True)
     status = Column(String, default="active", nullable=False)
     registered_at = Column(
@@ -444,11 +475,11 @@ class Arbitrator(Base):
     )
 
 
-class DisputeArbitrator(Base):
-    __tablename__ = "dispute_arbitrators"
+class DisputeEvaluator(Base):
+    __tablename__ = "dispute_evaluators"
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     bounty_id = Column(String, ForeignKey("bounties.bounty_id", ondelete="CASCADE"), nullable=False)
-    arbitrator_address = Column(String, ForeignKey("arbitrators.address", ondelete="CASCADE"), nullable=False)
+    evaluator_address = Column(String, ForeignKey("evaluators.address", ondelete="CASCADE"), nullable=False)
     vote = Column(String, nullable=True)
     voted_at = Column(DateTime, nullable=True)
 

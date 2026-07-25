@@ -118,3 +118,10 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Security(securi
     if not address:
         raise HTTPException(status_code=401, detail="Invalid session")
     return address
+
+def is_admin(current_user: str = Security(get_current_user)) -> str:
+    """Dependency injection to verify current user matches admin address."""
+    admin_addr = settings.ADMIN_ADDRESS
+    if not admin_addr or current_user != admin_addr:
+        raise HTTPException(status_code=403, detail="Administrator access required")
+    return current_user

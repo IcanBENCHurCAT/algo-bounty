@@ -53,6 +53,7 @@ export interface BountyFilters {
   limit?: number
   creator?: string
   worker?: string
+  adminAddress?: string
 }
 
 // ─── Agent / Profile ──────────────────────────────────────────────────────────

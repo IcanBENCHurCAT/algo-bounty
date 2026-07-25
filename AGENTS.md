@@ -167,11 +167,14 @@ Before implementing features, consult the corresponding design document:
 
 ---
 
-## 7. GitHub App Setup
+## 7. GitHub App Integration (Future-State TODO — Phase 2)
 
-For enhanced integration, it is recommended to use a GitHub App instead of a personal `GITHUB_TOKEN`.
+> [!NOTE]
+> **Pre-Mainnet Status**: Automated GitHub App installation token generation and automated release webhooks are marked as a **Future-State TODO (Phase 2)**. In Phase 1 Pre-Mainnet:
+> 1. **Human-in-the-Middle (HITM) Mode** is strictly **ON by default** for all bounties and cannot be disabled.
+> 2. Payout synchronization relies on manual verification via the `POST /api/v1/bounties/{id}/sync-github` endpoint and worker pull payout (`POST /api/v1/bounties/{id}/claim-payout`).
 
-### Required Permissions
+### Required Permissions (Future-State)
 - **Repository Permissions**:
   - **Issues**: Read & write (to post comments and manage labels)
   - **Pull requests**: Read & write (to link PRs and post status updates)
