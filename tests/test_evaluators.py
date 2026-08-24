@@ -25,8 +25,6 @@ def override_get_db():
     finally:
         db.close()
 
-from tests.conftest import override_get_db as default_override_get_db
-
 def override_get_current_user_good():
     return "GOOD_ADDRESS"
 
@@ -49,7 +47,7 @@ def setup_db():
     db.commit()
     db.close()
     yield
-    app.dependency_overrides[get_db] = default_override_get_db
+    app.dependency_overrides.pop(get_db, None)
     app.dependency_overrides.pop(get_current_user, None)
 
 def test_register_evaluator_success():
