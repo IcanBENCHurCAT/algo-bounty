@@ -25,6 +25,8 @@ def override_get_db():
     finally:
         db.close()
 
+app.dependency_overrides[get_db] = override_get_db
+
 def override_user():
     return "QUARANTINED_USER_ADDR"
 
@@ -35,8 +37,6 @@ client = TestClient(app)
 
 @pytest.fixture(autouse=True)
 def setup_db():
-    old_overrides = app.dependency_overrides.copy()
-    app.dependency_overrides[get_db] = override_get_db
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     db = TestingSessionLocal()
@@ -59,8 +59,6 @@ def setup_db():
     db.add(quarantine)
     db.commit()
     db.close()
-    yield
-    app.dependency_overrides = old_overrides
 
 def test_quarantine_blocks_bounty_creation():
     app.dependency_overrides[get_current_user] = override_user
