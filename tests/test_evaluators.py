@@ -25,6 +25,8 @@ def override_get_db():
     finally:
         db.close()
 
+app.dependency_overrides[get_db] = override_get_db
+
 def override_get_current_user_good():
     return "GOOD_ADDRESS"
 
@@ -35,7 +37,6 @@ client = TestClient(app)
 
 @pytest.fixture(autouse=True)
 def setup_db():
-    app.dependency_overrides[get_db] = override_get_db
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     db = TestingSessionLocal()
@@ -46,8 +47,6 @@ def setup_db():
     db.add(agent_bad)
     db.commit()
     db.close()
-    yield
-    app.dependency_overrides.pop(get_db, None)
 
 def test_register_evaluator_success():
     app.dependency_overrides[get_current_user] = override_get_current_user_good
