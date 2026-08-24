@@ -25,7 +25,15 @@ def override_get_db():
     finally:
         db.close()
 
-app.dependency_overrides[get_db] = override_get_db
+@pytest.fixture(autouse=True)
+def cleanup_overrides():
+    old_get_db = app.dependency_overrides.get(get_db)
+    app.dependency_overrides[get_db] = override_get_db
+    yield
+    if old_get_db is not None:
+        app.dependency_overrides[get_db] = old_get_db
+    else:
+        app.dependency_overrides.pop(get_db, None)
 
 def override_admin():
     return settings.ADMIN_ADDRESS or "ADMIN_WALLET_ADDR"
