@@ -297,12 +297,6 @@ async def post_github_comment_and_labels(
     if add_labels: print(f"Add Labels: {add_labels}")
     if remove_labels: print(f"Remove Labels: {remove_labels}")
 
-async def log_bot_comment(repo_url: str, issue_or_pr_number: int, comment_text: str):
-    """
-    Deprecated: use post_github_comment_and_labels instead.
-    """
-    await post_github_comment_and_labels(repo_url, issue_or_pr_number, comment=comment_text)
-
 
 async def _set_commit_status(
     repo_url: str,

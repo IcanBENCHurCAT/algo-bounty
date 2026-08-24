@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
-from gateway.github import get_github_bot_token, verify_webhook_signature, post_github_comment_and_labels, log_bot_comment, handle_pr_event
+from gateway.github import get_github_bot_token, verify_webhook_signature, post_github_comment_and_labels, handle_pr_event
 from gateway.database import Agent, Bounty
 
 @pytest.mark.asyncio
@@ -79,13 +79,6 @@ async def test_post_github_comment_and_labels():
         mock_get_token.return_value = None
         res2 = await post_github_comment_and_labels("https://github.com/owner/repo", 1, "comment")
         assert res2 is None
-
-@pytest.mark.asyncio
-async def test_log_bot_comment():
-    with patch("gateway.github.post_github_comment_and_labels", new_callable=AsyncMock) as mock_post:
-        # Valid
-        await log_bot_comment("https://github.com/owner/repo", 1, "text")
-        mock_post.assert_called_once_with("https://github.com/owner/repo", 1, comment="text")
 
 @pytest.mark.asyncio
 async def test_handle_pr_event_closed(db_session):
