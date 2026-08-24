@@ -10,8 +10,7 @@ os.environ["ALGORAND_NETWORK"] = "sandbox"
 os.environ["SECRET_KEY"] = "test_dummy_secret_key_at_least_32_characters_long"
 os.environ["TESTING"] = "True"
 
-from gateway.dependencies import get_db
-from gateway.main import app
+from gateway.main import app, get_db
 from gateway.database import Base, Agent
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///./test_all.db"
