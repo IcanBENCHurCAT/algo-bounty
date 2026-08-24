@@ -2,7 +2,7 @@
 
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import DocsNav from '@/components/DocsNav';
 
 interface TOCItem {
