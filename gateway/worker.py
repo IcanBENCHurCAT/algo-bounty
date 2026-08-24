@@ -236,19 +236,30 @@ async def indexer_worker():
                                         arb2_addr = encode_address(arb2_bytes)
                                         arb3_addr = encode_address(arb3_bytes)
                                         
+                                        evaluators_list = [arb1_addr, arb2_addr, arb3_addr]
                                         bounty.status = "disputed"
                                         
-                                        # Ensure they exist in DB and update assignment
-                                        for addr in [arb1_addr, arb2_addr, arb3_addr]:
-                                            if not db.query(Evaluator).filter(Evaluator.address == addr).first():
+                                        # Ensure evaluators exist in DB and update assignments in batch to avoid N+1 queries
+                                        existing_evals = db.query(Evaluator).filter(
+                                            Evaluator.address.in_(evaluators_list)
+                                        ).all()
+                                        existing_eval_addrs = {e.address for e in existing_evals}
+
+                                        for addr in evaluators_list:
+                                            if addr not in existing_eval_addrs:
                                                 db.add(Evaluator(address=addr, status="active"))
-                                            
-                                            assignment = db.query(DisputeEvaluator).filter(
-                                                DisputeEvaluator.bounty_id == bounty.bounty_id,
-                                                DisputeEvaluator.evaluator_address == addr
-                                            ).first()
-                                            if not assignment:
+                                                existing_eval_addrs.add(addr)
+
+                                        existing_assigns = db.query(DisputeEvaluator).filter(
+                                            DisputeEvaluator.bounty_id == bounty.bounty_id,
+                                            DisputeEvaluator.evaluator_address.in_(evaluators_list)
+                                        ).all()
+                                        existing_assign_addrs = {a.evaluator_address for a in existing_assigns}
+
+                                        for addr in evaluators_list:
+                                            if addr not in existing_assign_addrs:
                                                 db.add(DisputeEvaluator(bounty_id=bounty.bounty_id, evaluator_address=addr))
+                                                existing_assign_addrs.add(addr)
                                         
                                         changes_made = True
                                         print(f"[WORKER] Bounty {bounty.bounty_id} disputed/escalated. Assigned evaluators: {arb1_addr}, {arb2_addr}, {arb3_addr}")
