@@ -30,7 +30,7 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
-from sqlalchemy.orm import declarative_base, sessionmaker, synonym
+from sqlalchemy.orm import declarative_base, sessionmaker
 
 # ---------------------------------------------------------------------------
 # Connection pool warming (reduces first-request latency)
@@ -482,8 +482,6 @@ class DisputeEvaluator(Base):
     evaluator_address = Column(String, ForeignKey("evaluators.address", ondelete="CASCADE"), nullable=False)
     vote = Column(String, nullable=True)
     voted_at = Column(DateTime, nullable=True)
-
-    arbitrator_address = synonym("evaluator_address")
 
 
 class WebhookDeliveryRecord(Base):

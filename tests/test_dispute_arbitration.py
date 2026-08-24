@@ -11,7 +11,7 @@ def test_arbitrator_registration_insufficient_karma(client, db_session):
 
     token = get_auth_token(client, "LOW_KARMA_ARB")
     res = client.post(
-        "/api/v1/evaluators/register",
+        "/api/v1/arbitrators/register",
         headers={"Authorization": f"Bearer {token}"}
     )
     assert res.status_code == 403
@@ -25,11 +25,11 @@ def test_arbitrator_registration_success(client, db_session):
 
     token = get_auth_token(client, "HIGH_KARMA_ARB")
     res = client.post(
-        "/api/v1/evaluators/register",
+        "/api/v1/arbitrators/register",
         headers={"Authorization": f"Bearer {token}"}
     )
     assert res.status_code == 200
-    assert res.json()["status"] == "active"
+    assert res.json()["status"] == "registered"
 
     # Verify db record
     arb = db_session.query(Arbitrator).filter(Arbitrator.address == "HIGH_KARMA_ARB").first()
@@ -38,11 +38,11 @@ def test_arbitrator_registration_success(client, db_session):
 
     # Deregister
     res_dereg = client.post(
-        "/api/v1/evaluators/deregister",
+        "/api/v1/arbitrators/deregister",
         headers={"Authorization": f"Bearer {token}"}
     )
     assert res_dereg.status_code == 200
-    assert res_dereg.json()["status"] == "inactive"
+    assert res_dereg.json()["status"] == "deregistered"
 
     # Verify status changed in db
     db_session.refresh(arb)
@@ -61,7 +61,7 @@ def test_arbitrator_voting_restrictions(client, db_session):
     # Case 1: Unassigned arbitrator votes
     arb_token = get_auth_token(client, "ARB_ADDR")
     res = client.post(
-        "/api/v1/evaluators/bounties/b_dispute/vote",
+        "/api/v1/arbitrators/bounties/b_dispute/vote",
         json={"vote": "worker"},
         headers={"Authorization": f"Bearer {arb_token}"}
     )
@@ -74,7 +74,7 @@ def test_arbitrator_voting_restrictions(client, db_session):
     db_session.commit()
 
     res_vote = client.post(
-        "/api/v1/evaluators/bounties/b_dispute/vote",
+        "/api/v1/arbitrators/bounties/b_dispute/vote",
         json={"vote": "worker"},
         headers={"Authorization": f"Bearer {arb_token}"}
     )
@@ -84,7 +84,7 @@ def test_arbitrator_voting_restrictions(client, db_session):
 
     # Case 3: Assigned arbitrator attempts to vote again
     res_vote_again = client.post(
-        "/api/v1/evaluators/bounties/b_dispute/vote",
+        "/api/v1/arbitrators/bounties/b_dispute/vote",
         json={"vote": "split"},
         headers={"Authorization": f"Bearer {arb_token}"}
     )
