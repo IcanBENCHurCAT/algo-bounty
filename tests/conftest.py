@@ -33,6 +33,12 @@ def setup_database():
     Base.metadata.drop_all(bind=engine)
 
 @pytest.fixture(autouse=True)
+def reset_dependency_overrides():
+    yield
+    app.dependency_overrides.clear()
+    app.dependency_overrides[get_db] = override_get_db
+
+@pytest.fixture(autouse=True)
 def clean_db():
     db = TestingSessionLocal()
     try:
