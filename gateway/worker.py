@@ -3,7 +3,7 @@ import os
 import signal
 import base64
 from datetime import datetime, timezone, timedelta
-from gateway.database import SessionLocal, Bounty, Agent, Evaluator, DisputeEvaluator, Arbitrator, DisputeArbitrator
+from gateway.database import SessionLocal, Bounty, Agent, Evaluator, DisputeEvaluator
 from gateway.indexer import (
     poll_bounty_events, fetch_app_logs, read_box_value, sync_bounty_from_chain,
     read_box_uint64, read_box_address
