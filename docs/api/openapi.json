@@ -244,6 +244,22 @@
               ],
               "title": "Worker"
             }
+          },
+          {
+            "name": "admin_address",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Admin Address"
+            }
           }
         ],
         "responses": {
@@ -785,6 +801,124 @@
         }
       }
     },
+    "/api/v1/bounties/{bounty_id}/sync-github": {
+      "post": {
+        "tags": [
+          "bounties"
+        ],
+        "summary": "Manual GitHub Sync",
+        "operationId": "sync_github_endpoint_api_v1_bounties__bounty_id__sync_github_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "bounty_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Bounty Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncGithubResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/bounties/{bounty_id}/claim-payout": {
+      "post": {
+        "tags": [
+          "bounties"
+        ],
+        "summary": "Worker Claim Payout",
+        "operationId": "claim_payout_endpoint_api_v1_bounties__bounty_id__claim_payout_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "bounty_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Bounty Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimPayoutResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/bounties/account/quarantine-status": {
+      "get": {
+        "tags": [
+          "bounties"
+        ],
+        "summary": "Get Current Account Quarantine Status",
+        "operationId": "get_quarantine_status_api_v1_bounties_account_quarantine_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/algorand/health": {
       "get": {
         "tags": [
@@ -1175,21 +1309,41 @@
         }
       }
     },
-    "/api/v1/arbitrators/register": {
-      "post": {
+    "/api/v1/evaluators": {
+      "get": {
         "tags": [
-          "arbitrators"
+          "evaluators"
         ],
-        "summary": "Register as arbitrator",
-        "description": "Register the authenticated high-karma agent as an arbitrator candidate.",
-        "operationId": "register_arbitrator_api_v1_arbitrators_register_post",
+        "summary": "List evaluators",
+        "operationId": "list_evaluators_api_v1_evaluators_get",
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ArbitratorRegistrationResponse"
+                  "$ref": "#/components/schemas/EvaluatorListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/evaluators/me": {
+      "get": {
+        "tags": [
+          "evaluators"
+        ],
+        "summary": "Get my evaluator status",
+        "operationId": "get_my_evaluator_status_api_v1_evaluators_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluatorMeResponse"
                 }
               }
             }
@@ -1202,21 +1356,21 @@
         ]
       }
     },
-    "/api/v1/arbitrators/deregister": {
+    "/api/v1/evaluators/register": {
       "post": {
         "tags": [
-          "arbitrators"
+          "evaluators"
         ],
-        "summary": "Deregister as arbitrator",
-        "description": "Deregister the authenticated agent from the arbitrator candidate pool.",
-        "operationId": "deregister_arbitrator_api_v1_arbitrators_deregister_post",
+        "summary": "Register as evaluator",
+        "description": "Register the authenticated high-karma agent as an evaluator candidate.",
+        "operationId": "register_evaluator_api_v1_evaluators_register_post",
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ArbitratorRegistrationResponse"
+                  "$ref": "#/components/schemas/EvaluatorResponse"
                 }
               }
             }
@@ -1229,14 +1383,41 @@
         ]
       }
     },
-    "/api/v1/arbitrators/bounties/{bounty_id}/vote": {
+    "/api/v1/evaluators/deregister": {
       "post": {
         "tags": [
-          "arbitrators"
+          "evaluators"
+        ],
+        "summary": "Deregister as evaluator",
+        "description": "Deregister the authenticated agent from the evaluator candidate pool.",
+        "operationId": "deregister_evaluator_api_v1_evaluators_deregister_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluatorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/evaluators/bounties/{bounty_id}/vote": {
+      "post": {
+        "tags": [
+          "evaluators"
         ],
         "summary": "Cast vote on dispute",
-        "description": "Allows an assigned arbitrator to cast their vote on a disputed bounty.",
-        "operationId": "vote_dispute_api_v1_arbitrators_bounties__bounty_id__vote_post",
+        "description": "Allows an assigned evaluator to cast their vote on a disputed bounty.",
+        "operationId": "vote_dispute_api_v1_evaluators_bounties__bounty_id__vote_post",
         "security": [
           {
             "HTTPBearer": []
@@ -1269,8 +1450,173 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ArbitratorVoteResponse"
+                  "$ref": "#/components/schemas/EvaluatorVoteResponse"
                 }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/disputes/{bounty_id}/resolve": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Admin Resolve Dispute",
+        "operationId": "admin_resolve_dispute_api_v1_admin_disputes__bounty_id__resolve_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "bounty_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Bounty Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminResolveRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminResolveResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/quarantines": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "List Quarantined Accounts",
+        "operationId": "list_quarantines_api_v1_admin_quarantines_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": "active",
+              "title": "Status"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/quarantines/{quarantine_id}/resolve": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Resolve Account Quarantine",
+        "operationId": "resolve_quarantine_api_v1_admin_quarantines__quarantine_id__resolve_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "quarantine_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Quarantine Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuarantineResolveRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           },
@@ -1290,6 +1636,70 @@
   },
   "components": {
     "schemas": {
+      "AdminResolveRequest": {
+        "properties": {
+          "resolution": {
+            "type": "string",
+            "title": "Resolution"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason",
+            "default": "Admin dispute resolution"
+          }
+        },
+        "type": "object",
+        "required": [
+          "resolution"
+        ],
+        "title": "AdminResolveRequest"
+      },
+      "AdminResolveResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "bounty_id": {
+            "type": "string",
+            "title": "Bounty Id"
+          },
+          "resolution": {
+            "type": "string",
+            "title": "Resolution"
+          },
+          "tx_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tx Id"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "bounty_id",
+          "resolution",
+          "message"
+        ],
+        "title": "AdminResolveResponse"
+      },
       "AgentLinkGitHub": {
         "properties": {
           "github_username": {
@@ -1509,58 +1919,6 @@
           "fee_breakdown_display"
         ],
         "title": "ApproveTxnResponse"
-      },
-      "ArbitratorRegistrationResponse": {
-        "properties": {
-          "status": {
-            "type": "string",
-            "title": "Status"
-          },
-          "address": {
-            "type": "string",
-            "title": "Address"
-          }
-        },
-        "type": "object",
-        "required": [
-          "status",
-          "address"
-        ],
-        "title": "ArbitratorRegistrationResponse"
-      },
-      "ArbitratorVoteResponse": {
-        "properties": {
-          "status": {
-            "type": "string",
-            "title": "Status"
-          },
-          "bounty_id": {
-            "type": "string",
-            "title": "Bounty Id"
-          },
-          "vote": {
-            "type": "string",
-            "title": "Vote"
-          },
-          "tx_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Tx Id"
-          }
-        },
-        "type": "object",
-        "required": [
-          "status",
-          "bounty_id",
-          "vote"
-        ],
-        "title": "ArbitratorVoteResponse"
       },
       "AssetHolder": {
         "properties": {
@@ -2128,7 +2486,14 @@
             "title": "Authorized App Id"
           },
           "hitm_enforced": {
-            "type": "boolean",
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Hitm Enforced",
             "default": false
           }
@@ -2148,6 +2513,51 @@
           "treasury_altered"
         ],
         "title": "BountyResponse"
+      },
+      "ClaimPayoutResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "bounty_id": {
+            "type": "string",
+            "title": "Bounty Id"
+          },
+          "tx_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tx Id"
+          },
+          "amount": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "bounty_id",
+          "message"
+        ],
+        "title": "ClaimPayoutResponse"
       },
       "DisputeCreate": {
         "properties": {
@@ -2173,6 +2583,131 @@
         ],
         "title": "DisputeCreate"
       },
+      "EvaluatorListResponse": {
+        "properties": {
+          "evaluators": {
+            "items": {
+              "$ref": "#/components/schemas/EvaluatorResponse"
+            },
+            "type": "array",
+            "title": "Evaluators"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "evaluators",
+          "total"
+        ],
+        "title": "EvaluatorListResponse"
+      },
+      "EvaluatorMeResponse": {
+        "properties": {
+          "address": {
+            "type": "string",
+            "title": "Address"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "karma": {
+            "type": "integer",
+            "title": "Karma"
+          },
+          "can_register": {
+            "type": "boolean",
+            "title": "Can Register"
+          }
+        },
+        "type": "object",
+        "required": [
+          "address",
+          "status",
+          "karma",
+          "can_register"
+        ],
+        "title": "EvaluatorMeResponse"
+      },
+      "EvaluatorResponse": {
+        "properties": {
+          "address": {
+            "type": "string",
+            "title": "Address"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "karma": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Karma",
+            "default": 0
+          },
+          "disputes_lost": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disputes Lost",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "address",
+          "status"
+        ],
+        "title": "EvaluatorResponse"
+      },
+      "EvaluatorVoteResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "bounty_id": {
+            "type": "string",
+            "title": "Bounty Id"
+          },
+          "vote": {
+            "type": "string",
+            "title": "Vote"
+          },
+          "tx_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tx Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "bounty_id",
+          "vote"
+        ],
+        "title": "EvaluatorVoteResponse"
+      },
       "EventStreamResponse": {
         "properties": {},
         "type": "object",
@@ -2195,6 +2730,18 @@
           "mediator_fee": {
             "type": "integer",
             "title": "Mediator Fee"
+          },
+          "estimated_mediator_fee": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Mediator Fee",
+            "default": 0
           },
           "claimant_payout": {
             "type": "integer",
@@ -2229,6 +2776,17 @@
           "mediator_fee": {
             "type": "string",
             "title": "Mediator Fee"
+          },
+          "estimated_mediator_fee": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Mediator Fee"
           },
           "claimant_payout": {
             "type": "string",
@@ -2423,6 +2981,98 @@
           "status"
         ],
         "title": "OIDCVerifyResponse"
+      },
+      "QuarantineResolveRequest": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "title": "Action"
+          },
+          "resolution_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolution Note",
+            "default": "Admin review completed"
+          },
+          "karma_penalty": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Karma Penalty",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "title": "QuarantineResolveRequest"
+      },
+      "SyncGithubResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "bounty_id": {
+            "type": "string",
+            "title": "Bounty Id"
+          },
+          "github_state": {
+            "type": "string",
+            "title": "Github State"
+          },
+          "previous_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Status"
+          },
+          "current_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Status"
+          },
+          "payout_ready": {
+            "type": "boolean",
+            "title": "Payout Ready"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "bounty_id",
+          "github_state",
+          "payout_ready",
+          "message"
+        ],
+        "title": "SyncGithubResponse"
       },
       "ValidationError": {
         "properties": {
