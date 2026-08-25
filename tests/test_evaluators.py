@@ -8,6 +8,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 from gateway.dependencies import get_db
 from gateway.auth import get_current_user
+from tests.conftest import override_get_db as default_override_get_db
 
 engine = create_engine(
     "sqlite:///:memory:", 
@@ -35,7 +36,6 @@ client = TestClient(app)
 
 @pytest.fixture(autouse=True)
 def setup_db():
-    from tests.conftest import override_get_db as global_override_get_db
     app.dependency_overrides[get_db] = override_get_db
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
@@ -48,8 +48,8 @@ def setup_db():
     db.commit()
     db.close()
     yield
+    app.dependency_overrides[get_db] = default_override_get_db
     app.dependency_overrides.pop(get_current_user, None)
-    app.dependency_overrides[get_db] = global_override_get_db
 
 def test_register_evaluator_success():
     app.dependency_overrides[get_current_user] = override_get_current_user_good

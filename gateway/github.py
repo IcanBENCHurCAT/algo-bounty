@@ -9,6 +9,7 @@ import jwt
 import time
 from typing import Optional
 from datetime import datetime, UTC
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from .database import Bounty, GitHubPR, Notification, Agent
 from .algod_client import NODE_ENV, release_trustless
@@ -121,7 +122,7 @@ KNOWN_EVENT_TYPES = {
 }
 
 # Regex pattern to match #ALGO-XXXX or ALGO-XXXX
-BOUNTY_RE = re.compile(r'#?ALGO-(\d+)')
+BOUNTY_RE = re.compile(r'(?:#ALGO-|ALGO-)(\d+)', re.IGNORECASE)
 
 def extract_bounty_ids(text: str) -> list[str]:
     """Extract bounty IDs (e.g. 123 from ALGO-123) from text."""
@@ -532,10 +533,9 @@ async def handle_pr_event(db: Session, payload: dict):
 
     worker_agent = None
     if action == "closed" and pr.get("merged") is True:
-        worker_agent = (
-            db.query(Agent).filter(Agent.github_username == author).first()
-            or db.query(Agent).filter(Agent.address == author).first()
-        )
+        worker_agent = db.query(Agent).filter(
+            or_(Agent.github_username == author, Agent.address == author)
+        ).first()
 
     for issue_number in issue_numbers:
         bounty_id = f"b_{issue_number}"

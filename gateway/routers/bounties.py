@@ -159,7 +159,6 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
     if body.platform_fee > 1000:
         raise HTTPException(status_code=400, detail="Platform fee cannot exceed 10% (1000 basis points)")
 
-    # Check if user has enough karma to create this bounty
     agent = db.query(Agent).filter(Agent.address == current_user).first()
     if not agent:
         raise HTTPException(status_code=403, detail="Agent profile missing")

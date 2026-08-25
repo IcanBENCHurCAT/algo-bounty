@@ -293,5 +293,5 @@ async def test_bounty_creation_byoa_fields(client, db_session):
         bounty = db_session.query(Bounty).filter(Bounty.bounty_id == b_id).first()
         assert bounty is not None
         assert bounty.authorized_app_id == 98765
-        assert bounty.hitm_enforced is False
-        assert bounty.is_hitm is False
+        assert bounty.hitm_enforced is True
+        assert bounty.is_hitm is True

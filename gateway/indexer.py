@@ -147,7 +147,6 @@ def read_box_raw_bytes(app_id: int, box_name: str) -> bytes:
             if b_name in (box_name, name_b64, name_hex):
                 raw_val = box.get("value", "")
                 
-                # Check if it looks like a hex string
                 is_hex = len(raw_val) % 2 == 0 and all(c in "0123456789abcdefABCDEF" for c in raw_val)
                 if is_hex:
                     try:
