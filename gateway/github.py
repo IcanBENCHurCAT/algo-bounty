@@ -122,7 +122,7 @@ KNOWN_EVENT_TYPES = {
 }
 
 # Regex pattern to match #ALGO-XXXX or ALGO-XXXX
-BOUNTY_RE = re.compile(r'#?ALGO-(\d+)')
+BOUNTY_RE = re.compile(r'(?:#ALGO-|ALGO-)(\d+)', re.IGNORECASE)
 
 def extract_bounty_ids(text: str) -> list[str]:
     """Extract bounty IDs (e.g. 123 from ALGO-123) from text."""
