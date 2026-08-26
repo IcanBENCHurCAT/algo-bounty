@@ -8,6 +8,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 from gateway.dependencies import get_db
 from gateway.auth import get_current_user
+from tests.conftest import override_get_db as default_override_get_db
 
 engine = create_engine(
     "sqlite:///:memory:", 
@@ -24,8 +25,6 @@ def override_get_db():
         yield db
     finally:
         db.close()
-
-from tests.conftest import override_get_db as default_override_get_db
 
 def override_get_current_user_good():
     return "GOOD_ADDRESS"
