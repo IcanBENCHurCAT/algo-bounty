@@ -7,7 +7,7 @@ Welcome, fellow agent. This document is designed to help you navigate and contri
 ## 1. Project Overview
 
 AlgoBounty consists of three main layers:
-- **Smart Contracts**: On-chain escrow logic written in Puya/pyTEAL (`escrow.algo`).
+- **Smart Contracts**: On-chain escrow logic written in Algorand Python (`escrow.py`).
 - **Gateway (Backend)**: A FastAPI service that orchestrates between the blockchain, the database, and external integrations like GitHub (`gateway/`).
 - **Dashboard (Frontend)**: A Next.js web application for users to interact with the platform (`dashboard/`).
 
@@ -38,11 +38,11 @@ AlgoBounty consists of three main layers:
 │   ├── worker.py           # Background indexer task
 │   └── supabase_migration.py # Supabase/Postgres setup
 ├── dashboard/              # Next.js Frontend (App Router)
+├── docs/                   # Architecture decision records & documentation
+├── specs/                  # Feature specifications and implementation plans
 ├── supabase/               # Database RLS policies
 ├── tests/                  # Modular Pytest test suite
-├── escrow.algo             # Main Smart Contract (Puya/pyTEAL)
-├── v0-v7-*.md              # Design Documents (READ THESE FIRST)
-└── CONTRACTOR-BRIEF.md      # High-level implementation roadmap
+└── escrow.py               # Main Smart Contract (Algorand Python / Puya)
 ```
 
 ---
@@ -106,7 +106,7 @@ python gateway/worker.py
 ### Running Tests
 Use `pytest` with `pytest-asyncio` for asynchronous tests. Ensure `PYTHONPATH` is set to the root directory:
 ```bash
-PYTHONPATH=. python -m pytest tests/
+PYTHONPATH=. python3 -m pytest tests/
 ```
 - We have transitioned from monolithic tests (like `test_gateway.py`) to modular suites (e.g., `tests/test_misc_routers.py`, `tests/test_bounty_lifecycle_extended.py`) to prevent environment collisions.
 - In CI workflows, `TESTING="True"` is strictly required to bypass rate limits and enable test-specific mocks.
@@ -122,7 +122,7 @@ PYTHONPATH=. python -m pytest tests/
 - All secrets and configuration are centralized in `gateway/config.py`.
 - In production, ensure `SECRET_KEY`, `PLATFORM_PRIVATE_KEY`, and `GITHUB_TOKEN` are provided via environment variables or a configured secret manager.
 
-### Smart Contract Integration (`escrow.algo`)
+### Smart Contract Integration (`escrow.py`)
 - **State Management**: The contract state machine utilizes Global Boxes (e.g., `_K_STATE`) rather than per-user Local State, ensuring status is universally shared across all participants. A dedicated `_K_INITIALIZED` box prevents re-initialization attacks.
 - **Fund Transfers**: All fund transfers (payouts, refunds, splits) are executed securely via Algorand Inner Transactions (`itxn`), replacing older reliance on external transaction grouping or off-chain logging.
 - **Fees**: The contract supports fee collection by calculating and sending a 2% fee to a Treasury Account (passed during bounty creation) upon successful payouts.
@@ -147,14 +147,15 @@ PYTHONPATH=. python -m pytest tests/
 
 ---
 
-## 5. Design Documents Reference
+## 5. Design Documents & Specifications Reference
 
-Before implementing features, consult the corresponding design document:
-- **v1**: TEAL Escrow Contract spec.
-- **v2**: Karma/Reputation System.
-- **v4**: Dashboard & API spec.
-- **v5**: GitHub Integration (The Bridge).
-- **v6**: Human-in-the-Middle (HITM) Mode.
+Before implementing features, consult the corresponding Architecture Decision Record (ADR) in `docs/adr/` or feature specification in `specs/`:
+- **ADR-0001**: TEAL Escrow Contract spec (`docs/adr/0001-teal-escrow-contract.md`).
+- **ADR-0002**: Karma/Reputation System (`docs/adr/0002-karma-reputation-system.md`).
+- **ADR-0004**: Dashboard API spec (`docs/adr/0004-dashboard-api.md`).
+- **ADR-0005**: GitHub Integration (`docs/adr/0005-github-integration.md`).
+- **ADR-0006**: Human-in-the-Middle (HITM) Mode (`docs/adr/0006-hitm-design.md`).
+- **Feature Specs**: See active specs under `specs/` (e.g., `specs/001-mediator-portal/` and `specs/002-phase1-hardening/`).
 
 ---
 
