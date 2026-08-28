@@ -3,8 +3,11 @@
 This directory contains Architecture Decision Records for AlgoBounty.
 
 * [0000 - Rust Chain Autopsy](0000-rust-chain-autopsy.md)
+* [0001 - Gateway Security & GitHub Validation](0001-gateway-security-and-github-validation.md)
 * [0001 - TEAL Escrow Contract](0001-teal-escrow-contract.md)
 * [0002 - Karma Reputation System](0002-karma-reputation-system.md)
+* [0002 - On-Chain Fee Splits & Mediator Net](0002-on-chain-fee-splits-and-mediator-net.md)
+* [0003 - Indexer Neutrality & Compliance](0003-indexer-neutrality-and-compliance.md)
 * [0004 - Dashboard API](0004-dashboard-api.md)
 * [0005 - GitHub Integration](0005-github-integration.md)
 * [0006 - HITM Design](0006-hitm-design.md)
