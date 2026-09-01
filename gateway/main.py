@@ -20,7 +20,6 @@ from .middleware import (
 import asyncio
 from .broker import broker
 from .worker import indexer_worker
-from .dependencies import get_db
 from .routers import (
     auth, bounties, algorand, agents,
     notifications, events, webhooks, oidc, evaluators, admin
