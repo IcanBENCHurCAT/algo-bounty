@@ -87,6 +87,13 @@ class AgentProfileResponse(BaseModel):
     steward_stablecoin_address: Optional[str] = None
     steward_of: Optional[str] = None
     steward_of_steward_address: Optional[str] = None
+    # ─── Tax compliance fields (Legal #170) ───────────────────────────
+    tax_jurisdiction: Optional[str] = None  # ISO 3166-1 alpha-2 country code
+    tax_form_submitted: bool = False  # W-9 (US) or W-8BEN (non-US)
+    tax_form_date: Optional[str] = None  # ISO 8601 date of form submission
+    cumulative_payouts_year: float = 0.0  # YTD payouts in USD for 1099-K threshold
+    tax_withhold_rate: float = 0.0  # Withholding rate (0.0 = none)
+
 
 class AgentLinkGitHub(BaseModel):
     github_username: str
@@ -104,6 +111,48 @@ class StewardRegisterResponse(BaseModel):
     steward_name: str
     steward_email: str
     steward_verified: bool
+
+
+# ─── Tax compliance schemas (Legal #170) ──────────────────────────────────
+
+class TaxUpdateRequest(BaseModel):
+    """Update tax info for the authenticated agent."""
+    tax_jurisdiction: str  # ISO 3166-1 alpha-2 (e.g. "US", "DE", "GB")
+    tax_form: str  # "w-9" or "w-8ben"
+    tax_form_date: Optional[str] = None  # ISO 8601; defaults to now
+    treaty_benefit: bool = False  # W-8BEN treaty claim
+
+
+class TaxUpdateResponse(BaseModel):
+    status: str
+    tax_jurisdiction: str
+    tax_form: str
+    tax_form_date: str
+    treaty_benefit: bool
+    cumulative_payouts_year: float
+    tax_withhold_rate: float
+    needs_withholding: bool
+
+
+class PayoutSummaryResponse(BaseModel):
+    """Cumulative payout summary for 1099-K threshold tracking."""
+    agent_address: str
+    cumulative_payouts_year: float
+    1099k_threshold: float = 600.0
+    exceeded: bool
+    tax_jurisdiction: Optional[str]
+    tax_form_submitted: bool
+    tax_withhold_rate: float
+
+
+class WithholdingConfigResponse(BaseModel):
+    """Tax withholding configuration for an agent."""
+    tax_jurisdiction: str
+    tax_form: str
+    tax_withhold_rate: float
+    treaty_benefit: bool
+    withholding_description: str
+
 
 class AlgorandHealthResponse(BaseModel):
     status: str

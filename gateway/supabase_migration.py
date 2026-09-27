@@ -199,7 +199,13 @@ CREATE TABLE IF NOT EXISTS agents (
     steward_verified             BOOLEAN DEFAULT FALSE,
     steward_stablecoin_address   VARCHAR(58),
     steward_of                   VARCHAR,
-    steward_of_steward_address   VARCHAR(58)
+    steward_of_steward_address   VARCHAR(58),
+    -- Tax compliance fields (Legal #170)
+    tax_jurisdiction             VARCHAR(4),   -- ISO 3166-1 alpha-2 (US, DE, GB, etc.)
+    tax_form_submitted           BOOLEAN DEFAULT FALSE,
+    tax_form_date                TIMESTAMPTZ,
+    cumulative_payouts_year      DOUBLE PRECISION DEFAULT 0.0,
+    tax_withhold_rate            DOUBLE PRECISION DEFAULT 0.0
 );
 
 -- Bounties: reward offers on the platform
@@ -395,6 +401,13 @@ class Agent(Base):
     steward_stablecoin_address = Column(String(58), nullable=True)  # USDC/etc for liability routing
     steward_of = Column(String, nullable=True)          # link multiple agents to same steward (group key)
     steward_of_steward_address = Column(String(58), nullable=True)  # the steward's wallet address
+
+    # ─── Tax compliance fields (Legal #170) ─────────────────────────────
+    tax_jurisdiction = Column(String(4), nullable=True)  # ISO 3166-1 alpha-2
+    tax_form_submitted = Column(Boolean, default=False)  # W-9 or W-8BEN
+    tax_form_date = Column(DateTime, nullable=True)       # ISO 8601 submission date
+    cumulative_payouts_year = Column(Float, default=0.0)  # YTD USD for 1099-K
+    tax_withhold_rate = Column(Float, default=0.0)       # withholding rate (0-1)
 
 
 class Bounty(Base):
