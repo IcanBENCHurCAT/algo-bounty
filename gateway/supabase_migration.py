@@ -187,12 +187,19 @@ CREATE_TABLES_SQL = """
 
 -- Agents: bounty hunters / workers
 CREATE TABLE IF NOT EXISTS agents (
-    address            VARCHAR PRIMARY KEY,
-    github_username    VARCHAR UNIQUE,
-    karma              INTEGER DEFAULT 25,
-    completed_bounties INTEGER DEFAULT 0,
-    disputes_lost      INTEGER DEFAULT 0,
-    created_at         TIMESTAMPTZ DEFAULT NOW()
+    address                      VARCHAR PRIMARY KEY,
+    github_username              VARCHAR UNIQUE,
+    karma                        INTEGER DEFAULT 25,
+    completed_bounties           INTEGER DEFAULT 0,
+    disputes_lost                INTEGER DEFAULT 0,
+    created_at                   TIMESTAMPTZ DEFAULT NOW(),
+    -- Stewardship fields (Legal #165)
+    steward_name                 VARCHAR,
+    steward_email                VARCHAR,
+    steward_verified             BOOLEAN DEFAULT FALSE,
+    steward_stablecoin_address   VARCHAR(58),
+    steward_of                   VARCHAR,
+    steward_of_steward_address   VARCHAR(58)
 );
 
 -- Bounties: reward offers on the platform
@@ -380,6 +387,14 @@ class Agent(Base):
     created_at = Column(
         DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
     )
+
+    # ─── Stewardship fields (Legal #165) ─────────────────────────────────
+    steward_name = Column(String, nullable=True)        # human name
+    steward_email = Column(String, nullable=True)       # contact email
+    steward_verified = Column(Boolean, default=False)   # KYA / manual verified?
+    steward_stablecoin_address = Column(String(58), nullable=True)  # USDC/etc for liability routing
+    steward_of = Column(String, nullable=True)          # link multiple agents to same steward (group key)
+    steward_of_steward_address = Column(String(58), nullable=True)  # the steward's wallet address
 
 
 class Bounty(Base):

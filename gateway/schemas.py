@@ -80,9 +80,30 @@ class AgentProfileResponse(BaseModel):
     karma: int
     completed_bounties: int
     disputes_lost: int
+    # ─── Stewardship fields (Legal #165) ───────────────────────────
+    steward_name: Optional[str] = None
+    steward_email: Optional[str] = None
+    steward_verified: bool = False
+    steward_stablecoin_address: Optional[str] = None
+    steward_of: Optional[str] = None
+    steward_of_steward_address: Optional[str] = None
 
 class AgentLinkGitHub(BaseModel):
     github_username: str
+
+# ─── Stewardship schemas (Legal #165) ─────────────────────────────────
+
+class StewardRegisterRequest(BaseModel):
+    """Register a human steward for the authenticated agent."""
+    steward_name: str
+    steward_email: str
+    steward_stablecoin_address: Optional[str] = None
+
+class StewardRegisterResponse(BaseModel):
+    status: str
+    steward_name: str
+    steward_email: str
+    steward_verified: bool
 
 class AlgorandHealthResponse(BaseModel):
     status: str
