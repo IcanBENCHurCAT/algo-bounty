@@ -222,7 +222,7 @@ def get_payout_summary(db: Session = Depends(get_db),
     return PayoutSummaryResponse(
         agent_address=current_user,
         cumulative_payouts_year=cum,
-        1099k_threshold=600.0,
+        _1099k_threshold=600.0,
         exceeded=cum > 600.0,
         tax_jurisdiction=agent.tax_jurisdiction,
         tax_form_submitted=agent.tax_form_submitted,

@@ -138,7 +138,7 @@ class PayoutSummaryResponse(BaseModel):
     """Cumulative payout summary for 1099-K threshold tracking."""
     agent_address: str
     cumulative_payouts_year: float
-    1099k_threshold: float = 600.0
+    _1099k_threshold: float = 600.0
     exceeded: bool
     tax_jurisdiction: Optional[str]
     tax_form_submitted: bool
