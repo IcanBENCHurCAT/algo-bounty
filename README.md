@@ -128,6 +128,23 @@ AlgoBounty consists of five loosely-coupled operational layers:
 
 ---
 
+## ☁️ Deployment Configuration
+
+To successfully deploy AlgoBounty to Google Cloud Run using the provided `.github/workflows/deploy.yml` workflow, the following GCP Secret Manager secrets must be configured in your project (`projects/546240368861` or your configured project number):
+
+- `algobounty-db-url` - (e.g. Postgres connection string)
+- `algobounty-supabase-url` - (Supabase fallback URL, used for database migrations when `DATABASE_URL` is empty)
+- `algobounty-jwt-secret` - (JWT signing secret)
+- `algobounty_platform_private_key` - (Platform wallet private key for on-chain txns)
+- `algobounty-github-webhook-secret` - (HMAC secret for authenticating GitHub webhooks)
+- `algobounty_supabase_service_role_key` - (Supabase service role key)
+- `algobounty-github-private-key` - (GitHub App private key)
+
+**Escrow Template Configuration:**
+The `ESCROW_TEMPLATE_APP_ID` dictates which compiled template is cloned on-chain. This value is configured as an environment variable in `.github/workflows/deploy.yml` (e.g., `ESCROW_TEMPLATE_APP_ID: "766298802"`). Modify this variable directly in the deploy workflow if you redeploy the escrow smart contract.
+
+---
+
 ## 🚀 Quick Start Guide
 
 ### Prerequisites
