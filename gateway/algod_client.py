@@ -318,17 +318,7 @@ def compile_escrow_contract(program_type: str = "approval") -> str:
             except Exception:
                 pass
 
-    # 3. Try pre-compiled legacy .teal in root (production)
-    if not content:
-        legacy_teal_path = base_dir / "escrow.teal"
-        if legacy_teal_path.exists():
-            try:
-                with open(legacy_teal_path) as fh:
-                    content = fh.read().strip()
-            except Exception:
-                pass
-
-    # 4. Read raw Puya source and strip docstring fallback (for test_compile_escrow_contract_docstring_fallback)
+    # 3. Read raw Puya source and strip docstring fallback (for test_compile_escrow_contract_docstring_fallback)
     if not content:
         try:
             with open(contract_path) as fh:
