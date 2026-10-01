@@ -223,6 +223,9 @@ class HealthResponse(BaseModel):
     version: str
     sandbox_active: bool
     node_env: str
+    db: Optional[str] = None
+    algod: Optional[str] = None
+    indexer: Optional[str] = None
 
 class EventStreamResponse(BaseModel):
     pass # SSE endpoint, returns a text/event-stream
