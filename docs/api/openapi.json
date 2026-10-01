@@ -2842,6 +2842,39 @@
           "node_env": {
             "type": "string",
             "title": "Node Env"
+          },
+          "db": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Db"
+          },
+          "algod": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Algod"
+          },
+          "indexer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Indexer"
           }
         },
         "type": "object",
