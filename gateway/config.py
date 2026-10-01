@@ -67,11 +67,17 @@ class Config:
 
     @property
     def GITHUB_WEBHOOK_SECRET(self) -> str:
-        return self.get_secret("GITHUB_WEBHOOK_SECRET")
+        val = self.get_secret("GITHUB_WEBHOOK_SECRET")
+        if self.ALGORAND_NETWORK in ("testnet", "mainnet") and not val:
+            raise RuntimeError("GITHUB_WEBHOOK_SECRET must be set in testnet/mainnet")
+        return val
 
     @property
     def WEBHOOK_API_KEY(self) -> str:
-        return self.get_secret("WEBHOOK_API_KEY")
+        val = self.get_secret("WEBHOOK_API_KEY")
+        if self.ALGORAND_NETWORK in ("testnet", "mainnet") and not val:
+            raise RuntimeError("WEBHOOK_API_KEY must be set in testnet/mainnet")
+        return val
 
     @property
     def ALGORAND_NETWORK(self) -> str:
