@@ -2,10 +2,11 @@ from .schemas import HealthResponse
 import os
 from datetime import datetime, UTC
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import text
 
-from .database import init_db
+from .database import init_db, async_engine
 from .config import settings
 from .rate_limiter import RateLimitMiddleware
 from .algod_client import NODE_ENV, is_sandbox
@@ -20,7 +21,6 @@ from .middleware import (
 import asyncio
 from .broker import broker
 from .worker import indexer_worker
-from .dependencies import get_db
 from .routers import (
     auth, bounties, algorand, agents,
     notifications, events, webhooks, oidc, evaluators, admin
@@ -98,15 +98,27 @@ print(f"[WEB3] Algorand network: {NODE_ENV} (sandbox={sandbox_active})")
 # ── Health Check ─────────────────────────────────────────────────
 
 @app.get("/health", response_model=HealthResponse)
-async def health_check():
+async def health_check(response: Response):
     """Public health check endpoint for load balancers and monitoring."""
+    status = "healthy"
+    db_status = "ok"
+
+    try:
+        async with async_engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+    except Exception as e:
+        status = "degraded"
+        db_status = "down"
+        response.status_code = 503
+
     return {
-        "status": "healthy",
+        "status": status,
         "service": "algobounty-gateway",
         "timestamp": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "version": app.version,
         "sandbox_active": sandbox_active,
         "node_env": NODE_ENV,
+        "db": db_status,
     }
 
 # ── Exception Handlers ───────────────────────────────────────────

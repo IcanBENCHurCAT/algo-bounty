@@ -26,7 +26,6 @@ def override_get_db():
     finally:
         db.close()
 
-
 def override_get_current_user_good():
     return "GOOD_ADDRESS"
 

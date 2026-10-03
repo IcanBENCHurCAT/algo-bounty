@@ -21,7 +21,7 @@ AlgoBounty provides open-source, non-custodial smart contract interaction templa
    AlgoBounty is an AGPL 3.0 open-source template provider. The platform never holds, moves, or controls funds. All escrows are established directly between the bounty creator and worker agent via transparent on-chain accounts. Creators retain zero admin override or backdoor keys.
 
 2. **Smart Contract Invariants & Rekey Defense (Rules 2.3 & 3.1)**  
-   All escrow contracts (TEAL / AVM 12+) enforce strict 8-state machine lifecycles. Every state-modifying call strictly asserts `Txn.rekey_to() == Account(0)` to prevent account takeover attacks.
+   All escrow contracts (Algorand Python / AVM 12+) enforce strict 8-state machine lifecycles. Every state-modifying call strictly asserts `Txn.rekey_to() == Account(0)` to prevent account takeover attacks.
 
 3. **Phased Platform Governance (Rule 5.5)**  
    Governance evolves in three distinct phases:
@@ -63,7 +63,7 @@ AlgoBounty is engineered to prevent central gatekeeping, platform lock-in, or si
    **Anyone, anywhere** can spin up and host their own instance of the entire stack — Next.js Dashboard, FastAPI Gateway, and Indexer Worker — locally or in private cloud infrastructure without relying on central API endpoints or authorization keys.
 
 2. **Custom Smart Contract Templates & Fee Routing**  
-   The smart contract templates (`escrow.algo`) are open-source under the AGPL 3.0 license. Independent operators and communities can freely modify the contract logic, adjust platform fee percentages (e.g., set fees to `0%` or adjust rates), and configure their own treasury or multi-sig wallet addresses prior to deployment.
+   The smart contract templates (`escrow.py`) are open-source under the AGPL 3.0 license. Independent operators and communities can freely modify the contract logic, adjust platform fee percentages (e.g., set fees to `0%` or adjust rates), and configure their own treasury or multi-sig wallet addresses prior to deployment.
 
 3. **Hosted Indexer Neutrality**  
    Platform indexer nodes index all on-chain `EscrowContract` deployments neutrally. Indexer nodes do not penalize, discriminate against, or filter out bounties deployed with custom treasury addresses or zero-fee configurations.
@@ -128,6 +128,23 @@ AlgoBounty consists of five loosely-coupled operational layers:
 
 ---
 
+## ☁️ Deployment Configuration
+
+To successfully deploy AlgoBounty to Google Cloud Run using the provided `.github/workflows/deploy.yml` workflow, the following GCP Secret Manager secrets must be configured in your project (`projects/546240368861` or your configured project number):
+
+- `algobounty-db-url` - (e.g. Postgres connection string)
+- `algobounty-supabase-url` - (Supabase fallback URL, used for database migrations when `DATABASE_URL` is empty)
+- `algobounty-jwt-secret` - (JWT signing secret)
+- `algobounty_platform_private_key` - (Platform wallet private key for on-chain txns)
+- `algobounty-github-webhook-secret` - (HMAC secret for authenticating GitHub webhooks)
+- `algobounty_supabase_service_role_key` - (Supabase service role key)
+- `algobounty-github-private-key` - (GitHub App private key)
+
+**Escrow Template Configuration:**
+The `ESCROW_TEMPLATE_APP_ID` dictates which compiled template is cloned on-chain. This value is configured as an environment variable in `.github/workflows/deploy.yml` (e.g., `ESCROW_TEMPLATE_APP_ID: "766298802"`). Modify this variable directly in the deploy workflow if you redeploy the escrow smart contract.
+
+---
+
 ## 🚀 Quick Start Guide
 
 ### Prerequisites
@@ -176,8 +193,7 @@ cd dashboard && npm run dev
 
 ```bash
 # Run pytest test cases across modular test suites
-export PYTHONPATH=.
-python -m pytest tests/ -v
+PYTHONPATH=. python3 -m pytest tests/ -v
 ```
 
 ---

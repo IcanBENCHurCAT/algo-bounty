@@ -145,6 +145,13 @@ class WebhookApiKeyAuthMiddleware(BaseHTTPMiddleware):
         # Allow requests without API key if no key is configured
         # (development mode)
         if not self.required_key:
+            from gateway.config import settings
+            if settings.ALGORAND_NETWORK in ("testnet", "mainnet"):
+                return Response(
+                    content='{"error": "Missing or invalid X-API-Key header"}',
+                    status_code=401,
+                    media_type="application/json",
+                )
             return await call_next(request)
 
         # Validate API key
@@ -186,6 +193,12 @@ class GitHubWebhookSignatureMiddleware(BaseHTTPMiddleware):
                     status_code=403,
                     media_type="application/json",
                 )
+        elif settings.ALGORAND_NETWORK in ("testnet", "mainnet"):
+            return Response(
+                content='{"status": "rejected", "reason": "Missing GitHub webhook signature configuration"}',
+                status_code=403,
+                media_type="application/json",
+            )
 
         # 3. Store body and parsed payload in request state for downstream use
         request.state.github_body = body_bytes
