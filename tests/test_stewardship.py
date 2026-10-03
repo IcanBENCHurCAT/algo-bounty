@@ -52,9 +52,12 @@ class TestStewardRegistration:
         )
         assert res.status_code == 401
 
-    def test_register_steward_no_profile(self, client):
+    def test_register_steward_no_profile(self, client, db_session):
         """Register steward for non-existent agent — returns 404."""
         token = get_auth_token(client, "NONEXISTENT_AGENT_000000000000001")
+        # auth auto-creates the agent profile; delete it to exercise the 404 path
+        db_session.query(Agent).filter(Agent.address == "NONEXISTENT_AGENT_000000000000001").delete()
+        db_session.commit()
         res = client.put(
             "/api/v1/agents/me/steward",
             json={"steward_name": "Bob", "steward_email": "bob@test.com"},
@@ -151,6 +154,13 @@ class TestBountyClaimStewardship:
         """Cannot claim bounty without registered steward."""
         creator_addr = seeded_agents[0].address
         worker_addr = seeded_agents[1].address
+
+        # seeded_agents ships with verified stewards; strip them for this negative test
+        worker = db_session.query(Agent).filter(Agent.address == worker_addr).first()
+        worker.steward_name = None
+        worker.steward_email = None
+        worker.steward_verified = False
+        db_session.commit()
 
         bounty = Bounty(
             bounty_id="b_steward_claim_test",

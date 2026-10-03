@@ -11,7 +11,7 @@ def test_arbitrator_registration_insufficient_karma(client, db_session):
 
     token = get_auth_token(client, "LOW_KARMA_ARB")
     res = client.post(
-        "/api/v1/arbitrators/register",
+        "/api/v1/evaluators/register",
         headers={"Authorization": f"Bearer {token}"}
     )
     assert res.status_code == 403
@@ -25,11 +25,11 @@ def test_arbitrator_registration_success(client, db_session):
 
     token = get_auth_token(client, "HIGH_KARMA_ARB")
     res = client.post(
-        "/api/v1/arbitrators/register",
+        "/api/v1/evaluators/register",
         headers={"Authorization": f"Bearer {token}"}
     )
     assert res.status_code == 200
-    assert res.json()["status"] == "registered"
+    assert res.json()["status"] == "active"
 
     # Verify db record
     arb = db_session.query(Arbitrator).filter(Arbitrator.address == "HIGH_KARMA_ARB").first()
@@ -38,11 +38,11 @@ def test_arbitrator_registration_success(client, db_session):
 
     # Deregister
     res_dereg = client.post(
-        "/api/v1/arbitrators/deregister",
+        "/api/v1/evaluators/deregister",
         headers={"Authorization": f"Bearer {token}"}
     )
     assert res_dereg.status_code == 200
-    assert res_dereg.json()["status"] == "deregistered"
+    assert res_dereg.json()["status"] == "inactive"
 
     # Verify status changed in db
     db_session.refresh(arb)
@@ -61,7 +61,7 @@ def test_arbitrator_voting_restrictions(client, db_session):
     # Case 1: Unassigned arbitrator votes
     arb_token = get_auth_token(client, "ARB_ADDR")
     res = client.post(
-        "/api/v1/arbitrators/bounties/b_dispute/vote",
+        "/api/v1/evaluators/bounties/b_dispute/vote",
         json={"vote": "worker"},
         headers={"Authorization": f"Bearer {arb_token}"}
     )
@@ -69,12 +69,12 @@ def test_arbitrator_voting_restrictions(client, db_session):
     assert "You are not assigned" in res.json()["detail"]
 
     # Case 2: Assigned arbitrator votes
-    assignment = DisputeArbitrator(bounty_id="b_dispute", arbitrator_address="ARB_ADDR")
+    assignment = DisputeArbitrator(bounty_id="b_dispute", evaluator_address="ARB_ADDR")
     db_session.add(assignment)
     db_session.commit()
 
     res_vote = client.post(
-        "/api/v1/arbitrators/bounties/b_dispute/vote",
+        "/api/v1/evaluators/bounties/b_dispute/vote",
         json={"vote": "worker"},
         headers={"Authorization": f"Bearer {arb_token}"}
     )
@@ -84,7 +84,7 @@ def test_arbitrator_voting_restrictions(client, db_session):
 
     # Case 3: Assigned arbitrator attempts to vote again
     res_vote_again = client.post(
-        "/api/v1/arbitrators/bounties/b_dispute/vote",
+        "/api/v1/evaluators/bounties/b_dispute/vote",
         json={"vote": "split"},
         headers={"Authorization": f"Bearer {arb_token}"}
     )
@@ -152,7 +152,7 @@ async def test_worker_dispute_submitted_and_voted(db_session, seeded_agents):
 
     assignments = db_session.query(DisputeArbitrator).filter(DisputeArbitrator.bounty_id == "b_dispute_worker").all()
     assert len(assignments) == 3
-    assigned_addrs = [a.arbitrator_address for a in assignments]
+    assigned_addrs = [a.evaluator_address for a in assignments]
     assert addr1 in assigned_addrs
     assert addr2 in assigned_addrs
     assert addr3 in assigned_addrs
@@ -187,7 +187,7 @@ async def test_worker_dispute_submitted_and_voted(db_session, seeded_agents):
     # Assert arbitrator vote is recorded
     vote_record = db_session.query(DisputeArbitrator).filter(
         DisputeArbitrator.bounty_id == "b_dispute_worker",
-        DisputeArbitrator.arbitrator_address == addr1
+        DisputeArbitrator.evaluator_address == addr1
     ).first()
     assert vote_record.vote == "worker"
     assert vote_record.voted_at is not None
@@ -315,7 +315,7 @@ def test_inactive_arbitrator_penalised(db_session):
     old_time = datetime.now(timezone.utc) - timedelta(hours=ARBITRATOR_VOTE_DEADLINE_HOURS + 1)
     arb_row = Arbitrator(address="INACTIVE_ARB", status="active", registered_at=old_time)
     # Assign but no vote yet
-    assignment = DisputeArbitrator(bounty_id="b_inactive_arb", arbitrator_address="INACTIVE_ARB")
+    assignment = DisputeArbitrator(bounty_id="b_inactive_arb", evaluator_address="INACTIVE_ARB")
 
     db_session.add_all([bounty, arb_agent, arb_row, assignment])
     db_session.commit()
@@ -328,7 +328,7 @@ def test_inactive_arbitrator_penalised(db_session):
     # Assignment should be marked abstained
     updated = db_session.query(DisputeArbitrator).filter(
         DisputeArbitrator.bounty_id == "b_inactive_arb",
-        DisputeArbitrator.arbitrator_address == "INACTIVE_ARB"
+        DisputeArbitrator.evaluator_address == "INACTIVE_ARB"
     ).first()
     assert updated.vote == "abstained"
     assert updated.voted_at is not None
@@ -355,7 +355,7 @@ def test_active_arbitrator_not_penalised(db_session):
     arb_agent = Agent(address="ACTIVE_ARB", karma=60)
     # Registered just now — well within the 48h window
     arb_row = Arbitrator(address="ACTIVE_ARB", status="active", registered_at=datetime.now(timezone.utc))
-    assignment = DisputeArbitrator(bounty_id="b_active_arb", arbitrator_address="ACTIVE_ARB")
+    assignment = DisputeArbitrator(bounty_id="b_active_arb", evaluator_address="ACTIVE_ARB")
 
     db_session.add_all([bounty, arb_agent, arb_row, assignment])
     db_session.commit()

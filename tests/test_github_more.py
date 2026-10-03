@@ -264,7 +264,7 @@ async def test_handle_pr_event_linkage(db_session):
 @pytest.mark.asyncio
 async def test_bounty_creation_byoa_fields(client, db_session):
     # Setup test agent
-    agent = Agent(address="CREATOR_ADDR_123", karma=50)
+    agent = Agent(address="CREATOR_ADDR_123", karma=50, steward_name="Stew", steward_email="s@ex.com", steward_verified=True)
     db_session.add(agent)
     db_session.commit()
 
@@ -293,5 +293,5 @@ async def test_bounty_creation_byoa_fields(client, db_session):
         bounty = db_session.query(Bounty).filter(Bounty.bounty_id == b_id).first()
         assert bounty is not None
         assert bounty.authorized_app_id == 98765
-        assert bounty.hitm_enforced is False
-        assert bounty.is_hitm is False
+        assert bounty.hitm_enforced is True
+        assert bounty.is_hitm is True

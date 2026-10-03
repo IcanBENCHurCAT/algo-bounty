@@ -18,8 +18,8 @@ def db():
     Base.metadata.create_all(bind=engine)
     session = SessionLocal()
     # Seed agents
-    session.add(Agent(address="creator_addr", karma=100))
-    session.add(Agent(address="worker_addr", karma=100))
+    session.add(Agent(address="creator_addr", karma=100, steward_name="Stew", steward_email="s@ex.com", steward_verified=True))
+    session.add(Agent(address="worker_addr", karma=100, steward_name="Stew", steward_email="s@ex.com", steward_verified=True))
     session.commit()
     yield session
     session.close()
