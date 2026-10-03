@@ -9,6 +9,7 @@ Usage:
     python gateway/supabase_migration.py
 """
 
+import hashlib
 import os
 import signal
 from datetime import datetime, timezone
@@ -23,8 +24,11 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
+    Text,
+    UniqueConstraint,
     event,
     create_engine,
+    DECIMAL,
 )
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
@@ -32,6 +36,25 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlalchemy.orm import declarative_base, sessionmaker
+
+# ─── ToS version / governing law constants (Legal #171) ─────────────────
+CURRENT_TOS_VERSION = "1.1.0"  # bumped from 1.0.0 to add enforceability
+PLATFORM_GOVERNING_LAW = "Delaware, USA"  # Constitution §5.8 fallback
+PLATFORM_ARBITRATION_PROC = "mediation_then_binding"  # FAA-governed
+
+# Pre-compute ToS text hash for tamper-evident chain
+_TOS_TEXT_1_1_0 = (
+    "AlgoBounty Terms of Service v1.1.0 "
+    "- Pre-Mainnet Protocol Stewardship. "
+    "Governing law: Delaware, USA. "
+    "Arbitration: FAA-governed mediation then binding. "
+    "Non-custodial software protocol. "
+    "Counterparty compliance and taxes per §3. "
+    "Mandatory arbitration under FAA per §4. "
+    "Dispute resolution: evaluator ruling → platform blacklist/flag via KYA. "
+    "Mediation-then-binding process for all platform disputes."
+)
+CURRENT_TOS_HASH = hashlib.sha256(_TOS_TEXT_1_1_0.encode()).hexdigest()
 
 # ---------------------------------------------------------------------------
 # Connection pool warming (reduces first-request latency)
@@ -185,6 +208,61 @@ CREATE_TABLES_SQL = """
 -- AlgoBounty Tables for Supabase / PostgreSQL
 -- Run this in Supabase SQL Editor or via psql to create the schema.
 -- ================================================================
+
+-- ─── Terms of Service Enforcement (Legal #171) ──────────────────
+
+CREATE TABLE IF NOT EXISTS user_terms_acceptance (
+    id                  SERIAL PRIMARY KEY,
+    address             VARCHAR NOT NULL REFERENCES agents(address),
+    terms_version       VARCHAR NOT NULL,
+    accepted_at         TIMESTAMPTZ DEFAULT NOW(),
+    accepted_ip_hash    VARCHAR,
+    user_agent_hash     VARCHAR,
+    UNIQUE(address, terms_version)
+);
+CREATE INDEX IF NOT EXISTS idx_user_terms_address ON user_terms_acceptance (address);
+
+CREATE TABLE IF NOT EXISTS terms_history (
+    id              SERIAL PRIMARY KEY,
+    version         VARCHAR UNIQUE NOT NULL,
+    text            TEXT NOT NULL,
+    sha256_hash     VARCHAR UNIQUE NOT NULL,
+    effective_date  TIMESTAMPTZ DEFAULT NOW(),
+    is_active       BOOLEAN DEFAULT TRUE,
+    governing_law  VARCHAR DEFAULT 'Delaware, USA',
+    arbitration_clause TEXT DEFAULT 'mediation_then_binding'
+);
+
+-- Seed the current ToS v1.1.0
+INSERT INTO terms_history (version, text, sha256_hash, effective_date, is_active, governing_law, arbitration_clause)
+VALUES (
+    '1.1.0',
+    'AlgoBounty Terms of Service v1.1.0 - Pre-Mainnet Protocol Stewardship. Governing law: Delaware, USA. Arbitration: FAA-governed mediation then binding. Non-custodial software protocol. Counterparty compliance and taxes per §3. Mandatory arbitration under FAA per §4. Dispute resolution: evaluator ruling → platform blacklist/flag via KYA. Mediation-then-binding process for all platform disputes.',
+    (SELECT CURRENT_TOS_HASH FROM (
+        SELECT md5('dummy') as CURRENT_TOS_HASH
+    ) tmp),
+    NOW(),
+    TRUE,
+    'Delaware, USA',
+    'mediation_then_binding'
+);
+
+-- Blacklist / Quarantine (Legal #171 + #172)
+CREATE TABLE IF NOT EXISTS user_blacklist (
+    id              SERIAL PRIMARY KEY,
+    address         VARCHAR UNIQUE NOT NULL REFERENCES agents(address),
+    reason          VARCHAR NOT NULL,
+    details         TEXT,
+    blacklisted_at  TIMESTAMPTZ DEFAULT NOW(),
+    blacklisted_by  VARCHAR REFERENCES agents(address),
+    expires_at      TIMESTAMPTZ,
+    status          VARCHAR DEFAULT 'active',
+    resolved_by     VARCHAR,
+    resolved_at     TIMESTAMPTZ,
+    resolution_note TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_blacklist_address ON user_blacklist (address);
+CREATE INDEX IF NOT EXISTS idx_blacklist_status ON user_blacklist (status);
 
 -- Agents: bounty hunters / workers
 CREATE TABLE IF NOT EXISTS agents (
@@ -407,8 +485,13 @@ class Agent(Base):
     tax_jurisdiction = Column(String(4), nullable=True)  # ISO 3166-1 alpha-2
     tax_form_submitted = Column(Boolean, default=False)  # W-9 or W-8BEN
     tax_form_date = Column(DateTime, nullable=True)       # ISO 8601 submission date
-    cumulative_payouts_year = Column(Float, default=0.0)  # YTD USD for 1099-K
+    cumulative_payouts_year = Column(Float(asdecimal=False), default=0.0)  # YTD USD for 1099-K
     tax_withhold_rate = Column(Float, default=0.0)       # withholding rate (0-1)
+
+    # ─── Cold-start fields (Karma #175) ───────────────────────────
+    has_collateral = Column(Boolean, default=False)       # has active collateral deposit
+    vouched_by_count = Column(Integer, default=0)         # number of active vouches received
+    cold_start_eligible = Column(Boolean, default=True)   # eligible for collateral/staged path
 
 
 class Bounty(Base):
@@ -523,6 +606,85 @@ class WebhookDeliveryRecord(Base):
         DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
     )
     status = Column(String, default="success", nullable=False)
+
+
+# ─── Terms of Service (Legal #171) ──────────────────────────────
+
+class UserTermsAcceptance(Base):
+    """Records a wallet address accepting the current ToS version."""
+    __tablename__ = "user_terms_acceptance"
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    address = Column(String, ForeignKey("agents.address", ondelete="CASCADE"), nullable=False)
+    terms_version = Column(String, nullable=False)
+    accepted_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=True)
+    accepted_ip_hash = Column(String, nullable=True)
+    user_agent_hash = Column(String, nullable=True)
+    __table_args__ = (
+        UniqueConstraint("address", "terms_version", name="uq_terms_address_version"),
+    )
+
+
+class TermsHistory(Base):
+    """Historical snapshots of ToS versions."""
+    __tablename__ = "terms_history"
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    version = Column(String, unique=True, nullable=False)
+    text = Column(Text, nullable=False)
+    sha256_hash = Column(String, unique=True, nullable=False)
+    effective_date = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=True)
+    is_active = Column(Boolean, default=True)
+    governing_law = Column(String, nullable=True)
+    arbitration_clause = Column(String, nullable=True)
+
+
+class UserBlacklist(Base):
+    """Admin-controlled blacklist for addresses."""
+    __tablename__ = "user_blacklist"
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    address = Column(String, ForeignKey("agents.address", ondelete="CASCADE"), unique=True, nullable=False)
+    reason = Column(String, nullable=False)
+    details = Column(Text, nullable=True)
+    blacklisted_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=True)
+    blacklisted_by = Column(String, ForeignKey("agents.address", ondelete="SET NULL"), nullable=True)
+    expires_at = Column(DateTime, nullable=True)
+    status = Column(String, default="active", nullable=False)
+    resolved_by = Column(String, nullable=True)
+    resolved_at = Column(DateTime, nullable=True)
+    resolution_note = Column(Text, nullable=True)
+
+
+# ─── Cold-start support (Karma #175) ────────────────────────────
+
+class CollateralDeposit(Base):
+    """Records ALGO locked by a new agent as temporary reputation proxy."""
+    __tablename__ = "collateral_deposits"
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    agent_address = Column(String, ForeignKey("agents.address", ondelete="CASCADE"), nullable=False)
+    amount_microalgo = Column(BigInteger, nullable=False)
+    bounty_id = Column(String, ForeignKey("bounties.bounty_id", ondelete="CASCADE"), nullable=True)
+    status = Column(String, default="locked", nullable=False)
+    # locked = held while bounty is active
+    # slashed = lost due to bounty failure
+    # released = returned after successful completion
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    released_at = Column(DateTime, nullable=True)
+
+
+class Vouch(Base):
+    """Elite agent co-signing a new agent's bounty with partial reputation risk."""
+    __tablename__ = "vouches"
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    vouching_agent = Column(String, ForeignKey("agents.address", ondelete="CASCADE"), nullable=False)
+    vouched_agent = Column(String, ForeignKey("agents.address", ondelete="CASCADE"), nullable=False)
+    bounty_id = Column(String, ForeignKey("bounties.bounty_id", ondelete="SET NULL"), nullable=True)
+    amount_at_stake = Column(BigInteger, default=0)       # reputation capital at risk
+    status = Column(String, default="active", nullable=False)
+    # active, resolved, slashed, expired
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    resolved_at = Column(DateTime, nullable=True)
+    __table_args__ = (
+        UniqueConstraint("vouching_agent", "vouched_agent", "bounty_id", name="uq_vouch_triple"),
+    )
 
 
 # ---------------------------------------------------------------------------

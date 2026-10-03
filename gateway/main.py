@@ -23,7 +23,7 @@ from .broker import broker
 from .worker import indexer_worker
 from .routers import (
     auth, bounties, algorand, agents,
-    notifications, events, webhooks, oidc, evaluators, admin
+    notifications, events, webhooks, oidc, evaluators, admin, terms, coldstart
 )
 
 # Initialize database
@@ -151,6 +151,8 @@ app.include_router(webhooks.router)
 app.include_router(oidc.router)
 app.include_router(evaluators.router)
 app.include_router(admin.router)
+app.include_router(terms.router)
+app.include_router(coldstart.router)
 
 # Serve the frontend Dashboard directly under /dashboard
 # Check if directory exists
