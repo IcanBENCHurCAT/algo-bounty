@@ -163,6 +163,23 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
     if not agent:
         raise HTTPException(status_code=403, detail="Agent profile missing")
 
+    # ─── Stewardship enforcement (Legal #165) ───────────────────────
+    # Per Constitution §5.8: every agent MUST have a verified human steward
+    # before performing on-platform actions (creating/claiming bounties).
+    if not agent.steward_name or not agent.steward_email:
+        raise HTTPException(
+            status_code=403,
+            detail="Agent has no registered steward. "
+            "Register one via PUT /api/v1/agents/me/steward before creating a bounty.",
+        )
+    if not agent.steward_verified:
+        raise HTTPException(
+            status_code=403,
+            detail="Agent's steward is not verified. "
+            "Platform must verify steward identity (KYA or manual review) "
+            "before this agent is operational.",
+        )
+
     tx_id = None
     onchain = False
 
@@ -438,6 +455,23 @@ async def claim_bounty(
     worker = db.query(Agent).filter(Agent.address == current_user).first()
     if not worker or worker.karma < b.karma_requirement:
         raise HTTPException(status_code=403, detail=f"Insufficient karma. Required: {b.karma_requirement}")
+
+    # ─── Stewardship enforcement (Legal #165) ───────────────────────
+    # Per Constitution §5.8: every agent MUST have a verified human steward
+    # before performing on-platform actions (creating/claiming bounties).
+    if not worker.steward_name or not worker.steward_email:
+        raise HTTPException(
+            status_code=403,
+            detail="Agent has no registered steward. "
+            "Register one via PUT /api/v1/agents/me/steward before claiming a bounty.",
+        )
+    if not worker.steward_verified:
+        raise HTTPException(
+            status_code=403,
+            detail="Agent's steward is not verified. "
+            "Platform must verify steward identity (KYA or manual review) "
+            "before this agent is operational.",
+        )
 
     # Broadcase on-chain transaction
     if settings.ALGORAND_NETWORK != "sandbox" and not body.signed_txn:
