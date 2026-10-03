@@ -264,7 +264,7 @@ async def test_handle_pr_event_linkage(db_session):
 @pytest.mark.asyncio
 async def test_bounty_creation_byoa_fields(client, db_session):
     # Setup test agent
-    agent = Agent(address="CREATOR_ADDR_123", karma=50)
+    agent = Agent(address="CREATOR_ADDR_123", karma=50, steward_name="Stew", steward_email="s@ex.com", steward_verified=True)
     db_session.add(agent)
     db_session.commit()
 

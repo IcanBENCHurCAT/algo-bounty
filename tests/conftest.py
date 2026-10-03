@@ -77,9 +77,9 @@ def db_session():
 
 @pytest.fixture
 def seeded_agents(db_session):
-    creator = Agent(address="CREATOR_ADDR", karma=50)
-    worker = Agent(address="WORKER_ADDR", karma=30)
-    low_karma_worker = Agent(address="LOW_KARMA_WORKER", karma=5)
+    creator = Agent(address="CREATOR_ADDR", karma=50, steward_name="Stew C", steward_email="c@example.com", steward_verified=True)
+    worker = Agent(address="WORKER_ADDR", karma=30, steward_name="Stew W", steward_email="w@example.com", steward_verified=True)
+    low_karma_worker = Agent(address="LOW_KARMA_WORKER", karma=5, steward_name="Stew L", steward_email="l@example.com", steward_verified=True)
     db_session.add(creator)
     db_session.add(worker)
     db_session.add(low_karma_worker)

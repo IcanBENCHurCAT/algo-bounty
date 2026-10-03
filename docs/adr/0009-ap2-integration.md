@@ -162,7 +162,7 @@ Instructions:
 ## Sub-Agent 3: Smart Contract Mediator & Bonding Logic
 * **Role**: Smart Contract (AVM) Developer
 * **Scope**: Extend `escrow.py` with mediator bonding logic and box consolidation.
-* **Workspace**: Smart Contract (`escrow.py` / `escrow.teal`)
+* **Workspace**: Smart Contract (`escrow.py` / `artifacts/EscrowContract.approval.teal`)
 ```text
 Task: Update the smart contract escrow logic to support mediator fee allocation and mediator bonding without exceeding AVM box constraints.
 Instructions:

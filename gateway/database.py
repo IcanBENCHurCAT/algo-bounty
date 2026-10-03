@@ -28,6 +28,8 @@ from .supabase_migration import (
     AccountQuarantine,
     SyncRecord,
     WebhookDeliveryRecord,
+    CollateralDeposit,
+    Vouch,
     sync_engine,
     async_engine,
     engine,  # backward-compatible alias (async_engine)
@@ -59,6 +61,8 @@ __all__ = [
     "Arbitrator",
     "DisputeArbitrator",
     "WebhookDeliveryRecord",
+    "CollateralDeposit",
+    "Vouch",
     "engine",
     "sync_engine",
     "async_engine",
