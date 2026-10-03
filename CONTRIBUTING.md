@@ -52,8 +52,7 @@ Thank you for your interest in contributing to AlgoBounty! Whether you are a hum
    - **Backend Tests**:
      ```bash
      export SECRET_KEY=your_test_secret_key_at_least_32_chars
-     export PYTHONPATH=.
-     python -m pytest tests/
+     PYTHONPATH=. python3 -m pytest tests/
      ```
    - Run frontend: `cd dashboard && npm run dev`
 4. **Submit a PR**: Provide a clear description of your changes and link any relevant issues or design documents.
@@ -93,7 +92,7 @@ Thank you for your interest in contributing to AlgoBounty! Whether you are a hum
 
 ## 5. Documentation
 
-- If you add a new feature, update the relevant design document (`v0-v7-*.md`) or create a new one.
+- If you add a new feature, update the relevant Architecture Decision Record in `docs/adr/` or feature specification in `specs/`.
 - Keep `AGENTS.md` updated with any architectural changes.
 
 ---

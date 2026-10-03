@@ -49,6 +49,95 @@ def get_current_terms(db: Session = Depends(get_db)):
     }
 
 
+@router.get("/blacklist", summary="List blacklist", description="Admin-only: list all blacklisted addresses.")
+def list_blacklist(
+    db: Session = Depends(get_db),
+    current_user: str = Depends(is_admin),
+):
+    """List all blacklisted addresses."""
+    from sqlalchemy import text
+    results = db.execute(
+        text("SELECT address, reason, blacklisted_at, status FROM user_blacklist WHERE status = 'active' ORDER BY blacklisted_at DESC")
+    ).all()
+
+    return {
+        "blacklisted_addresses": [
+            {
+                "address": r[0],
+                "reason": r[1],
+                "blacklisted_at": r[2].isoformat() if hasattr(r[2], 'isoformat') else str(r[2]),
+                "status": r[3],
+            }
+            for r in results
+        ]
+    }
+
+
+@router.post("/blacklist", summary="Add to blacklist", description="Admin-only: blacklist an address.")
+def add_to_blacklist(
+    address: str,
+    reason: str = ...,
+    details: Optional[str] = None,
+    expires_at: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: str = Depends(is_admin),
+):
+    """Blacklist an address (blocks from new bounties)."""
+    from sqlalchemy import text
+
+    db.execute(
+        text("""
+            INSERT INTO user_blacklist (address, reason, details, blacklisted_by, expires_at, status)
+            VALUES (:addr, :reason, :details, :by, :exp, 'active')
+        """),
+        {
+            "addr": address,
+            "reason": reason,
+            "details": details,
+            "by": current_user,
+            "exp": expires_at,
+        }
+    )
+    db.commit()
+
+    return {
+        "blacklisted": True,
+        "address": address,
+        "reason": reason,
+        "blacklisted_by": current_user,
+    }
+
+
+@router.post("/blacklist/{address}/resolve", summary="Resolve blacklist", description="Admin-only: remove address from blacklist.")
+def resolve_blacklist(
+    address: str,
+    reason: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: str = Depends(is_admin),
+):
+    """Remove an address from the blacklist."""
+    from sqlalchemy import text
+
+    db.execute(
+        text("""
+            UPDATE user_blacklist SET
+                status = 'resolved',
+                resolved_by = :by,
+                resolved_at = NOW(),
+                resolution_note = :note
+            WHERE address = :addr AND status = 'active'
+        """),
+        {"addr": address, "by": current_user, "note": reason}
+    )
+    db.commit()
+
+    return {
+        "blacklist_removed": True,
+        "address": address,
+        "resolved_by": current_user,
+    }
+
+
 @router.get("/{version}", summary="Get historical ToS", description="Returns a specific version of the Terms of Service.")
 def get_terms_version(version: str, db: Session = Depends(get_db)):
     """Return a historical ToS version."""
@@ -158,90 +247,3 @@ def enforce_terms_check(
     return {"accepted": True, "version": CURRENT_TOS_VERSION}
 
 
-@router.get("/blacklist", summary="List blacklist", description="Admin-only: list all blacklisted addresses.")
-def list_blacklist(
-    db: Session = Depends(get_db),
-    current_user: str = Depends(is_admin),
-):
-    """List all blacklisted addresses."""
-    from sqlalchemy import text
-    results = db.execute(
-        text("SELECT address, reason, blacklisted_at, status FROM user_blacklist WHERE status = 'active' ORDER BY blacklisted_at DESC")
-    ).all()
-
-    return {
-        "blacklisted_addresses": [
-            {
-                "address": r[0],
-                "reason": r[1],
-                "blacklisted_at": r[2].isoformat() if hasattr(r[2], 'isoformat') else str(r[2]),
-                "status": r[3],
-            }
-            for r in results
-        ]
-    }
-
-
-@router.post("/blacklist", summary="Add to blacklist", description="Admin-only: blacklist an address.")
-def add_to_blacklist(
-    address: str,
-    reason: str = ...,
-    details: Optional[str] = None,
-    expires_at: Optional[str] = None,
-    db: Session = Depends(get_db),
-    current_user: str = Depends(is_admin),
-):
-    """Blacklist an address (blocks from new bounties)."""
-    from sqlalchemy import text
-
-    db.execute(
-        text("""
-            INSERT INTO user_blacklist (address, reason, details, blacklisted_by, expires_at, status)
-            VALUES (:addr, :reason, :details, :by, :exp, 'active')
-        """),
-        {
-            "addr": address,
-            "reason": reason,
-            "details": details,
-            "by": current_user,
-            "exp": expires_at,
-        }
-    )
-    db.commit()
-
-    return {
-        "blacklisted": True,
-        "address": address,
-        "reason": reason,
-        "blacklisted_by": current_user,
-    }
-
-
-@router.post("/blacklist/{address}/resolve", summary="Resolve blacklist", description="Admin-only: remove address from blacklist.")
-def resolve_blacklist(
-    address: str,
-    reason: Optional[str] = None,
-    db: Session = Depends(get_db),
-    current_user: str = Depends(is_admin),
-):
-    """Remove an address from the blacklist."""
-    from sqlalchemy import text
-
-    db.execute(
-        text("""
-            UPDATE user_blacklist SET
-                status = 'resolved',
-                resolved_by = :by,
-                resolved_at = NOW(),
-                resolution_note = :note
-            WHERE address = :addr AND status = 'active'
-        """),
-        {"addr": address, "by": current_user, "note": reason}
-    )
-    db.commit()
-
-    return {
-        "blacklist_removed": True,
-        "address": address,
-        "resolved_by": current_user,
-    }

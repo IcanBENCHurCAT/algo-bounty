@@ -100,10 +100,12 @@ cp gateway/.env.template gateway/.env
 
 ```bash
 # Start the FastAPI gateway (port 8000)
-python gateway/main.py
+export PYTHONPATH=.
+python3 gateway/main.py
 
 # Start the background worker
-python gateway/worker.py
+export PYTHONPATH=.
+python3 gateway/worker.py
 
 # Start the dashboard (port 3000)
 cd dashboard && npm run dev
@@ -112,7 +114,7 @@ cd dashboard && npm run dev
 ### 4. Run Tests
 
 ```bash
-pytest tests/ -v
+PYTHONPATH=. python3 -m pytest tests/ -v
 ```
 
 The test suite includes **119 test functions** across 25 test files.

@@ -244,6 +244,22 @@
               ],
               "title": "Worker"
             }
+          },
+          {
+            "name": "admin_address",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Admin Address"
+            }
           }
         ],
         "responses": {
@@ -785,6 +801,124 @@
         }
       }
     },
+    "/api/v1/bounties/{bounty_id}/sync-github": {
+      "post": {
+        "tags": [
+          "bounties"
+        ],
+        "summary": "Manual GitHub Sync",
+        "operationId": "sync_github_endpoint_api_v1_bounties__bounty_id__sync_github_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "bounty_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Bounty Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncGithubResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/bounties/{bounty_id}/claim-payout": {
+      "post": {
+        "tags": [
+          "bounties"
+        ],
+        "summary": "Worker Claim Payout",
+        "operationId": "claim_payout_endpoint_api_v1_bounties__bounty_id__claim_payout_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "bounty_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Bounty Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimPayoutResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/bounties/account/quarantine-status": {
+      "get": {
+        "tags": [
+          "bounties"
+        ],
+        "summary": "Get Current Account Quarantine Status",
+        "operationId": "get_quarantine_status_api_v1_bounties_account_quarantine_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/algorand/health": {
       "get": {
         "tags": [
@@ -1010,6 +1144,248 @@
         ]
       }
     },
+    "/api/v1/agents/me/steward": {
+      "put": {
+        "tags": [
+          "agents"
+        ],
+        "summary": "Register a human steward for this agent",
+        "description": "Link a human steward (name, email, optional stablecoin address) to the authenticated agent's profile. The steward assumes full legal, tax, and financial responsibility per Constitution \u00a75.8.",
+        "operationId": "register_steward_api_v1_agents_me_steward_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StewardRegisterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StewardRegisterResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/agents/steward/{steward_address}": {
+      "get": {
+        "tags": [
+          "agents"
+        ],
+        "summary": "List all agents for a steward address",
+        "description": "Return all agent profiles that reference the given steward wallet address via steward_of_steward_address.",
+        "operationId": "list_agents_for_steward_api_v1_agents_steward__steward_address__get",
+        "parameters": [
+          {
+            "name": "steward_address",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Steward Address"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AgentProfileResponse"
+                  },
+                  "title": "Response List Agents For Steward Api V1 Agents Steward  Steward Address  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/agents/me/tax": {
+      "put": {
+        "tags": [
+          "agents"
+        ],
+        "summary": "Update tax jurisdiction and form",
+        "description": "Set the agent's tax jurisdiction (ISO 3166-1 alpha-2), submit W-9 (US) or W-8BEN (non-US), and claim treaty benefits if applicable. This is used to determine 1099-K reporting obligations.",
+        "operationId": "update_tax_info_api_v1_agents_me_tax_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaxUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaxUpdateResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/agents/me/tax/payouts": {
+      "get": {
+        "tags": [
+          "agents"
+        ],
+        "summary": "Get cumulative payout summary",
+        "description": "Returns the agent's year-to-date cumulative payouts and 1099-K threshold status.",
+        "operationId": "get_payout_summary_api_v1_agents_me_tax_payouts_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayoutSummaryResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/agents/me/tax/withholding": {
+      "get": {
+        "tags": [
+          "agents"
+        ],
+        "summary": "Get withholding configuration",
+        "description": "Returns the withholding rate and description for the agent based on jurisdiction and form.",
+        "operationId": "get_withholding_config_api_v1_agents_me_tax_withholding_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WithholdingConfigResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/agents/me/tax/record-payout": {
+      "post": {
+        "tags": [
+          "agents"
+        ],
+        "summary": "Record a payout for cumulative tracking",
+        "description": "Record a payout amount for the authenticated agent in USD. Called after each bounty completion to accumulate payouts for 1099-K threshold tracking.",
+        "operationId": "record_payout_api_v1_agents_me_tax_record_payout_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "amount",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "default": 0.0,
+              "title": "Amount"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/notifications": {
       "get": {
         "tags": [
@@ -1175,21 +1551,41 @@
         }
       }
     },
-    "/api/v1/arbitrators/register": {
-      "post": {
+    "/api/v1/evaluators": {
+      "get": {
         "tags": [
-          "arbitrators"
+          "evaluators"
         ],
-        "summary": "Register as arbitrator",
-        "description": "Register the authenticated high-karma agent as an arbitrator candidate.",
-        "operationId": "register_arbitrator_api_v1_arbitrators_register_post",
+        "summary": "List evaluators",
+        "operationId": "list_evaluators_api_v1_evaluators_get",
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ArbitratorRegistrationResponse"
+                  "$ref": "#/components/schemas/EvaluatorListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/evaluators/me": {
+      "get": {
+        "tags": [
+          "evaluators"
+        ],
+        "summary": "Get my evaluator status",
+        "operationId": "get_my_evaluator_status_api_v1_evaluators_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluatorMeResponse"
                 }
               }
             }
@@ -1202,21 +1598,21 @@
         ]
       }
     },
-    "/api/v1/arbitrators/deregister": {
+    "/api/v1/evaluators/register": {
       "post": {
         "tags": [
-          "arbitrators"
+          "evaluators"
         ],
-        "summary": "Deregister as arbitrator",
-        "description": "Deregister the authenticated agent from the arbitrator candidate pool.",
-        "operationId": "deregister_arbitrator_api_v1_arbitrators_deregister_post",
+        "summary": "Register as evaluator",
+        "description": "Register the authenticated high-karma agent as an evaluator candidate.",
+        "operationId": "register_evaluator_api_v1_evaluators_register_post",
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ArbitratorRegistrationResponse"
+                  "$ref": "#/components/schemas/EvaluatorResponse"
                 }
               }
             }
@@ -1229,14 +1625,41 @@
         ]
       }
     },
-    "/api/v1/arbitrators/bounties/{bounty_id}/vote": {
+    "/api/v1/evaluators/deregister": {
       "post": {
         "tags": [
-          "arbitrators"
+          "evaluators"
+        ],
+        "summary": "Deregister as evaluator",
+        "description": "Deregister the authenticated agent from the evaluator candidate pool.",
+        "operationId": "deregister_evaluator_api_v1_evaluators_deregister_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluatorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/evaluators/bounties/{bounty_id}/vote": {
+      "post": {
+        "tags": [
+          "evaluators"
         ],
         "summary": "Cast vote on dispute",
-        "description": "Allows an assigned arbitrator to cast their vote on a disputed bounty.",
-        "operationId": "vote_dispute_api_v1_arbitrators_bounties__bounty_id__vote_post",
+        "description": "Allows an assigned evaluator to cast their vote on a disputed bounty.",
+        "operationId": "vote_dispute_api_v1_evaluators_bounties__bounty_id__vote_post",
         "security": [
           {
             "HTTPBearer": []
@@ -1269,8 +1692,936 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ArbitratorVoteResponse"
+                  "$ref": "#/components/schemas/EvaluatorVoteResponse"
                 }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/disputes/{bounty_id}/resolve": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Admin Resolve Dispute",
+        "operationId": "admin_resolve_dispute_api_v1_admin_disputes__bounty_id__resolve_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "bounty_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Bounty Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminResolveRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminResolveResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/quarantines": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "List Quarantined Accounts",
+        "operationId": "list_quarantines_api_v1_admin_quarantines_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": "active",
+              "title": "Status"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/quarantines/{quarantine_id}/resolve": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Resolve Account Quarantine",
+        "operationId": "resolve_quarantine_api_v1_admin_quarantines__quarantine_id__resolve_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "quarantine_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Quarantine Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuarantineResolveRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/terms/current": {
+      "get": {
+        "tags": [
+          "terms"
+        ],
+        "summary": "Get current ToS",
+        "description": "Returns the currently active Terms of Service version and full text.",
+        "operationId": "get_current_terms_api_v1_terms_current_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/terms/blacklist": {
+      "get": {
+        "tags": [
+          "terms"
+        ],
+        "summary": "List blacklist",
+        "description": "Admin-only: list all blacklisted addresses.",
+        "operationId": "list_blacklist_api_v1_terms_blacklist_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "terms"
+        ],
+        "summary": "Add to blacklist",
+        "description": "Admin-only: blacklist an address.",
+        "operationId": "add_to_blacklist_api_v1_terms_blacklist_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "address",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Address"
+            }
+          },
+          {
+            "name": "reason",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Reason"
+            }
+          },
+          {
+            "name": "details",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Details"
+            }
+          },
+          {
+            "name": "expires_at",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Expires At"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/terms/blacklist/{address}/resolve": {
+      "post": {
+        "tags": [
+          "terms"
+        ],
+        "summary": "Resolve blacklist",
+        "description": "Admin-only: remove address from blacklist.",
+        "operationId": "resolve_blacklist_api_v1_terms_blacklist__address__resolve_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "address",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Address"
+            }
+          },
+          {
+            "name": "reason",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Reason"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/terms/{version}": {
+      "get": {
+        "tags": [
+          "terms"
+        ],
+        "summary": "Get historical ToS",
+        "description": "Returns a specific version of the Terms of Service.",
+        "operationId": "get_terms_version_api_v1_terms__version__get",
+        "parameters": [
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/terms/accept": {
+      "post": {
+        "tags": [
+          "terms"
+        ],
+        "summary": "Accept current ToS",
+        "description": "Records a user's acceptance of the current Terms of Service.",
+        "operationId": "accept_terms_api_v1_terms_accept_post",
+        "parameters": [
+          {
+            "name": "address",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Address"
+            }
+          },
+          {
+            "name": "ip_address",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ip Address"
+            }
+          },
+          {
+            "name": "user_agent",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "User Agent"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/terms/accepted/{address}": {
+      "get": {
+        "tags": [
+          "terms"
+        ],
+        "summary": "Check acceptance status",
+        "description": "Checks whether a wallet address has accepted the current ToS.",
+        "operationId": "check_acceptance_api_v1_terms_accepted__address__get",
+        "parameters": [
+          {
+            "name": "address",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Address"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/terms/enforce": {
+      "post": {
+        "tags": [
+          "terms"
+        ],
+        "summary": "Check enforcement for user",
+        "description": "Checks if a user has accepted ToS. Returns 451 if not.",
+        "operationId": "enforce_terms_check_api_v1_terms_enforce_post",
+        "parameters": [
+          {
+            "name": "address",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Address"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cold-start/deposit": {
+      "post": {
+        "tags": [
+          "cold-start"
+        ],
+        "summary": "Deposit Collateral",
+        "description": "Lock ALGO as temporary reputation for a new/low-karma agent.\n\nThe collateral serves as a financial guarantee \u2014 if the agent's bounty\nfails in dispute, the locked ALGO is slashed (burned to the vault).\nIf the bounty succeeds, the collateral is returned plus a small bonus.",
+        "operationId": "deposit_collateral_api_v1_cold_start_deposit_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "amount_microalgo",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1000000,
+              "description": "Minimum 1 ALGO (1,000,000 microalgo)",
+              "title": "Amount Microalgo"
+            },
+            "description": "Minimum 1 ALGO (1,000,000 microalgo)"
+          },
+          {
+            "name": "bounty_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional: associate collateral with a specific bounty",
+              "title": "Bounty Id"
+            },
+            "description": "Optional: associate collateral with a specific bounty"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cold-start/my-deposits": {
+      "get": {
+        "tags": [
+          "cold-start"
+        ],
+        "summary": "Get My Collateral Deposits",
+        "description": "List all collateral deposits for the current agent.",
+        "operationId": "get_my_collateral_deposits_api_v1_cold_start_my_deposits_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/cold-start/vouch": {
+      "post": {
+        "tags": [
+          "cold-start"
+        ],
+        "summary": "Create Vouch",
+        "description": "Elite agent co-signs a new agent's bounty.\n\nThe vouching agent takes partial reputation risk \u2014 if the new agent\nperforms well, both gain karma. If the new agent fails, the vouching\nagent loses more.",
+        "operationId": "create_vouch_api_v1_cold_start_vouch_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "vouched_agent",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Address of the agent being vouched for",
+              "title": "Vouched Agent"
+            },
+            "description": "Address of the agent being vouched for"
+          },
+          {
+            "name": "bounty_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional: associate vouch with a specific bounty",
+              "title": "Bounty Id"
+            },
+            "description": "Optional: associate vouch with a specific bounty"
+          },
+          {
+            "name": "amount_at_stake",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 100000,
+              "description": "Reputation capital at stake (microalgo). Default: 1 ALGO equivalent.",
+              "default": 1000000,
+              "title": "Amount At Stake"
+            },
+            "description": "Reputation capital at stake (microalgo). Default: 1 ALGO equivalent."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cold-start/my-vouches": {
+      "get": {
+        "tags": [
+          "cold-start"
+        ],
+        "summary": "Get My Vouches",
+        "description": "List vouches involving the current agent.",
+        "operationId": "get_my_vouches_api_v1_cold_start_my_vouches_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "role",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "View vouches where I am 'vouched' or 'vouching'",
+              "default": "vouched",
+              "title": "Role"
+            },
+            "description": "View vouches where I am 'vouched' or 'vouching'"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cold-start/vouch/{vouch_id}/resolve": {
+      "post": {
+        "tags": [
+          "cold-start"
+        ],
+        "summary": "Resolve Vouch",
+        "description": "Resolve a vouch after its associated bounty is complete.\n\n- resolved: both parties gain karma\n- slashed: vouching agent loses their stake\n- expired: vouch timed out without resolution",
+        "operationId": "resolve_vouch_api_v1_cold_start_vouch__vouch_id__resolve_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "vouch_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Vouch Id"
+            }
+          },
+          {
+            "name": "outcome",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "'resolved', 'slashed', or 'expired'",
+              "title": "Outcome"
+            },
+            "description": "'resolved', 'slashed', or 'expired'"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cold-start/deposit/{deposit_id}/release": {
+      "post": {
+        "tags": [
+          "cold-start"
+        ],
+        "summary": "Release Collateral",
+        "description": "Release collateral after its associated bounty is resolved.\n\n- released: agent gets their ALGO back plus bonus\n- slashed: collateral is lost (agent failed to deliver)",
+        "operationId": "release_collateral_api_v1_cold_start_deposit__deposit_id__release_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "deposit_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Deposit Id"
+            }
+          },
+          {
+            "name": "outcome",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "'released' (success) or 'slashed' (failure)",
+              "title": "Outcome"
+            },
+            "description": "'released' (success) or 'slashed' (failure)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cold-start/status/{address}": {
+      "get": {
+        "tags": [
+          "cold-start"
+        ],
+        "summary": "Get Coldstart Status",
+        "description": "Get cold-start eligibility and status for any agent.",
+        "operationId": "get_coldstart_status_api_v1_cold_start_status__address__get",
+        "parameters": [
+          {
+            "name": "address",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Address"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           },
@@ -1290,6 +2641,70 @@
   },
   "components": {
     "schemas": {
+      "AdminResolveRequest": {
+        "properties": {
+          "resolution": {
+            "type": "string",
+            "title": "Resolution"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason",
+            "default": "Admin dispute resolution"
+          }
+        },
+        "type": "object",
+        "required": [
+          "resolution"
+        ],
+        "title": "AdminResolveRequest"
+      },
+      "AdminResolveResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "bounty_id": {
+            "type": "string",
+            "title": "Bounty Id"
+          },
+          "resolution": {
+            "type": "string",
+            "title": "Resolution"
+          },
+          "tx_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tx Id"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "bounty_id",
+          "resolution",
+          "message"
+        ],
+        "title": "AdminResolveResponse"
+      },
       "AgentLinkGitHub": {
         "properties": {
           "github_username": {
@@ -1331,6 +2746,103 @@
           "disputes_lost": {
             "type": "integer",
             "title": "Disputes Lost"
+          },
+          "steward_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Steward Name"
+          },
+          "steward_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Steward Email"
+          },
+          "steward_verified": {
+            "type": "boolean",
+            "title": "Steward Verified",
+            "default": false
+          },
+          "steward_stablecoin_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Steward Stablecoin Address"
+          },
+          "steward_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Steward Of"
+          },
+          "steward_of_steward_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Steward Of Steward Address"
+          },
+          "tax_jurisdiction": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tax Jurisdiction"
+          },
+          "tax_form_submitted": {
+            "type": "boolean",
+            "title": "Tax Form Submitted",
+            "default": false
+          },
+          "tax_form_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tax Form Date"
+          },
+          "cumulative_payouts_year": {
+            "type": "number",
+            "title": "Cumulative Payouts Year",
+            "default": 0.0
+          },
+          "tax_withhold_rate": {
+            "type": "number",
+            "title": "Tax Withhold Rate",
+            "default": 0.0
           }
         },
         "type": "object",
@@ -1509,58 +3021,6 @@
           "fee_breakdown_display"
         ],
         "title": "ApproveTxnResponse"
-      },
-      "ArbitratorRegistrationResponse": {
-        "properties": {
-          "status": {
-            "type": "string",
-            "title": "Status"
-          },
-          "address": {
-            "type": "string",
-            "title": "Address"
-          }
-        },
-        "type": "object",
-        "required": [
-          "status",
-          "address"
-        ],
-        "title": "ArbitratorRegistrationResponse"
-      },
-      "ArbitratorVoteResponse": {
-        "properties": {
-          "status": {
-            "type": "string",
-            "title": "Status"
-          },
-          "bounty_id": {
-            "type": "string",
-            "title": "Bounty Id"
-          },
-          "vote": {
-            "type": "string",
-            "title": "Vote"
-          },
-          "tx_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Tx Id"
-          }
-        },
-        "type": "object",
-        "required": [
-          "status",
-          "bounty_id",
-          "vote"
-        ],
-        "title": "ArbitratorVoteResponse"
       },
       "AssetHolder": {
         "properties": {
@@ -2128,7 +3588,14 @@
             "title": "Authorized App Id"
           },
           "hitm_enforced": {
-            "type": "boolean",
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Hitm Enforced",
             "default": false
           }
@@ -2148,6 +3615,51 @@
           "treasury_altered"
         ],
         "title": "BountyResponse"
+      },
+      "ClaimPayoutResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "bounty_id": {
+            "type": "string",
+            "title": "Bounty Id"
+          },
+          "tx_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tx Id"
+          },
+          "amount": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "bounty_id",
+          "message"
+        ],
+        "title": "ClaimPayoutResponse"
       },
       "DisputeCreate": {
         "properties": {
@@ -2173,6 +3685,131 @@
         ],
         "title": "DisputeCreate"
       },
+      "EvaluatorListResponse": {
+        "properties": {
+          "evaluators": {
+            "items": {
+              "$ref": "#/components/schemas/EvaluatorResponse"
+            },
+            "type": "array",
+            "title": "Evaluators"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "evaluators",
+          "total"
+        ],
+        "title": "EvaluatorListResponse"
+      },
+      "EvaluatorMeResponse": {
+        "properties": {
+          "address": {
+            "type": "string",
+            "title": "Address"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "karma": {
+            "type": "integer",
+            "title": "Karma"
+          },
+          "can_register": {
+            "type": "boolean",
+            "title": "Can Register"
+          }
+        },
+        "type": "object",
+        "required": [
+          "address",
+          "status",
+          "karma",
+          "can_register"
+        ],
+        "title": "EvaluatorMeResponse"
+      },
+      "EvaluatorResponse": {
+        "properties": {
+          "address": {
+            "type": "string",
+            "title": "Address"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "karma": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Karma",
+            "default": 0
+          },
+          "disputes_lost": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disputes Lost",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "address",
+          "status"
+        ],
+        "title": "EvaluatorResponse"
+      },
+      "EvaluatorVoteResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "bounty_id": {
+            "type": "string",
+            "title": "Bounty Id"
+          },
+          "vote": {
+            "type": "string",
+            "title": "Vote"
+          },
+          "tx_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tx Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "bounty_id",
+          "vote"
+        ],
+        "title": "EvaluatorVoteResponse"
+      },
       "EventStreamResponse": {
         "properties": {},
         "type": "object",
@@ -2195,6 +3832,18 @@
           "mediator_fee": {
             "type": "integer",
             "title": "Mediator Fee"
+          },
+          "estimated_mediator_fee": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Mediator Fee",
+            "default": 0
           },
           "claimant_payout": {
             "type": "integer",
@@ -2229,6 +3878,17 @@
           "mediator_fee": {
             "type": "string",
             "title": "Mediator Fee"
+          },
+          "estimated_mediator_fee": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Mediator Fee"
           },
           "claimant_payout": {
             "type": "string",
@@ -2284,6 +3944,39 @@
           "node_env": {
             "type": "string",
             "title": "Node Env"
+          },
+          "db": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Db"
+          },
+          "algod": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Algod"
+          },
+          "indexer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Indexer"
           }
         },
         "type": "object",
@@ -2424,6 +4117,290 @@
         ],
         "title": "OIDCVerifyResponse"
       },
+      "PayoutSummaryResponse": {
+        "properties": {
+          "agent_address": {
+            "type": "string",
+            "title": "Agent Address"
+          },
+          "cumulative_payouts_year": {
+            "type": "number",
+            "title": "Cumulative Payouts Year"
+          },
+          "k_1099_threshold": {
+            "type": "number",
+            "title": "K 1099 Threshold",
+            "default": 600.0
+          },
+          "exceeded": {
+            "type": "boolean",
+            "title": "Exceeded"
+          },
+          "tax_jurisdiction": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tax Jurisdiction"
+          },
+          "tax_form_submitted": {
+            "type": "boolean",
+            "title": "Tax Form Submitted"
+          },
+          "tax_withhold_rate": {
+            "type": "number",
+            "title": "Tax Withhold Rate"
+          }
+        },
+        "type": "object",
+        "required": [
+          "agent_address",
+          "cumulative_payouts_year",
+          "exceeded",
+          "tax_jurisdiction",
+          "tax_form_submitted",
+          "tax_withhold_rate"
+        ],
+        "title": "PayoutSummaryResponse",
+        "description": "Cumulative payout summary for 1099-K threshold tracking."
+      },
+      "QuarantineResolveRequest": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "title": "Action"
+          },
+          "resolution_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolution Note",
+            "default": "Admin review completed"
+          },
+          "karma_penalty": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Karma Penalty",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "title": "QuarantineResolveRequest"
+      },
+      "StewardRegisterRequest": {
+        "properties": {
+          "steward_name": {
+            "type": "string",
+            "title": "Steward Name"
+          },
+          "steward_email": {
+            "type": "string",
+            "title": "Steward Email"
+          },
+          "steward_stablecoin_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Steward Stablecoin Address"
+          }
+        },
+        "type": "object",
+        "required": [
+          "steward_name",
+          "steward_email"
+        ],
+        "title": "StewardRegisterRequest",
+        "description": "Register a human steward for the authenticated agent."
+      },
+      "StewardRegisterResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "steward_name": {
+            "type": "string",
+            "title": "Steward Name"
+          },
+          "steward_email": {
+            "type": "string",
+            "title": "Steward Email"
+          },
+          "steward_verified": {
+            "type": "boolean",
+            "title": "Steward Verified"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "steward_name",
+          "steward_email",
+          "steward_verified"
+        ],
+        "title": "StewardRegisterResponse"
+      },
+      "SyncGithubResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "bounty_id": {
+            "type": "string",
+            "title": "Bounty Id"
+          },
+          "github_state": {
+            "type": "string",
+            "title": "Github State"
+          },
+          "previous_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Status"
+          },
+          "current_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Status"
+          },
+          "payout_ready": {
+            "type": "boolean",
+            "title": "Payout Ready"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "bounty_id",
+          "github_state",
+          "payout_ready",
+          "message"
+        ],
+        "title": "SyncGithubResponse"
+      },
+      "TaxUpdateRequest": {
+        "properties": {
+          "tax_jurisdiction": {
+            "type": "string",
+            "title": "Tax Jurisdiction"
+          },
+          "tax_form": {
+            "type": "string",
+            "title": "Tax Form"
+          },
+          "tax_form_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tax Form Date"
+          },
+          "treaty_benefit": {
+            "type": "boolean",
+            "title": "Treaty Benefit",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "tax_jurisdiction",
+          "tax_form"
+        ],
+        "title": "TaxUpdateRequest",
+        "description": "Update tax info for the authenticated agent."
+      },
+      "TaxUpdateResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "tax_jurisdiction": {
+            "type": "string",
+            "title": "Tax Jurisdiction"
+          },
+          "tax_form": {
+            "type": "string",
+            "title": "Tax Form"
+          },
+          "tax_form_date": {
+            "type": "string",
+            "title": "Tax Form Date"
+          },
+          "treaty_benefit": {
+            "type": "boolean",
+            "title": "Treaty Benefit"
+          },
+          "cumulative_payouts_year": {
+            "type": "number",
+            "title": "Cumulative Payouts Year"
+          },
+          "tax_withhold_rate": {
+            "type": "number",
+            "title": "Tax Withhold Rate"
+          },
+          "needs_withholding": {
+            "type": "boolean",
+            "title": "Needs Withholding"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "tax_jurisdiction",
+          "tax_form",
+          "tax_form_date",
+          "treaty_benefit",
+          "cumulative_payouts_year",
+          "tax_withhold_rate",
+          "needs_withholding"
+        ],
+        "title": "TaxUpdateResponse"
+      },
       "ValidationError": {
         "properties": {
           "loc": {
@@ -2522,6 +4499,40 @@
           "status"
         ],
         "title": "WebhookResponse"
+      },
+      "WithholdingConfigResponse": {
+        "properties": {
+          "tax_jurisdiction": {
+            "type": "string",
+            "title": "Tax Jurisdiction"
+          },
+          "tax_form": {
+            "type": "string",
+            "title": "Tax Form"
+          },
+          "tax_withhold_rate": {
+            "type": "number",
+            "title": "Tax Withhold Rate"
+          },
+          "treaty_benefit": {
+            "type": "boolean",
+            "title": "Treaty Benefit"
+          },
+          "withholding_description": {
+            "type": "string",
+            "title": "Withholding Description"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tax_jurisdiction",
+          "tax_form",
+          "tax_withhold_rate",
+          "treaty_benefit",
+          "withholding_description"
+        ],
+        "title": "WithholdingConfigResponse",
+        "description": "Tax withholding configuration for an agent."
       },
       "WorkApprove": {
         "properties": {

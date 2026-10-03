@@ -20,16 +20,22 @@ from datetime import datetime, timezone
 
 @pytest.fixture
 def mock_db_session():
-    """Mock the get_db dependency with a proper context manager."""
+    """Mock DB session. Defaults to 'no records' (new user)."""
     mock_db = MagicMock()
-    mock_db.execute = MagicMock()
+    mock_db.execute.return_value.first.return_value = None
+    mock_db.execute.return_value.all.return_value = []
     mock_db.commit = MagicMock()
-    mock_context = MagicMock()
-    mock_context.__enter__ = MagicMock(return_value=mock_db)
-    mock_context.__exit__ = MagicMock(return_value=None)
-    with patch('gateway.routers.terms.get_db') as mock_get_db:
-        mock_get_db.return_value = mock_context
-        yield mock_db
+    yield mock_db
+
+
+@pytest.fixture
+def client(mock_db_session):
+    """TestClient with get_db overridden to the mock session."""
+    from gateway.main import app
+    from gateway.dependencies import get_db
+    app.dependency_overrides[get_db] = lambda: mock_db_session
+    yield TestClient(app)
+    app.dependency_overrides.clear()
 
 
 # ─── Current ToS ──────────────────────────────────────────────────

@@ -10,9 +10,31 @@ from gateway.auth import (
 )
 
 def test_generate_challenge():
-    addr = "addr"
+    addr = "ALGORAND_ADDRESS_12345"
     ch = generate_challenge(addr)
-    assert addr in ch
+    assert ch.startswith(f"AlgoBounty auth: {addr} at ")
+    timestamp_str = ch.split(" at ")[-1]
+    assert timestamp_str.isdigit()
+
+def test_generate_challenge_timestamp_mocking():
+    mock_timestamp = 1700000000
+    addr = "TEST_ADDRESS_67890"
+    with patch("time.time", return_value=mock_timestamp):
+        ch = generate_challenge(addr)
+        assert ch == f"AlgoBounty auth: {addr} at 1700000000"
+
+@pytest.mark.parametrize("input_address", [
+    "",
+    "   ",
+    "addr_with_spaces ",
+    "special!@#$%^&*()_+-=",
+    "unicode_地址_ test"
+])
+def test_generate_challenge_edge_cases(input_address):
+    ch = generate_challenge(input_address)
+    assert f"AlgoBounty auth: {input_address} at " in ch
+    timestamp_str = ch.rsplit(" at ", 1)[-1]
+    assert timestamp_str.isdigit()
 
 def test_verify_signature_exceptions():
     with patch("gateway.auth.util.verify_bytes", side_effect=Exception("verify error")):

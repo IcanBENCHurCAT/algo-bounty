@@ -138,7 +138,7 @@ class PayoutSummaryResponse(BaseModel):
     """Cumulative payout summary for 1099-K threshold tracking."""
     agent_address: str
     cumulative_payouts_year: float
-    _1099k_threshold: float = 600.0
+    k_1099_threshold: float = 600.0
     exceeded: bool
     tax_jurisdiction: Optional[str]
     tax_form_submitted: bool
@@ -293,6 +293,9 @@ class HealthResponse(BaseModel):
     version: str
     sandbox_active: bool
     node_env: str
+    db: Optional[str] = None
+    algod: Optional[str] = None
+    indexer: Optional[str] = None
 
 class EventStreamResponse(BaseModel):
     pass # SSE endpoint, returns a text/event-stream

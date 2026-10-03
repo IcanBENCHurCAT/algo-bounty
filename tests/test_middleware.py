@@ -107,3 +107,51 @@ def test_webhook_api_key_auth_middleware():
     res = client.get("/webhooks/test", headers={"X-API-Key": "secret_key"})
     assert res.status_code == 200
 
+def test_webhook_api_key_auth_middleware_fail_closed():
+    from gateway.middleware import WebhookApiKeyAuthMiddleware
+    from unittest.mock import patch
+    import os
+
+    app = FastAPI()
+    app.add_middleware(WebhookApiKeyAuthMiddleware, api_key="")
+
+    @app.get("/webhooks/test")
+    def webhooks_test():
+        return {"status": "ok"}
+
+    client = TestClient(app)
+
+    with patch.dict(os.environ, {"ALGORAND_NETWORK": "testnet"}):
+        res = client.get("/webhooks/test")
+        assert res.status_code == 401
+        assert "Missing or invalid X-API-Key" in res.json()["error"]
+
+    with patch.dict(os.environ, {"ALGORAND_NETWORK": "sandbox"}):
+        res = client.get("/webhooks/test")
+        assert res.status_code == 200
+
+def test_github_webhook_signature_middleware_fail_closed():
+    from gateway.middleware import GitHubWebhookSignatureMiddleware
+    from unittest.mock import patch
+    import os
+
+    app = FastAPI()
+    app.add_middleware(GitHubWebhookSignatureMiddleware)
+
+    @app.post("/webhooks/github")
+    def github_webhook(request: Request):
+        return {"status": "ok"}
+
+    client = TestClient(app)
+
+    with patch.dict(os.environ, {"ALGORAND_NETWORK": "testnet", "GITHUB_WEBHOOK_SECRET": ""}):
+        try:
+            res = client.post("/webhooks/github", json={"test": "payload"})
+        except RuntimeError as e:
+            assert str(e) == "GITHUB_WEBHOOK_SECRET must be set in testnet/mainnet"
+        else:
+            assert False, "Expected RuntimeError due to config check"
+
+    with patch.dict(os.environ, {"ALGORAND_NETWORK": "sandbox", "GITHUB_WEBHOOK_SECRET": ""}):
+        res = client.post("/webhooks/github", json={"test": "payload"})
+        assert res.status_code == 200

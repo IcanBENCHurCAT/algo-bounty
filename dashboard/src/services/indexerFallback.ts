@@ -1,6 +1,6 @@
 import algosdk from 'algosdk'
 import { getNetworkName, getAlgodClient } from '@/lib/algorand'
-import type { Bounty, BountyStatus } from '@/types'
+import type { Bounty } from '@/types'
 
 const INDEXER_URLS = {
   testnet: 'https://testnet-idx.algonode.cloud',
@@ -75,7 +75,7 @@ export async function fetchBountyFromChain(appId: number): Promise<Bounty> {
 
   const bountyId = bountyIdBytes ? new TextDecoder().decode(bountyIdBytes) : `b_${appId}`
 
-  const statusMap: Record<number, BountyStatus> = {
+  const statusMap: Record<number, Bounty['status']> = {
     0: 'open',
     1: 'claimed',
     2: 'submitted',

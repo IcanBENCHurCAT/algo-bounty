@@ -13,6 +13,7 @@ env:
   REGION: us-central1
   GATEWAY_SERVICE: algo-bounty-gateway
   FRONTEND_SERVICE: algo-bounty-frontend
+  ESCROW_TEMPLATE_APP_ID: "766298802"
 
 jobs:
   deploy-testnet:
@@ -63,8 +64,8 @@ jobs:
           --timeout=300
           --min-instances=1
           --no-cpu-throttling
-          --set-env-vars=ALGORAND_NETWORK=testnet,SUPABASE_URL=${{ secrets.SUPABASE_URL }},ESCROW_TEMPLATE_APP_ID=766298802
-          --set-secrets=DATABASE_URL=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-db-url:latest,SECRET_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-jwt-secret:latest,PLATFORM_PRIVATE_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty_platform_private_key:latest,GITHUB_WEBHOOK_SECRET=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-github-webhook-secret:latest,SUPABASE_SERVICE_ROLE_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty_supabase_service_role_key:latest,GITHUB_PRIVATE_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-github-private-key:latest
+          --set-env-vars=ALGORAND_NETWORK=testnet,ESCROW_TEMPLATE_APP_ID=${{ env.ESCROW_TEMPLATE_APP_ID }}
+          --set-secrets=SUPABASE_URL=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-supabase-url:latest,DATABASE_URL=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-db-url:latest,SECRET_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-jwt-secret:latest,PLATFORM_PRIVATE_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty_platform_private_key:latest,GITHUB_WEBHOOK_SECRET=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-github-webhook-secret:latest,SUPABASE_SERVICE_ROLE_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty_supabase_service_role_key:latest,GITHUB_PRIVATE_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-github-private-key:latest
 
 #    - name: Deploy Indexer to Cloud Run
 #      uses: google-github-actions/deploy-cloudrun@v2
@@ -80,8 +81,8 @@ jobs:
 #          --min-instances=1
 #          --max-instances=1
 #          --no-cpu-throttling
-#          --set-env-vars=ALGORAND_NETWORK=testnet,SUPABASE_URL=${{ secrets.SUPABASE_URL }},PYTHONPATH=/app
-#          --set-secrets=DATABASE_URL=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-db-url:latest,SECRET_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-jwt-secret:latest,PLATFORM_PRIVATE_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty_platform_private_key:latest,GITHUB_WEBHOOK_SECRET=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-github-webhook-secret:latest,SUPABASE_SERVICE_ROLE_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty_supabase_service_role_key:latest,GITHUB_PRIVATE_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-github-private-key:latest
+#          --set-env-vars=ALGORAND_NETWORK=testnet,PYTHONPATH=/app
+#          --set-secrets=SUPABASE_URL=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-supabase-url:latest,DATABASE_URL=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-db-url:latest,SECRET_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-jwt-secret:latest,PLATFORM_PRIVATE_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty_platform_private_key:latest,GITHUB_WEBHOOK_SECRET=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-github-webhook-secret:latest,SUPABASE_SERVICE_ROLE_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty_supabase_service_role_key:latest,GITHUB_PRIVATE_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-github-private-key:latest
 
     - name: Generate Frontend Image Tag
       run: |

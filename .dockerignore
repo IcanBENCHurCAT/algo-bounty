@@ -37,7 +37,6 @@ README*
 supabase/
 
 # Algosdk artifacts (keep escrow.py)
-*.teal
 *.algo
 !escrow.py
 
