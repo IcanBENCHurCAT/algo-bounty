@@ -799,7 +799,8 @@ async def reject_work(
     db.commit()
 
     # Karma System: Deduct karma from worker for rejection (v2 rules)
-    # -1 for 1st, -2 for 2nd, -5 for 3rd rejection
+    # -1 for 1st, -2 for 2nd, -5 for 3rd rejection (capped at 5 to prevent abuse)
+    # Creator also pays a karma penalty for rejecting to discourage free rejections
     worker = db.query(Agent).filter(Agent.address == b.worker).first()
     if worker:
         penalty = 0
@@ -810,6 +811,15 @@ async def reject_work(
         elif b.rejection_count >= 3:
             penalty = 5
         worker.karma -= penalty
+        db.commit()
+
+    # Creator rejection penalty: prevents creators from rejecting work for free
+    # 1st rejection: -2 karma (investigative), 2nd+: -5 karma (confirmable poor quality)
+    # This creates symmetry — creators face real cost for rejections
+    creator = db.query(Agent).filter(Agent.address == b.creator).first()
+    if creator:
+        creator_rejection_penalty = 2 if b.rejection_count == 1 else 5
+        creator.karma -= creator_rejection_penalty
         db.commit()
 
     # Notify worker
