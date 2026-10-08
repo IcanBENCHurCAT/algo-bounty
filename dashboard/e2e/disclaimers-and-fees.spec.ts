@@ -25,13 +25,13 @@ test.describe('Compliance Disclaimers and Custom Fees E2E Tests', () => {
   test('should block bounty creation until tax disclaimer is checked and validate custom fees', async ({ page }) => {
     // Inject mock creator credentials
     const tokensPath = path.join(process.cwd(), 'session_tokens.json');
-    let creatorJwt = 'mock_jwt';
-    let creatorAddress = 'AAAABBBBC3GDV6N4Z6XN2L6X7T2H6XN2L6XN2L6XN2L6XN2L6XN2L6XN2L';
-    if (fs.existsSync(tokensPath)) {
-      const tokens = JSON.parse(fs.readFileSync(tokensPath, 'utf-8'));
-      creatorJwt = tokens.CREATOR.jwt;
-      creatorAddress = tokens.CREATOR.address;
+    if (!fs.existsSync(tokensPath) || fs.statSync(tokensPath).size <= 10) {
+      const { execSync } = require('child_process');
+      execSync('python ../scripts/seed_demo_data.py');
     }
+    const tokens = JSON.parse(fs.readFileSync(tokensPath, 'utf-8'));
+    const creatorJwt = tokens.CREATOR.jwt;
+    const creatorAddress = tokens.CREATOR.address;
 
     await page.goto('http://localhost:3000/');
     await page.waitForTimeout(1000);

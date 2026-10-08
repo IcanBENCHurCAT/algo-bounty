@@ -41,9 +41,9 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@types/jest": "^30.0.0",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
+    "@types/node": "^20.19.43",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
     "jest": "^30.4.2",
@@ -51,7 +51,7 @@
     "lightningcss": "^1.32.0",
     "tailwindcss": "^4",
     "ts-jest": "^29.4.11",
-    "typescript": "^5"
+    "typescript": "^5.9.3"
   },
   "overrides": {
     "@walletconnect/client": "^1.8.0"
