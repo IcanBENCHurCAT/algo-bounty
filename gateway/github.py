@@ -130,6 +130,31 @@ def extract_bounty_ids(text: str) -> list[str]:
         return []
     return sorted(list(set(BOUNTY_RE.findall(text))))
 
+
+def normalize_repo_url(url: Optional[str]) -> str:
+    """Normalize repository URL for comparison by stripping trailing slashes, .git suffix, and lowercasing."""
+    if not url:
+        return ""
+    normalized = url.strip().rstrip("/")
+    if normalized.lower().endswith(".git"):
+        normalized = normalized[:-4]
+    return normalized.rstrip("/").lower()
+
+
+def is_worker_authorized(bounty_worker: Optional[str], author: Optional[str], db: Optional[Session] = None) -> bool:
+    """Check whether a PR author matches or is authorized for the claimed worker."""
+    if not bounty_worker or not author:
+        return False
+    if bounty_worker == author or bounty_worker.lower() == author.lower():
+        return True
+    if db is not None:
+        agent = db.query(Agent).filter(
+            or_(Agent.github_username == author, Agent.address == author)
+        ).first()
+        if agent and (agent.address == bounty_worker or (agent.github_username and agent.github_username.lower() == bounty_worker.lower())):
+            return True
+    return False
+
 def verify_webhook_signature(payload_bytes: bytes, signature: str, secret: str) -> bool:
     """
     Verify that a GitHub webhook request includes a valid HMAC-SHA256 signature.
@@ -544,6 +569,26 @@ async def handle_pr_event(db: Session, payload: dict):
         bounty = bounty_by_id.get(bounty_id)
         if not bounty:
             continue
+
+        # Normalize and verify repository matching
+        norm_event_repo = normalize_repo_url(repo_url)
+        norm_bounty_repo = normalize_repo_url(bounty.repo_url)
+        if not norm_event_repo or not norm_bounty_repo or norm_event_repo != norm_bounty_repo:
+            logger.warning(
+                f"[SECURITY] Mismatched repository URL for bounty {bounty_id}: "
+                f"event repository '{repo_url}' != bounty repository '{bounty.repo_url}'. "
+                f"Skipping linking and transition."
+            )
+            continue
+
+        # Enforce worker claim isolation
+        if bounty.status == "claimed" and bounty.worker and not is_worker_authorized(bounty.worker, author, db):
+            logger.warning(
+                f"[SECURITY] Worker claim isolation violation for bounty {bounty_id}: "
+                f"bounty is claimed by '{bounty.worker}', but PR #{pr_number} action '{action}' is by '{author}'. "
+                f"Rejecting unauthorized transition attempt."
+            )
+            continue
             
         if bounty_id not in existing_pr_bounty_ids:
             new_pr = GitHubPR(
@@ -589,7 +634,7 @@ async def handle_pr_event(db: Session, payload: dict):
                     )
                 
             # If bounty is claimed, transition to submitted
-            elif bounty.status == "claimed" and bounty.worker == author:
+            elif bounty.status == "claimed" and is_worker_authorized(bounty.worker, author, db):
                 bounty.status = "submitted"
                 db.commit()
 
@@ -617,6 +662,13 @@ async def handle_pr_event(db: Session, payload: dict):
         elif action == "closed" and pr.get("merged") is True:
             # PR Merged! If trustless mode is on, auto-approve the payout!
             if bounty.status in ["claimed", "submitted"]:
+                if bounty.worker and not is_worker_authorized(bounty.worker, author, db):
+                    logger.warning(
+                        f"[SECURITY] Worker claim isolation violation on merge for bounty {bounty.bounty_id}: "
+                        f"bounty worker is '{bounty.worker}', but merged PR #{pr_number} author is '{author}'. "
+                        f"Skipping auto-payout."
+                    )
+                    continue
                 if not bounty.is_hitm:
                     recipient_addr = worker_agent.address if worker_agent else None
                     if not recipient_addr:
