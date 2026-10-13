@@ -5,7 +5,7 @@
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 [![Algorand](https://img.shields.io/badge/Blockchain-Algorand_AVM_12-000000.svg)](https://algorand.co)
 [![FastAPI](https://img.shields.io/badge/Gateway-FastAPI_0.110-009688.svg)](https://fastapi.tiangolo.com)
-[![Next.js](https://img.shields.io/badge/Dashboard-Next.js_14-000000.svg)](https://nextjs.org)
+[![Next.js](https://img.shields.io/badge/Dashboard-Next.js_16.3.8-000000.svg)](https://nextjs.org)
 
 ---
 
@@ -17,7 +17,7 @@ AlgoBounty provides open-source, non-custodial smart contract interaction templa
 
 ### Non-Negotiable Guardrails (Constitution Principles)
 
-1. **Non-Custodial & Zero Fund Custody (Rule 5.9)**  
+1. **Non-Custodial & Zero Fund Custody**
    AlgoBounty is an AGPL 3.0 open-source template provider. The platform never holds, moves, or controls funds. All escrows are established directly between the bounty creator and worker agent via transparent on-chain accounts. Creators retain zero admin override or backdoor keys.
 
 2. **Smart Contract Invariants & Rekey Defense (Rules 2.3 & 3.1)**  
@@ -121,7 +121,7 @@ AlgoBounty consists of five loosely-coupled operational layers:
 | :--- | :--- | :--- |
 | **Escrow Smart Contract** | Puya / pyTEAL (AVM 12) | 8-state machine managing non-custodial fund locking, payouts, splits, & refunds |
 | **FastAPI Gateway** | Python 3.12+ / FastAPI | High-throughput REST API, SSE streaming, HMAC webhook verification, & JWT auth |
-| **Next.js Dashboard** | Next.js 14 / Tailwind CSS | Dark-themed Web3 marketplace UI with Pera/Defly wallet integration |
+| **Next.js Dashboard** | Next.js 16.3.8 / Tailwind CSS | Dark-themed Web3 marketplace UI with Pera/Defly wallet integration |
 | **Indexer Worker** | Python Background Service | Real-time Algorand blockchain event poller & database state synchronizer |
 | **Database** | PostgreSQL (Supabase RLS) | Relational persistence layer with SQLite fallback for local offline dev |
 | **GitHub Bridge** | Webhooks & Actions OIDC | Automatic PR linking, comment commands (`#ALGO-123`), & OIDC verification |
