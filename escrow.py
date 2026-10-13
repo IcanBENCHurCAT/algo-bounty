@@ -151,7 +151,7 @@ class EscrowContract(ARC4Contract):
         escrow_amount: UInt64,
         asset_id: UInt64,
         mediator_addr: Account,
-        is_dispute: UInt64 = UInt64(0),
+        is_dispute: UInt64,
     ) -> UInt64:
         """Split the platform fee 50/50 between royalty and treasury/gateway,
         pay the 0.25% mediator fee, and return the remaining balance.
@@ -381,6 +381,7 @@ class EscrowContract(ARC4Contract):
         remaining_amount = self._send_fee_split(
             self._get_agent_address(), escrow_amount, asset_id,
             Account(self.mediator_data.value.address.bytes),
+            UInt64(0),
         )
         self._send_payout(self._get_agent_address(), remaining_amount, asset_id)
 
@@ -677,6 +678,7 @@ class EscrowContract(ARC4Contract):
     def auto_resolve_creator_win(self) -> None:
         assert Txn.type_enum == TransactionType.ApplicationCall
         assert Txn.on_completion == OnCompleteAction.NoOp
+        assert Txn.rekey_to == Account(Bytes(32 * b"\x00"))
 
         assert self.state_box.value == DISPUTED
 
@@ -704,6 +706,7 @@ class EscrowContract(ARC4Contract):
     def timeout_dispute(self) -> None:
         assert Txn.type_enum == TransactionType.ApplicationCall
         assert Txn.on_completion == OnCompleteAction.NoOp
+        assert Txn.rekey_to == Account(Bytes(32 * b"\x00"))
 
         assert self.state_box.value == DISPUTED
 
@@ -734,6 +737,7 @@ class EscrowContract(ARC4Contract):
     def auto_release(self) -> None:
         assert Txn.type_enum == TransactionType.ApplicationCall
         assert Txn.on_completion == OnCompleteAction.NoOp
+        assert Txn.rekey_to == Account(Bytes(32 * b"\x00"))
 
         assert self.state_box.value == SUBMITTED
         assert self._get_is_hitm() == 1
@@ -752,6 +756,7 @@ class EscrowContract(ARC4Contract):
         remaining_amount = self._send_fee_split(
             self._get_agent_address(), escrow_amount, asset_id,
             Account(self.mediator_data.value.address.bytes),
+            UInt64(0),
         )
         self._send_payout(self._get_agent_address(), remaining_amount, asset_id)
 
@@ -781,6 +786,7 @@ class EscrowContract(ARC4Contract):
         remaining_amount = self._send_fee_split(
             self.creator_address.value, escrow_amount, asset_id,
             Account(self.mediator_data.value.address.bytes),
+            UInt64(0),
         )
         self._send_payout(self.creator_address.value, remaining_amount, asset_id)
 
@@ -790,6 +796,7 @@ class EscrowContract(ARC4Contract):
     def expire_claim(self) -> None:
         assert Txn.type_enum == TransactionType.ApplicationCall
         assert Txn.on_completion == OnCompleteAction.NoOp
+        assert Txn.rekey_to == Account(Bytes(32 * b"\x00"))
 
         assert self.state_box.value == CLAIMED
 
@@ -921,6 +928,7 @@ class EscrowContract(ARC4Contract):
 
     @arc4.abimethod(allow_actions=["DeleteApplication"])
     def delete_bounty(self) -> None:
+        assert Txn.rekey_to == Account(Bytes(32 * b"\x00"))
         assert Txn.sender == self.creator_address.value, "Only creator can delete application"
         assert self.state_box.value == CLOSED, "Bounty must be fully closed/paid out before deletion"
         
