@@ -48,7 +48,7 @@ This feature modifies all ~8 payout/refund code paths in the AlgoBounty escrow s
 **Purpose**: Branch, compilation, and baseline verification
 
 - [x] T001 Ensure working on branch `006-fee-split-payouts` (already created)
-- [x] T002 Verify compilation: `python compile_teal.py` — confirm `EscrowContract.approval.teal` and `clear.teal` generated without errors
+- [x] T002 Verify compilation: `python compile_teal.py` — confirm `artifacts/escrow_testnet.teal` and `escrow_testnet_clear.teal` generated without errors
 - [x] T003 Run existing test suite baseline: `python -m pytest tests/ -v` — confirm all tests pass before changes (establishes baseline confidence)
 
 ---
