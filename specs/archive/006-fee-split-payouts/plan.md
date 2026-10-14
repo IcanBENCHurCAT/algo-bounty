@@ -68,7 +68,7 @@ specs/006-fee-split-payouts/
 
 ```text
 escrow.py                    # Main smart contract — modify payout paths
-EscrowContract.approval.teal # Compiled output (auto-generated)
+artifacts/escrow_testnet.teal # Compiled output (auto-generated)
 tests/test_escrow.py         # Unit/integration tests — add fee-split tests
 gateway/                     # Off-chain payout orchestration — update caller
 tests/                       # Existing test suite

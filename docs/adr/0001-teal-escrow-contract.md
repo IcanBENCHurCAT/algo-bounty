@@ -554,7 +554,7 @@ Key test cases:
 
 ```bash
 # 1. Compile
-algokit compile escrow.algo -o artifacts/EscrowContract.approval.teal
+algokit compile escrow.algo -o artifacts/escrow_testnet.teal
 
 # 2. Test
 algokit test --root tests/ --test-files test_escrow_contract.py
@@ -563,7 +563,7 @@ algokit test --root tests/ --test-files test_escrow_contract.py
 algokit deploy escrow.algo --env .env.testnet
 
 # 4. Verify on AlgoExplorer
-algokit explore --verify artifacts/EscrowContract.approval.teal
+algokit explore --verify artifacts/escrow_testnet.teal
 ```
 
 ---

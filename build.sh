@@ -28,6 +28,7 @@ echo "=== Compiling Testnet Variant ==="
 $ALGOKIT compile python escrow.py \
   --out-dir "$TEMP_BUILD_DIR/testnet" \
   --output-teal \
+  --target-avm-version 12 \
   --template-var DISPUTE_TIMEOUT=300 \
   --template-var CLAIM_TIMEOUT=120
 
@@ -40,6 +41,7 @@ echo "=== Compiling Mainnet Variant ==="
 $ALGOKIT compile python escrow.py \
   --out-dir "$TEMP_BUILD_DIR/mainnet" \
   --output-teal \
+  --target-avm-version 12 \
   --template-var DISPUTE_TIMEOUT=2592000 \
   --template-var CLAIM_TIMEOUT=172800
 

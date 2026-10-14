@@ -18,8 +18,8 @@ python compile_teal.py
 ```
 
 Expected output:
-- `EscrowContract.approval.teal` — compiled approval program
-- `EscrowContract.clear.teal` — compiled clear program
+- `artifacts/escrow_testnet.teal` — compiled approval program
+- `artifacts/escrow_testnet_clear.teal` — compiled clear program
 - `EscrowContract.arc56.json` — ARC56 application specification
 
 Verify compilation succeeds without errors. Any compilation errors are a failure condition.
