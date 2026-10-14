@@ -82,7 +82,7 @@ This document defines the prescriptive architectural rules, engineering standard
 
   5.10. **No Proprietary Vendor Lock-in (BYOK)**: To preserve self-hostability, the platform MUST NOT hardcode or mandate the use of proprietary third-party API keys or centralized brokers for core escrow functionality (e.g., GitHub OIDC, AI services). All external integrations MUST support a "Bring Your Own Key" (BYOK) or "Bring Your Own App" configuration so that local operators are never blocked by the original author's rate limits or suspended accounts.
 
-  5.11. **Frontend Portability and Decentralization**: The frontend Web3 application MUST be designed to be minimally reliant on a centralized backend for core smart contract interactions (creation, claiming, approval). It SHOULD support static generation/export (e.g., via Next.js `output: 'export'`) to enable hosting on decentralized storage networks like IPFS or Arweave, communicating directly with Algorand RPC nodes.
+  5.11. **Frontend Portability and Decentralization**: The platform employs a gateway-assisted architecture for core actions (bounty creation, claim-txn construction, trustless payout), while strictly preserving user custody. Core smart contract interactions MUST use a user-custody signing flow where the backend returns unsigned transactions and pre-sign fee disclosures for the user to sign in their wallet, satisfying the spirit of self-custody for user funds. The frontend Web3 application SHOULD support static generation/export (e.g., via Next.js `output: 'export'`) to enable hosting on decentralized storage networks like IPFS or Arweave as an explicit roadmap item. The future typed-client migration (Rule 4.2) will serve as the enabler when this roadmap item is tackled.
 
 ### 6. Least-Privilege Wallet and Key Management
 
@@ -155,9 +155,9 @@ Agents and human contributors MUST use this checklist to validate new specs/plan
 - [ ] Does the frontend show users the exact transactions they are signing? (Rule 6.1)
 - [ ] Are any high-risk deployment tasks gated behind human verification? (Rule 9.3)
 - [ ] Do external integrations support "Bring Your Own Key" (BYOK) to prevent vendor lock-in? (Rule 5.10)
-- [ ] Are core Web3 interactions operable without a centralized backend? (Rule 5.11)
+- [ ] Does the gateway-assisted flow return unsigned transactions and fee disclosures for user-custody signing? (Rule 5.11)
 
 ---
 
-**Version**: 3.0.0 | **Ratified**: 2026-07-16 | **Last Amended**: 2026-07-19 (v3.0.0)
+**Version**: 3.1.0 | **Ratified**: 2026-07-16 | **Last Amended**: 2026-10-14 (v3.1.0)
 **Superseded rules**: 2.5.0 core principles were updated with a phased cooperative DAO rollout. v3.0.0 removed hardcoded protocol mechanics that are now baked into the smart contract codebase, streamlining the constitution into prescriptive architectural guardrails.
