@@ -372,27 +372,40 @@ async def get_claim_txn(
     params.fee = 1000
     params.flat_fee = True
 
-    from algosdk.abi import Method
-    claim_method = Method.from_signature("claim_bounty()void")
-    claim_selector = claim_method.get_selector()
+    from ..EscrowContractClient import EscrowContractClient
+    from algokit_utils import CommonAppCallParams, AlgorandClient
+    
+    algorand = AlgorandClient.from_clients(algod=client)
+    algorand.set_suggested_params_cache(params)
+    
+    escrow_client = EscrowContractClient(
+        algorand=algorand,
+        app_id=b.app_id,
+        default_sender=current_user
+    )
 
-    from algosdk.transaction import ApplicationNoOpTxn
     claim_boxes = [
         (b.app_id, b"state"), (b.app_id, b"agent_address"), (b.app_id, b"asset_id"),
         (b.app_id, b"creator_address"), (b.app_id, b"claim_deadline"), (b.app_id, b"claim_timestamp")
     ]
 
-    claim_txn = ApplicationNoOpTxn(
-        sender=current_user,
-        sp=params,
-        index=b.app_id,
-        app_args=[claim_selector],
-        boxes=claim_boxes
+    built_txn = escrow_client.create_transaction.claim_bounty(
+        params=CommonAppCallParams(
+            sender=current_user,
+            static_fee=params.fee,
+            box_references=claim_boxes
+        )
     )
     
     import algosdk.encoding as encoding
+    claim_txn = built_txn.transactions[0]
+    # Re-apply exact parameters if necessary
+    claim_txn.fee = params.fee
+    claim_txn.first_valid_round = params.first
+    claim_txn.last_valid_round = params.last
+    claim_txn.genesis_hash = params.gh
     txn_b64 = encoding.msgpack_encode(claim_txn)
-    
+
     # Fee breakdown (FR-002, FR-004, FR-010)
     escrow_amount = b.amount
     platform_fee_bps = getattr(b, "platform_fee", 200)
@@ -1094,3 +1107,4 @@ def get_quarantine_status(
         "quarantined_at": quarantine.quarantined_at.isoformat(),
         "expires_at": quarantine.expires_at.isoformat()
     }
+
