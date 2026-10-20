@@ -372,24 +372,37 @@ async def get_claim_txn(
     params.fee = 1000
     params.flat_fee = True
 
-    from algosdk.abi import Method
-    claim_method = Method.from_signature("claim_bounty()void")
-    claim_selector = claim_method.get_selector()
+    from ..EscrowContractClient import EscrowContractClient
+    from algokit_utils import AlgorandClient, CommonAppCallParams, BoxReference, AlgoAmount
 
-    from algosdk.transaction import ApplicationNoOpTxn
-    claim_boxes = [
-        (b.app_id, b"state"), (b.app_id, b"agent_address"), (b.app_id, b"asset_id"),
-        (b.app_id, b"creator_address"), (b.app_id, b"claim_deadline"), (b.app_id, b"claim_timestamp")
-    ]
+    algorand = AlgorandClient.from_clients(algod=client)
+    algorand.set_suggested_params_cache(params)
 
-    claim_txn = ApplicationNoOpTxn(
-        sender=current_user,
-        sp=params,
-        index=b.app_id,
-        app_args=[claim_selector],
-        boxes=claim_boxes
+    escrow_client = EscrowContractClient(
+        algorand=algorand,
+        app_id=b.app_id,
+        default_sender=current_user
     )
-    
+
+    built = escrow_client.create_transaction.claim_bounty(
+        params=CommonAppCallParams(
+            sender=current_user,
+            static_fee=AlgoAmount.from_micro_algo(params.fee),
+            box_references=[
+                BoxReference(app_id=b.app_id, name=n) for n in (
+                    b"state", b"agent_address", b"asset_id",
+                    b"creator_address", b"claim_deadline", b"claim_timestamp"
+                )
+            ]
+        )
+    )
+
+    claim_txn = built.transactions[0]
+    claim_txn.fee = params.fee
+    claim_txn.first_valid_round = params.first
+    claim_txn.last_valid_round = params.last
+    claim_txn.genesis_hash = params.gh
+
     import algosdk.encoding as encoding
     txn_b64 = encoding.msgpack_encode(claim_txn)
     
@@ -627,30 +640,38 @@ async def get_approve_txn(
     params.fee = 3000  # 2 inner payment transfers + 1 outer call = 3 fees
     params.flat_fee = True
 
-    from algosdk.abi import Method
-    approve_method = Method.from_signature("approve_work()void")
-    approve_selector = approve_method.get_selector()
+    from ..EscrowContractClient import EscrowContractClient
+    from algokit_utils import AlgorandClient, CommonAppCallParams, BoxReference, AlgoAmount
 
-    from algosdk.transaction import ApplicationNoOpTxn
-    approve_boxes = [
-        (b.app_id, b"state"),
-        (b.app_id, b"escrow_amount"),
-        (b.app_id, b"asset_id"),
-        (b.app_id, b"payout_type"),
-        (b.app_id, b"treasury_address"),
-        (b.app_id, b"agent_address"),
-        (b.app_id, b"creator_address")
-    ]
+    algorand = AlgorandClient.from_clients(algod=client)
+    algorand.set_suggested_params_cache(params)
 
-    approve_txn = ApplicationNoOpTxn(
-        sender=current_user,
-        sp=params,
-        index=b.app_id,
-        app_args=[approve_selector],
-        boxes=approve_boxes,
-        accounts=[b.worker]
+    escrow_client = EscrowContractClient(
+        algorand=algorand,
+        app_id=b.app_id,
+        default_sender=current_user
     )
-    
+
+    built = escrow_client.create_transaction.approve_work(
+        params=CommonAppCallParams(
+            sender=current_user,
+            static_fee=AlgoAmount.from_micro_algo(params.fee),
+            box_references=[
+                BoxReference(app_id=b.app_id, name=n) for n in (
+                    b"state", b"escrow_amount", b"asset_id", b"payout_type",
+                    b"treasury_address", b"agent_address", b"creator_address"
+                )
+            ],
+            account_references=[b.worker]
+        )
+    )
+
+    approve_txn = built.transactions[0]
+    approve_txn.fee = params.fee
+    approve_txn.first_valid_round = params.first
+    approve_txn.last_valid_round = params.last
+    approve_txn.genesis_hash = params.gh
+
     import algosdk.encoding as encoding
     txn_b64 = encoding.msgpack_encode(approve_txn)
     

@@ -528,28 +528,35 @@ def release_trustless(app_id: int, worker_address: str) -> dict:
         params.flat_fee = True
         params.fee = 2000  # cover inner transaction fee
 
-        from algosdk.abi import Method
-        from algosdk.transaction import ApplicationCallTxn, OnComplete
+        from .EscrowContractClient import EscrowContractClient
+        from algokit_utils import AlgorandClient, CommonAppCallParams, BoxReference, AlgoAmount
 
-        # approve_work() ABI selector
-        method = Method.from_signature("approve_work()void")
-        selector = method.get_selector()
+        algorand = AlgorandClient.from_clients(algod=client)
+        algorand.set_suggested_params_cache(params)
 
-        # Box references needed by approve_work: state_box, worker, treasury
-        boxes = [
-            (app_id, b"state"),
-            (app_id, b"worker_address"),
-            (app_id, b"treasury_address"),
-        ]
-
-        txn = ApplicationCallTxn(
-            sender=platform_account.address,
-            sp=params,
-            index=app_id,
-            on_complete=OnComplete.NoOpOC,
-            app_args=[selector],
-            boxes=boxes,
+        escrow_client = EscrowContractClient(
+            algorand=algorand,
+            app_id=app_id,
+            default_sender=platform_account.address
         )
+
+        built = escrow_client.create_transaction.approve_work(
+            params=CommonAppCallParams(
+                sender=platform_account.address,
+                static_fee=AlgoAmount.from_micro_algo(2000),
+                box_references=[
+                    BoxReference(app_id=app_id, name=n) for n in (
+                        b"state", b"worker_address", b"treasury_address"
+                    )
+                ]
+            )
+        )
+
+        txn = built.transactions[0]
+        txn.fee = 2000
+        txn.first_valid_round = params.first
+        txn.last_valid_round = params.last
+        txn.genesis_hash = params.gh
 
         signed = txn.sign(platform_account.private_key)
         tx_id = client.send_transaction(signed)
