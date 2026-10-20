@@ -15,3 +15,4 @@ psycopg2-binary>=2.9.9
 aiosqlite>=0.20.0
 jcs
 base58
+algokit-utils>=4.0.0,<5.0.0
