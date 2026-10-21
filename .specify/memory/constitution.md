@@ -1,12 +1,10 @@
 <!--
 SYNC IMPACT REPORT:
-- Version change: 2.5.0 -> 3.0.0
+- Version change: 3.1.0 -> 3.1.1
 - Ratification Date: 2026-07-16
-- Last Amended Date: 2026-07-19 (v3.0.0)
+- Last Amended Date: 2026-10-21 (v3.1.1)
 - Modified Sections:
-  - Sections 2.4, 3.1, 3.3, and 5.3 generalized to remove hardcoded protocol details (box sizes, enum states, fee %).
-  - Section 10 (Existing AlgoBounty Specific Rules) deleted as these mechanics are permanently baked into the protocol.
-  - Review Checklist condensed to remove baked-in protocol checks.
+  - Section 5.11 updated to reflect the completed typed-client migration.
 - Templates requiring updates:
   - None.
 -->
@@ -82,7 +80,7 @@ This document defines the prescriptive architectural rules, engineering standard
 
   5.10. **No Proprietary Vendor Lock-in (BYOK)**: To preserve self-hostability, the platform MUST NOT hardcode or mandate the use of proprietary third-party API keys or centralized brokers for core escrow functionality (e.g., GitHub OIDC, AI services). All external integrations MUST support a "Bring Your Own Key" (BYOK) or "Bring Your Own App" configuration so that local operators are never blocked by the original author's rate limits or suspended accounts.
 
-  5.11. **Frontend Portability and Decentralization**: The platform employs a gateway-assisted architecture for core actions (bounty creation, claim-txn construction, trustless payout), while strictly preserving user custody. Core smart contract interactions MUST use a user-custody signing flow where the backend returns unsigned transactions and pre-sign fee disclosures for the user to sign in their wallet, satisfying the spirit of self-custody for user funds. The frontend Web3 application SHOULD support static generation/export (e.g., via Next.js `output: 'export'`) to enable hosting on decentralized storage networks like IPFS or Arweave as an explicit roadmap item. The future typed-client migration (Rule 4.2) will serve as the enabler when this roadmap item is tackled.
+  5.11. **Frontend Portability and Decentralization**: The platform employs a gateway-assisted architecture for core actions (bounty creation, claim-txn construction, trustless payout), while strictly preserving user custody. Core smart contract interactions MUST use a user-custody signing flow where the backend returns unsigned transactions and pre-sign fee disclosures for the user to sign in their wallet, satisfying the spirit of self-custody for user funds. The frontend Web3 application SHOULD support static generation/export (e.g., via Next.js `output: 'export'`) to enable hosting on decentralized storage networks like IPFS or Arweave as an explicit roadmap item. The completed typed-client migration (Rule 4.2) will serve as the enabler when this roadmap item is tackled.
 
 ### 6. Least-Privilege Wallet and Key Management
 
@@ -159,5 +157,5 @@ Agents and human contributors MUST use this checklist to validate new specs/plan
 
 ---
 
-**Version**: 3.1.0 | **Ratified**: 2026-07-16 | **Last Amended**: 2026-10-14 (v3.1.0)
-**Superseded rules**: 2.5.0 core principles were updated with a phased cooperative DAO rollout. v3.0.0 removed hardcoded protocol mechanics that are now baked into the smart contract codebase, streamlining the constitution into prescriptive architectural guardrails.
+**Version**: 3.1.1 | **Ratified**: 2026-07-16 | **Last Amended**: 2026-10-21 (v3.1.1)
+**Superseded rules**: 3.1.0 updated Rule 5.11 wording to reflect completed typed-client migration. 2.5.0 core principles were updated with a phased cooperative DAO rollout. v3.0.0 removed hardcoded protocol mechanics that are now baked into the smart contract codebase, streamlining the constitution into prescriptive architectural guardrails.
