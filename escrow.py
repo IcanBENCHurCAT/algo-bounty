@@ -62,6 +62,8 @@ class EscrowContract(ARC4Contract):
         self.claim_deadline = Box(UInt64, key="claim_deadline")
         self.claim_timestamp = Box(UInt64, key="claim_timestamp")
         self.github_status = Box(Bytes, key="github_status")
+        self.github_pr_url = Box(Bytes, key="github_pr_url")
+        self.github_test_hash = Box(Bytes, key="github_test_hash")
         self.dispute_timestamp = Box(UInt64, key="dispute_timestamp")
         self.review_days = Box(UInt64, key="review_days")
         self.state_box = Box(UInt64, key="state")
@@ -361,6 +363,12 @@ class EscrowContract(ARC4Contract):
         assert Txn.type_enum == TransactionType.ApplicationCall
         assert Txn.on_completion == OnCompleteAction.NoOp
         assert Txn.rekey_to == Account(Bytes(32 * b"\x00"))
+
+        # Work must actually be submitted before it can be approved.
+        # Without this check the payout could be triggered from CLAIMED,
+        # REJECTED, or DISPUTED (skipping evaluator resolution), or from
+        # OPEN, where the payout would go to the zero address.
+        assert self.state_box.value == SUBMITTED, "Work must be submitted before approval"
 
         # Can be approved by the creator, OR by the authorized gateway (if not HITM)
         is_creator = Txn.sender == self.creator_address.value
@@ -693,12 +701,17 @@ class EscrowContract(ARC4Contract):
         asset_id = self._get_asset_id()
         self._verify_escrow_balance(asset_id, escrow_amount)
 
-        self._send_fee_split(
+        # _send_fee_split already transfers the fees out of the contract;
+        # pay out only the remainder it returns. Paying the full
+        # escrow_amount here would overpay by the fee total (and fail
+        # outright for asset bounties, where the contract holds exactly
+        # the escrow amount).
+        remaining_amount = self._send_fee_split(
             self.creator_address.value, escrow_amount, asset_id,
             Account(self.mediator_data.value.address.bytes),
             is_dispute=UInt64(1),
         )
-        self._send_payout(self.creator_address.value, escrow_amount, asset_id)
+        self._send_payout(self.creator_address.value, remaining_amount, asset_id)
 
         log(Bytes(b"dispute_auto_resolved_creator_win"))
 
@@ -827,12 +840,18 @@ class EscrowContract(ARC4Contract):
 
         assert self.state_box.value == SUBMITTED
 
-        # Store GitHub verification data
-        self.proof_url.value = pr_url
+        # Only the gateway performs GitHub verification. Without a sender
+        # check, anyone could overwrite a submitted bounty's proof.
+        gw_addr, gw_exists = self.gateway_address.maybe()
+        assert gw_exists and Txn.sender == gw_addr, "Only gateway can verify GitHub submissions"
+
+        # Store GitHub verification data in dedicated boxes. The agent's
+        # submission (proof_url / proof_data) must not be overwritten.
+        self.github_pr_url.value = pr_url
         self.github_status.value = Bytes(b"pending")
 
-        # Store test hash in proof_data
-        self.proof_data.value = test_hash
+        # Store test hash separately from the submission proof
+        self.github_test_hash.value = test_hash
 
         # Store OIDC token
         self.oidc_token.value = oidc_token
@@ -846,6 +865,13 @@ class EscrowContract(ARC4Contract):
         assert Txn.type_enum == TransactionType.ApplicationCall
         assert Txn.on_completion == OnCompleteAction.NoOp
         assert Txn.rekey_to == Account(Bytes(32 * b"\x00"))
+
+        assert self.state_box.value == SUBMITTED
+
+        # Only the gateway may report GitHub status. Without a sender
+        # check, anyone could write a "pass" status on any bounty.
+        gw_addr, gw_exists = self.gateway_address.maybe()
+        assert gw_exists and Txn.sender == gw_addr, "Only gateway can set GitHub status"
 
         assert status == Bytes(b"pass") or status == Bytes(b"fail") or status == Bytes(b"pending")
 
