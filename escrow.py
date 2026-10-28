@@ -362,6 +362,8 @@ class EscrowContract(ARC4Contract):
         assert Txn.on_completion == OnCompleteAction.NoOp
         assert Txn.rekey_to == Account(Bytes(32 * b"\x00"))
 
+        assert self.state_box.value == SUBMITTED, "Bounty must be in submitted state to approve work"
+
         # Can be approved by the creator, OR by the authorized gateway (if not HITM)
         is_creator = Txn.sender == self.creator_address.value
         gw_addr, gw_exists = self.gateway_address.maybe()
