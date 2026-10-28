@@ -16,3 +16,14 @@
 - [ ] Deploy the validated smart contract to MainNet.
 - [ ] Update the App ID registry (e.g. backend environment variables or frontend configuration) to point to the new MainNet App ID.
 - [ ] Verify the new App ID is functioning correctly on-chain.
+
+## 2026-10-28: Escrow security fixes (issues #214, #215, #216) - NO deployment performed
+- **#214**: `approve_work` now asserts `state == SUBMITTED` before paying out (was callable from CLAIMED/REJECTED/DISPUTED, and from OPEN where the payout went to the zero address).
+- **#215**: `github_verify` and `set_github_status` now require the gateway as sender; `set_github_status` also requires SUBMITTED. `github_verify` stores its data in new dedicated boxes (`github_pr_url`, `github_test_hash`) instead of overwriting the agent's `proof_url`/`proof_data`.
+- **#216**: `auto_resolve_creator_win` now pays the fee-split remainder returned by `_send_fee_split` instead of the full `escrow_amount` on top of the fees.
+- Artifacts regenerated with puyapy 5.10.1 (AVM 12) using the same invocations that reproduce the previous artifacts byte-for-byte on the old source: TEAL with PLATFORM_FEE=200, arc56 without it, per-network timeout template vars.
+- Still to do at deploy time (in addition to the checklist above):
+  - [ ] Regenerate typed clients from the new arc56 (`gateway/EscrowContractClient.py`, `dashboard/src/lib/EscrowContractClient.ts`).
+  - [ ] Regenerate or retire `artifacts/EscrowContract.arc32.json` (legacy format).
+  - [ ] Root-level `EscrowContract.arc56.json` / `*.puya.map` were already stale relative to source before this change; regenerate or remove.
+  - [ ] Gateway box references for `github_verify`/`set_github_status` calls must include the new `github_pr_url` / `github_test_hash` boxes.
