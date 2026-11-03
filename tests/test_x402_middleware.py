@@ -4,17 +4,13 @@ from gateway.main import app
 import time
 import nacl.signing
 from algosdk import encoding
-from gateway.database import SessionLocal, Bounty, Agent
+from gateway.database import Bounty, Agent
 from gateway.auth import create_jwt_token
 from unittest.mock import patch, MagicMock
 
 client = TestClient(app)
 
-@pytest.fixture
-def db_session():
-    db = SessionLocal()
-    yield db
-    db.close()
+
 
 def setup_mock_db(db, address):
     # Setup agent

@@ -109,7 +109,7 @@ def build_engine():
         return _build_postgres_engine(url, is_asyncpg=True)
     else:
         # Fallback: SQLite for local dev
-        sqlite_url = "sqlite:///./algobounty.db"
+        sqlite_url = url if (url and url.startswith("sqlite")) else "sqlite:///./algobounty.db"
         return _build_sqlite_engine(sqlite_url)
 
 
