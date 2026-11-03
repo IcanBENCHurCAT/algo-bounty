@@ -49,7 +49,7 @@ jobs:
 
     - name: Deploy Gateway to Cloud Run
       id: deploy_gateway
-      uses: google-github-actions/deploy-cloudrun@v2
+      uses: google-github-actions/deploy-cloudrun@v3
       with:
         service: ${{ env.GATEWAY_SERVICE }}
         image: ${{ env.IMAGE_TAG }}
@@ -68,7 +68,7 @@ jobs:
           --set-secrets=SUPABASE_URL=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-supabase-url:latest,DATABASE_URL=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-db-url:latest,SECRET_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-jwt-secret:latest,PLATFORM_PRIVATE_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty_platform_private_key:latest,GITHUB_WEBHOOK_SECRET=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-github-webhook-secret:latest,SUPABASE_SERVICE_ROLE_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty_supabase_service_role_key:latest,GITHUB_PRIVATE_KEY=projects/${{ env.PROJECT_NUMBER }}/secrets/algobounty-github-private-key:latest
 
 #    - name: Deploy Indexer to Cloud Run
-#      uses: google-github-actions/deploy-cloudrun@v2
+#      uses: google-github-actions/deploy-cloudrun@v3
 #      with:
 #        service: algo-bounty-indexer
 #        image: ${{ env.IMAGE_TAG }}
@@ -96,7 +96,7 @@ jobs:
 
     - name: Deploy Frontend to Cloud Run
       id: deploy_frontend
-      uses: google-github-actions/deploy-cloudrun@v2
+      uses: google-github-actions/deploy-cloudrun@v3
       with:
         service: ${{ env.FRONTEND_SERVICE }}
         image: ${{ env.FRONTEND_IMAGE_TAG }}
