@@ -19,7 +19,7 @@
     "@txnlab/use-wallet-react": "^4.6.0",
     "@walletconnect/modal": "^2.7.0",
     "@walletconnect/sign-client": "^2.23.10",
-    "@walletconnect/types": "^2.23.10",
+    "@walletconnect/types": "^2.26.0",
     "algosdk": "^3.9.0",
     "comma-separated-tokens": "^2.0.3",
     "inline-style-parser": "^0.2.9",
