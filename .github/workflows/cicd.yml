@@ -67,7 +67,7 @@ jobs:
         python export_openapi.py
 
     - name: Commit OpenAPI documentation
-      uses: stefanzweifel/git-auto-commit-action@v5
+      uses: stefanzweifel/git-auto-commit-action@v7
       with:
         commit_message: "docs(api): auto-generate openapi.json"
         file_pattern: "docs/api/openapi.json"
