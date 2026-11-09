@@ -11,6 +11,14 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
+    # use-wallet v5 is a modular-adapter rewrite and not a drop-in bump.
+    # Both packages version and migrate together. Remove these rules in the
+    # v5 migration PR (see the "Migrate dashboard wallet to use-wallet v5" issue).
+    ignore:
+      - dependency-name: "@txnlab/use-wallet-react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@txnlab/use-wallet"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
