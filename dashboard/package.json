@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@agoralabs-sh/avm-web-provider": "^1.7.0",
-    "@algorandfoundation/algokit-utils": "^9.2.2",
+    "@algorandfoundation/algokit-utils": "^9.2.3",
     "@blockshake/defly-connect": "^1.2.1",
     "@perawallet/connect": "^1.4.1",
     "@tailwindcss/typography": "^0.5.20",
