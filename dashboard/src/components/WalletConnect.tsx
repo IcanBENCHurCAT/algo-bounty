@@ -1,14 +1,14 @@
 'use client'
 
 import React, { useState } from 'react'
-import { useWallet, WalletId } from '@txnlab/use-wallet-react'
+import { useWallet } from '@txnlab/use-wallet-react'
 import { useAuth } from '@/hooks/useAuth'
 import { Button } from '@/components/ui/Button'
 
 const WALLET_LABELS: Record<string, { label: string; color: string }> = {
-  [WalletId.PERA]:   { label: 'Pera',   color: '#FCD34D' },
-  [WalletId.DEFLY]:  { label: 'Defly',  color: '#00D4AA' },
-  [WalletId.EXODUS]: { label: 'Exodus', color: '#8B5CF6' },
+  pera:   { label: 'Pera',   color: '#FCD34D' },
+  defly:  { label: 'Defly',  color: '#00D4AA' },
+  exodus: { label: 'Exodus', color: '#8B5CF6' },
 }
 
 function truncate(addr: string): string {
