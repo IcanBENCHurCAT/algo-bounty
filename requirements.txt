@@ -1,7 +1,7 @@
 fastapi>=0.162.0
 uvicorn[standard]>=0.54.0
 PyJWT>=2.15.1
-cryptography>=42.0.0
+cryptography>=50.0.2
 sqlalchemy[asyncio]>=2.1.8
 py-algorand-sdk>=2.12.0
 httpx>=0.28.1
