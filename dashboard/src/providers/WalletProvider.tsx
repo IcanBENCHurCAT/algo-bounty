@@ -5,8 +5,10 @@ import {
   WalletProvider as UseWalletProvider,
   WalletManager,
   NetworkId,
-  WalletId,
 } from '@txnlab/use-wallet-react'
+import { pera } from '@perawallet/use-wallet-pera'
+import { defly } from '@txnlab/use-wallet-defly'
+import { exodus } from '@txnlab/use-wallet-exodus'
 
 // ─── Network configs ──────────────────────────────────────────────────────────
 // NetworkConfig.algod expects AlgodConfig { token, baseServer, port? }
@@ -42,7 +44,7 @@ const defaultNetwork: NetworkId =
 
 // Stable singleton — created once at module level to prevent re-init on renders
 const manager = new WalletManager({
-  wallets: [WalletId.PERA, WalletId.DEFLY, WalletId.EXODUS],
+  wallets: [pera(), defly(), exodus()],
   networks: NETWORKS,
   defaultNetwork,
 })
