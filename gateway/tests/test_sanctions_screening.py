@@ -449,3 +449,23 @@ class TestScreeningAPIEndpoints:
         data = resp.json()
         assert data["status"] == "blocked"
         assert data["sanctions_match"] is True
+
+    def test_screening_normalization_case_and_whitespace(self, client):
+        """Verify lowercase and whitespace-padded inputs cannot bypass sanctions screening."""
+        # Lowercase test
+        lower_resp = client.post("/api/v1/screening/screen", json={"address": "tornado_cash_router"})
+        assert lower_resp.status_code == 200
+        assert lower_resp.json()["status"] == "blocked"
+        assert lower_resp.json()["sanctions_match"] is True
+
+        # Whitespace-padded test
+        padded_resp = client.post("/api/v1/screening/screen", json={"address": "  TORNADO_CASH_ROUTER  "})
+        assert padded_resp.status_code == 200
+        assert padded_resp.json()["status"] == "blocked"
+        assert padded_resp.json()["sanctions_match"] is True
+
+        # PEP flagged lowercase and padded
+        pep_resp = client.post("/api/v1/screening/screen", json={"address": "  pep_flagged_test_address  "})
+        assert pep_resp.status_code == 200
+        assert pep_resp.json()["status"] == "flagged"
+        assert pep_resp.json()["pep_match"] is True

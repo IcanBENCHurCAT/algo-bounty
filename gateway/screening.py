@@ -110,22 +110,24 @@ def evaluate_locally(address: str, db: Optional[Session] = None) -> ScreeningRes
     Used when KYA service is unavailable or local evaluation is requested.
     """
     now = datetime.now(timezone.utc)
-    addr_upper = address.upper()
+    norm_address = address.strip()
+    addr_upper = norm_address.upper()
 
     # 1. Check database blacklist if DB session is provided
     if db is not None:
         try:
+            from sqlalchemy import func
             from .supabase_migration import UserBlacklist
             bl = db.query(UserBlacklist).filter(
-                UserBlacklist.address == address,
+                func.upper(func.trim(UserBlacklist.address)) == addr_upper,
                 UserBlacklist.status == "active",
             ).first()
             if bl:
                 status = SCREENING_STATUS_BLOCKED
-                hash_val = compute_screening_hash(address, status, now)
+                hash_val = compute_screening_hash(norm_address, status, now)
                 return ScreeningResult(
                     status=status,
-                    address=address,
+                    address=norm_address,
                     screened_at=now,
                     screening_hash=hash_val,
                     sanctions_match=True,
@@ -137,17 +139,18 @@ def evaluate_locally(address: str, db: Optional[Session] = None) -> ScreeningRes
             logger.debug(f"Blacklist check skipped: {e}")
 
     # 2. Check known static sanctioned addresses & patterns
+    sanctioned_upper = {a.strip().upper() for a in KNOWN_SANCTIONED_ADDRESSES}
     if (
-        address in KNOWN_SANCTIONED_ADDRESSES
+        addr_upper in sanctioned_upper
         or "SANCTIONED" in addr_upper
         or "BLOCKED" in addr_upper
         or "OFAC" in addr_upper
     ):
         status = SCREENING_STATUS_BLOCKED
-        hash_val = compute_screening_hash(address, status, now)
+        hash_val = compute_screening_hash(norm_address, status, now)
         return ScreeningResult(
             status=status,
-            address=address,
+            address=norm_address,
             screened_at=now,
             screening_hash=hash_val,
             sanctions_match=True,
@@ -157,16 +160,17 @@ def evaluate_locally(address: str, db: Optional[Session] = None) -> ScreeningRes
         )
 
     # 3. Check known static flagged / PEP addresses & patterns
+    flagged_upper = {a.strip().upper() for a in KNOWN_FLAGGED_ADDRESSES}
     if (
-        address in KNOWN_FLAGGED_ADDRESSES
+        addr_upper in flagged_upper
         or "FLAGGED" in addr_upper
         or "PEP" in addr_upper
     ):
         status = SCREENING_STATUS_FLAGGED
-        hash_val = compute_screening_hash(address, status, now)
+        hash_val = compute_screening_hash(norm_address, status, now)
         return ScreeningResult(
             status=status,
-            address=address,
+            address=norm_address,
             screened_at=now,
             screening_hash=hash_val,
             pep_match=True,
@@ -177,10 +181,10 @@ def evaluate_locally(address: str, db: Optional[Session] = None) -> ScreeningRes
 
     # 4. Clean address passes
     status = SCREENING_STATUS_PASSED
-    hash_val = compute_screening_hash(address, status, now)
+    hash_val = compute_screening_hash(norm_address, status, now)
     return ScreeningResult(
         status=status,
-        address=address,
+        address=norm_address,
         screened_at=now,
         screening_hash=hash_val,
         sanctions_match=False,
@@ -204,11 +208,12 @@ def screen_address(
     Calls KYA POST /api/v1/screen. If the external call fails or is not configured,
     falls back cleanly to the local evaluator.
     """
+    norm_address = address.strip()
     if use_local_evaluator:
-        return evaluate_locally(address, db=db)
+        return evaluate_locally(norm_address, db=db)
 
     kya_url = f"{settings.KYA_SERVICE_URL.rstrip('/')}/api/v1/screen"
-    payload = {"address": address, "chain": "algorand"}
+    payload = {"address": norm_address, "chain": "algorand"}
     headers = {"Content-Type": "application/json"}
     if settings.KYA_API_KEY:
         headers["Authorization"] = f"Bearer {settings.KYA_API_KEY}"
@@ -250,11 +255,11 @@ def screen_address(
                 screened_at = now
 
             # Audit hash
-            screening_hash = data.get("screening_hash") or compute_screening_hash(address, status, screened_at)
+            screening_hash = data.get("screening_hash") or compute_screening_hash(norm_address, status, screened_at)
 
             return ScreeningResult(
                 status=status,
-                address=address,
+                address=norm_address,
                 screened_at=screened_at,
                 screening_hash=screening_hash,
                 sanctions_match=bool(data.get("sanctions_match", status == SCREENING_STATUS_BLOCKED)),
@@ -267,13 +272,13 @@ def screen_address(
             logger.warning(
                 f"KYA screening endpoint returned HTTP {resp.status_code}; falling back to local evaluator"
             )
-            return evaluate_locally(address, db=db)
+            return evaluate_locally(norm_address, db=db)
 
     except Exception as exc:
         logger.warning(
             f"KYA screening request failed ({type(exc).__name__}: {exc}); falling back to local evaluator"
         )
-        return evaluate_locally(address, db=db)
+        return evaluate_locally(norm_address, db=db)
 
 
 async def screen_address_async(
@@ -284,11 +289,12 @@ async def screen_address_async(
     timeout: float = 3.0,
 ) -> ScreeningResult:
     """Async variant of screen_address."""
+    norm_address = address.strip()
     if use_local_evaluator:
-        return evaluate_locally(address, db=db)
+        return evaluate_locally(norm_address, db=db)
 
     kya_url = f"{settings.KYA_SERVICE_URL.rstrip('/')}/api/v1/screen"
-    payload = {"address": address, "chain": "algorand"}
+    payload = {"address": norm_address, "chain": "algorand"}
     headers = {"Content-Type": "application/json"}
     if settings.KYA_API_KEY:
         headers["Authorization"] = f"Bearer {settings.KYA_API_KEY}"
@@ -327,11 +333,11 @@ async def screen_address_async(
             else:
                 screened_at = now
 
-            screening_hash = data.get("screening_hash") or compute_screening_hash(address, status, screened_at)
+            screening_hash = data.get("screening_hash") or compute_screening_hash(norm_address, status, screened_at)
 
             return ScreeningResult(
                 status=status,
-                address=address,
+                address=norm_address,
                 screened_at=screened_at,
                 screening_hash=screening_hash,
                 sanctions_match=bool(data.get("sanctions_match", status == SCREENING_STATUS_BLOCKED)),
@@ -341,13 +347,13 @@ async def screen_address_async(
                 details=data.get("details", data),
             )
         else:
-            return evaluate_locally(address, db=db)
+            return evaluate_locally(norm_address, db=db)
 
     except Exception as exc:
         logger.warning(
             f"KYA screening async request failed ({type(exc).__name__}: {exc}); falling back to local evaluator"
         )
-        return evaluate_locally(address, db=db)
+        return evaluate_locally(norm_address, db=db)
 
 
 # ─── FastAPI Router for KYA Screening Endpoints ─────────────────────────
@@ -357,7 +363,7 @@ router = APIRouter(prefix="/api/v1/screening", tags=["screening"])
 
 @router.post("/screen", response_model=ScreeningResponse, summary="Screen an address against OFAC/sanctions lists")
 def api_screen_address(req: ScreeningRequest, db: Session = Depends(get_db)):
-    result = screen_address(req.address, db=db)
+    result = screen_address(req.address.strip(), db=db)
     return {
         "status": result.status,
         "address": result.address,
@@ -372,7 +378,7 @@ def api_screen_address(req: ScreeningRequest, db: Session = Depends(get_db)):
 
 @router.get("/{address}", response_model=ScreeningResponse, summary="Lookup screening status for an address")
 def api_get_screening(address: str, db: Session = Depends(get_db)):
-    result = screen_address(address, db=db)
+    result = screen_address(address.strip(), db=db)
     return {
         "status": result.status,
         "address": result.address,
