@@ -1,5 +1,6 @@
 import os
 import logging
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -114,5 +115,33 @@ class Config:
         if addr:
             return addr
         return self.TREASURY_ADDRESS
+
+    REQUIRE_SCREENING: bool = False
+    _require_screening: Optional[bool] = None
+
+    @property
+    def REQUIRE_SCREENING(self) -> bool:
+        if self._require_screening is not None:
+            return self._require_screening
+        val = self.get_secret("REQUIRE_SCREENING", "false")
+        return str(val).strip().lower() in ("true", "1", "yes")
+
+    @REQUIRE_SCREENING.setter
+    def REQUIRE_SCREENING(self, val: bool):
+        self._require_screening = bool(val)
+
+    @REQUIRE_SCREENING.deleter
+    def REQUIRE_SCREENING(self):
+        self._require_screening = None
+
+    @property
+    def KYA_SERVICE_URL(self) -> str:
+        return self.get_secret("KYA_SERVICE_URL", "http://localhost:8001")
+
+    @property
+    def KYA_API_KEY(self) -> str:
+        return self.get_secret("KYA_API_KEY", "")
+
+REQUIRE_SCREENING: bool = False
 
 settings = Config()

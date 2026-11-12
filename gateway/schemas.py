@@ -27,6 +27,7 @@ class BountyCreate(BaseModel):
     gateway_address: Optional[str] = None
     authorized_app_id: Optional[int] = None
     hitm_enforced: Optional[bool] = None
+    screening_status: Optional[str] = None
 
 
 class BountyDeployResponse(BaseModel):
@@ -238,6 +239,9 @@ class BountyResponse(BaseModel):
     gateway_address: Optional[str] = None
     authorized_app_id: Optional[int] = None
     hitm_enforced: Optional[bool] = False
+    screening_status: Optional[str] = "pending"
+    screened_at: Optional[str] = None
+    screening_hash: Optional[str] = None
 
 
 class ListBountiesResponse(BaseModel):
@@ -250,6 +254,9 @@ class BountyCreateResponse(BaseModel):
     status: str
     tx_id: Optional[str] = None
     onchain: bool
+    screening_status: Optional[str] = "pending"
+    screened_at: Optional[str] = None
+    screening_hash: Optional[str] = None
 
 class BountyActionResponse(BaseModel):
     bounty_id: str
@@ -326,3 +333,19 @@ class AdminResolveResponse(BaseModel):
     resolution: str
     tx_id: Optional[str] = None
     message: str
+
+# ─── Sanctions Screening Schemas (Legal #180) ───────────────────────────
+
+class ScreeningRequest(BaseModel):
+    address: str
+    chain: Optional[str] = "algorand"
+
+class ScreeningResponse(BaseModel):
+    status: str  # 'pending', 'passed', 'flagged', 'blocked'
+    address: str
+    screened_at: str
+    screening_hash: str
+    sanctions_match: bool = False
+    pep_match: bool = False
+    risk_score: float = 0.0
+    reason: Optional[str] = None

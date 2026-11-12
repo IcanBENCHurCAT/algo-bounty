@@ -25,6 +25,7 @@ from .routers import (
     auth, bounties, algorand, agents,
     notifications, events, webhooks, oidc, evaluators, admin, terms, coldstart
 )
+from .screening import router as screening_router
 
 # Initialize database
 init_db()
@@ -153,6 +154,7 @@ app.include_router(evaluators.router)
 app.include_router(admin.router)
 app.include_router(terms.router)
 app.include_router(coldstart.router)
+app.include_router(screening_router)
 
 # Serve the frontend Dashboard directly under /dashboard
 # Check if directory exists

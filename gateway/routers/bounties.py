@@ -56,6 +56,7 @@ def list_bounties(
     creator: Optional[str] = None,
     worker: Optional[str] = None,
     admin_address: Optional[str] = None,
+    screening_status: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     query = db.query(Bounty)
@@ -89,6 +90,8 @@ def list_bounties(
         query = query.filter(Bounty.karma_requirement >= min_karma)
     if hitm is not None:
         query = query.filter(Bounty.is_hitm == hitm)
+    if screening_status:
+        query = query.filter(Bounty.screening_status == screening_status)
 
     bounties = query.all()
     # Serialize
@@ -112,7 +115,10 @@ def list_bounties(
             "treasury_altered": b.treasury_altered,
             "gateway_address": b.gateway_address,
             "authorized_app_id": b.authorized_app_id,
-            "hitm_enforced": b.hitm_enforced
+            "hitm_enforced": b.hitm_enforced,
+            "screening_status": getattr(b, "screening_status", "pending") or "pending",
+            "screened_at": b.screened_at.replace(tzinfo=UTC).isoformat().replace("+00:00", "Z") if getattr(b, "screened_at", None) else None,
+            "screening_hash": getattr(b, "screening_hash", None),
         })
     return {"bounties": result, "total": len(result)}
 
@@ -139,7 +145,10 @@ def get_bounty(bounty_id: str, db: Session = Depends(get_db)):
         "treasury_altered": b.treasury_altered,
         "gateway_address": b.gateway_address,
         "authorized_app_id": b.authorized_app_id,
-        "hitm_enforced": b.hitm_enforced
+        "hitm_enforced": b.hitm_enforced,
+        "screening_status": getattr(b, "screening_status", "pending") or "pending",
+        "screened_at": b.screened_at.replace(tzinfo=UTC).isoformat().replace("+00:00", "Z") if getattr(b, "screened_at", None) else None,
+        "screening_hash": getattr(b, "screening_hash", None),
     }
 
 @router.post("", response_model=BountyCreateResponse, summary="Create a new bounty", description="Deploy a new bounty escrow on-chain (if not in sandbox) and create a database record. Deducts 1 karma from the creator.")
@@ -178,6 +187,20 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
             detail="Agent's steward is not verified. "
             "Platform must verify steward identity (KYA or manual review) "
             "before this agent is operational.",
+        )
+
+    # ─── Sanctions Screening: OFAC/PEP at Point of Entry via KYA (#180) ───
+    from ..screening import screen_address
+    screening_result = screen_address(current_user, db=db)
+    screening_status = screening_result.status
+    screened_at = screening_result.screened_at
+    screening_hash = screening_result.screening_hash
+
+    if settings.REQUIRE_SCREENING and screening_status == "blocked":
+        reason = screening_result.reason or "Creator address is blocked by OFAC/sanctions policy"
+        raise HTTPException(
+            status_code=403,
+            detail=f"Sanctions screening blocked: {reason}"
         )
 
     tx_id = None
@@ -292,6 +315,9 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
         pending_bounty.authorized_app_id = authorized_app
         pending_bounty.hitm_enforced = True
         pending_bounty.is_hitm = True
+        pending_bounty.screening_status = screening_status
+        pending_bounty.screened_at = screened_at
+        pending_bounty.screening_hash = screening_hash
         db.commit()
     else:
         new_bounty = Bounty(
@@ -311,7 +337,10 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
             treasury_address=body.treasury_address or default_treasury,
             gateway_address=body.gateway_address,
             authorized_app_id=authorized_app,
-            hitm_enforced=True
+            hitm_enforced=True,
+            screening_status=screening_status,
+            screened_at=screened_at,
+            screening_hash=screening_hash,
         )
         db.add(new_bounty)
         db.commit()
@@ -323,6 +352,7 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
         "amount": body.amount,
         "creator": current_user,
         "onchain": onchain,
+        "screening_status": screening_status,
     })
 
     return {
@@ -331,6 +361,9 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
         "status": "open",
         "tx_id": tx_id,
         "onchain": onchain,
+        "screening_status": screening_status,
+        "screened_at": screened_at.replace(tzinfo=UTC).isoformat().replace("+00:00", "Z") if screened_at else None,
+        "screening_hash": screening_hash,
     }
 
 @router.post("/{bounty_id}/claim/txn", response_model=ApproveTxnResponse, summary="Generate unsigned claim transaction with fee breakdown")

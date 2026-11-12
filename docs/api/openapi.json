@@ -260,6 +260,22 @@
               ],
               "title": "Admin Address"
             }
+          },
+          {
+            "name": "screening_status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Screening Status"
+            }
           }
         ],
         "responses": {
@@ -2637,6 +2653,89 @@
           }
         }
       }
+    },
+    "/api/v1/screening/screen": {
+      "post": {
+        "tags": [
+          "screening"
+        ],
+        "summary": "Screen an address against OFAC/sanctions lists",
+        "operationId": "api_screen_address_api_v1_screening_screen_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScreeningRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScreeningResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/screening/{address}": {
+      "get": {
+        "tags": [
+          "screening"
+        ],
+        "summary": "Lookup screening status for an address",
+        "operationId": "api_get_screening_api_v1_screening__address__get",
+        "parameters": [
+          {
+            "name": "address",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Address"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScreeningResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3347,6 +3446,17 @@
               }
             ],
             "title": "Hitm Enforced"
+          },
+          "screening_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Screening Status"
           }
         },
         "type": "object",
@@ -3392,6 +3502,40 @@
           "onchain": {
             "type": "boolean",
             "title": "Onchain"
+          },
+          "screening_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Screening Status",
+            "default": "pending"
+          },
+          "screened_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Screened At"
+          },
+          "screening_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Screening Hash"
           }
         },
         "type": "object",
@@ -3598,6 +3742,40 @@
             ],
             "title": "Hitm Enforced",
             "default": false
+          },
+          "screening_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Screening Status",
+            "default": "pending"
+          },
+          "screened_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Screened At"
+          },
+          "screening_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Screening Hash"
           }
         },
         "type": "object",
@@ -4204,6 +4382,85 @@
           "action"
         ],
         "title": "QuarantineResolveRequest"
+      },
+      "ScreeningRequest": {
+        "properties": {
+          "address": {
+            "type": "string",
+            "title": "Address"
+          },
+          "chain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chain",
+            "default": "algorand"
+          }
+        },
+        "type": "object",
+        "required": [
+          "address"
+        ],
+        "title": "ScreeningRequest"
+      },
+      "ScreeningResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "address": {
+            "type": "string",
+            "title": "Address"
+          },
+          "screened_at": {
+            "type": "string",
+            "title": "Screened At"
+          },
+          "screening_hash": {
+            "type": "string",
+            "title": "Screening Hash"
+          },
+          "sanctions_match": {
+            "type": "boolean",
+            "title": "Sanctions Match",
+            "default": false
+          },
+          "pep_match": {
+            "type": "boolean",
+            "title": "Pep Match",
+            "default": false
+          },
+          "risk_score": {
+            "type": "number",
+            "title": "Risk Score",
+            "default": 0.0
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "address",
+          "screened_at",
+          "screening_hash"
+        ],
+        "title": "ScreeningResponse"
       },
       "StewardRegisterRequest": {
         "properties": {

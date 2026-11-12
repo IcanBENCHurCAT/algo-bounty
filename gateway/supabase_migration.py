@@ -308,7 +308,10 @@ CREATE TABLE IF NOT EXISTS bounties (
     treasury_address  VARCHAR DEFAULT 'RTCed54abc91f37d8d2d2cb2cf69ce60b0021fd67e5',
     gateway_address   VARCHAR,
     authorized_app_id INTEGER,
-    hitm_enforced     BOOLEAN DEFAULT FALSE
+    hitm_enforced     BOOLEAN DEFAULT FALSE,
+    screening_status  VARCHAR DEFAULT 'pending',
+    screened_at       TIMESTAMPTZ,
+    screening_hash    VARCHAR
 );
 
 -- GitHub Pull Requests linked to bounties
@@ -352,6 +355,7 @@ CREATE TABLE IF NOT EXISTS dispute_arbitrators (
 CREATE INDEX IF NOT EXISTS idx_bounties_creator        ON bounties (creator);
 CREATE INDEX IF NOT EXISTS idx_bounties_repo_url       ON bounties (repo_url);
 CREATE INDEX IF NOT EXISTS idx_bounties_status         ON bounties (status);
+CREATE INDEX IF NOT EXISTS idx_bounties_screening_status ON bounties (screening_status);
 CREATE INDEX IF NOT EXISTS idx_bounties_karma          ON bounties (karma_requirement);
 CREATE INDEX IF NOT EXISTS idx_github_prs_pr_number    ON github_prs (pr_number);
 CREATE INDEX IF NOT EXISTS idx_github_prs_repo_url     ON github_prs (repo_url);
@@ -522,6 +526,9 @@ class Bounty(Base):
     gateway_address = Column(String(58), nullable=True)
     authorized_app_id = Column(Integer, nullable=True)
     hitm_enforced = Column(Boolean, default=False, nullable=False)
+    screening_status = Column(String, default="pending", nullable=False)
+    screened_at = Column(DateTime, nullable=True)
+    screening_hash = Column(String, nullable=True)
 
 
 class AccountQuarantine(Base):
