@@ -53,7 +53,7 @@ jobs:
 
     - name: Comment coverage on PR
       if: github.event_name == 'pull_request'
-      uses: MishaKav/pytest-coverage-comment@v1.13.0
+      uses: MishaKav/pytest-coverage-comment@v1.13.1
       with:
         pytest-xml-coverage-path: ./coverage.xml
         github-token: ${{ secrets.GITHUB_TOKEN }}
