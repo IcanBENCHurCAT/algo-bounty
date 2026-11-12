@@ -55,7 +55,7 @@
     "lightningcss": "^1.33.0",
     "tailwindcss": "^4",
     "ts-jest": "^29.4.11",
-    "typescript": "^5.9.3"
+    "typescript": "^6.0.3"
   },
   "overrides": {
     "@walletconnect/client": "^1.8.0",
