@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from typing import Optional, Any
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from .config import settings
@@ -41,6 +42,7 @@ KNOWN_SANCTIONED_ADDRESSES = {
     "BLOCKED_CREATOR_ADDRESS",
     "BLOCKED_TEST_ADDRESS",
 }
+KNOWN_SANCTIONED_UPPER = frozenset(a.strip().upper() for a in KNOWN_SANCTIONED_ADDRESSES)
 
 # Known PEP / high-risk flagged addresses and patterns for local evaluation
 KNOWN_FLAGGED_ADDRESSES = {
@@ -48,6 +50,7 @@ KNOWN_FLAGGED_ADDRESSES = {
     "FLAGGED_TEST_ADDRESS",
     "HIGH_RISK_CREATOR_ADDRESS",
 }
+KNOWN_FLAGGED_UPPER = frozenset(a.strip().upper() for a in KNOWN_FLAGGED_ADDRESSES)
 
 
 def compute_screening_hash(address: str, status: str, screened_at: datetime) -> str:
@@ -116,7 +119,6 @@ def evaluate_locally(address: str, db: Optional[Session] = None) -> ScreeningRes
     # 1. Check database blacklist if DB session is provided
     if db is not None:
         try:
-            from sqlalchemy import func
             from .supabase_migration import UserBlacklist
             bl = db.query(UserBlacklist).filter(
                 func.upper(func.trim(UserBlacklist.address)) == addr_upper,
@@ -139,9 +141,8 @@ def evaluate_locally(address: str, db: Optional[Session] = None) -> ScreeningRes
             logger.debug(f"Blacklist check skipped: {e}")
 
     # 2. Check known static sanctioned addresses & patterns
-    sanctioned_upper = {a.strip().upper() for a in KNOWN_SANCTIONED_ADDRESSES}
     if (
-        addr_upper in sanctioned_upper
+        addr_upper in KNOWN_SANCTIONED_UPPER
         or "SANCTIONED" in addr_upper
         or "BLOCKED" in addr_upper
         or "OFAC" in addr_upper
@@ -160,9 +161,8 @@ def evaluate_locally(address: str, db: Optional[Session] = None) -> ScreeningRes
         )
 
     # 3. Check known static flagged / PEP addresses & patterns
-    flagged_upper = {a.strip().upper() for a in KNOWN_FLAGGED_ADDRESSES}
     if (
-        addr_upper in flagged_upper
+        addr_upper in KNOWN_FLAGGED_UPPER
         or "FLAGGED" in addr_upper
         or "PEP" in addr_upper
     ):
