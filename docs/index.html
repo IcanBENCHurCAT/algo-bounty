@@ -44,9 +44,9 @@
     </script>
     
     <!-- Marked Markdown Parser & Highlight.js -->
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/tokyo-night-dark.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked@15.0.7/marked.min.js" integrity="sha384-H+hy9ULve6xfxRkWIh/YOtvDdpXgV2fmAGQkIDTxIgZwNoaoBal14Di2YTMR6MzR" crossorigin="anonymous"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/tokyo-night-dark.min.css" integrity="sha384-6PRNB60loRkq5oYgj0ETV33K0YsTUlab8qtfTGXhRgW5Nz1IpzS2zwj6UmlJEnyV" crossorigin="anonymous">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" integrity="sha384-F/bZzf7p3Joyp5psL90p/p89AZJsndkSoGwRpXcZhleCWhd8SnRuoYo4d0yirjJp" crossorigin="anonymous"></script>
 
     <style>
         ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -324,25 +324,29 @@
         function generateTOC() {
             const headings = document.querySelectorAll('#content-container article h2, #content-container article h3');
             const tocContainer = document.getElementById('toc-nav');
+            tocContainer.replaceChildren();
             if (!headings.length) {
-                tocContainer.innerHTML = '<p class="text-xs text-slate-500 italic">No section headings found.</p>';
+                const emptyMsg = document.createElement('p');
+                emptyMsg.className = 'text-xs text-slate-500 italic';
+                emptyMsg.textContent = 'No section headings found.';
+                tocContainer.appendChild(emptyMsg);
                 return;
             }
 
-            let tocHTML = '';
+            const fragment = document.createDocumentFragment();
             headings.forEach((heading, index) => {
                 const id = heading.id || `section-${index}`;
                 heading.id = id;
                 const isH3 = heading.tagName.toLowerCase() === 'h3';
                 const indentClass = isH3 ? 'pl-4 text-xs text-slate-400' : 'font-medium text-slate-200 mt-2';
 
-                tocHTML += `
-                    <a href="#${id}" class="block py-1 px-2 rounded hover:bg-dark-card hover:text-brand-400 transition-colors ${indentClass}">
-                        ${heading.innerText}
-                    </a>
-                `;
+                const link = document.createElement('a');
+                link.href = `#${encodeURIComponent(id)}`;
+                link.className = `block py-1 px-2 rounded hover:bg-dark-card hover:text-brand-400 transition-colors ${indentClass}`;
+                link.textContent = heading.textContent || '';
+                fragment.appendChild(link);
             });
-            tocContainer.innerHTML = tocHTML;
+            tocContainer.appendChild(fragment);
         }
 
         function enhanceCodeBlocks() {
@@ -385,12 +389,16 @@
                     generateTOC();
                 })
                 .catch(err => {
-                    container.innerHTML = `
-                        <div class="p-8 glass-card rounded-xl border border-rose-500/30 text-center">
-                            <p class="text-rose-400 font-semibold mb-2">Error loading documentation</p>
-                            <p class="text-xs text-slate-500">${err.message}</p>
-                        </div>
-                    `;
+                    const card = document.createElement('div');
+                    card.className = 'p-8 glass-card rounded-xl border border-rose-500/30 text-center';
+                    const title = document.createElement('p');
+                    title.className = 'text-rose-400 font-semibold mb-2';
+                    title.textContent = 'Error loading documentation';
+                    const detail = document.createElement('p');
+                    detail.className = 'text-xs text-slate-500';
+                    detail.textContent = err?.message || 'Unable to load document';
+                    card.append(title, detail);
+                    container.replaceChildren(card);
                 });
         }
 
