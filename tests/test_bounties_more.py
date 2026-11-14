@@ -69,7 +69,8 @@ def test_get_bounty_onchain_error(client, db_session):
         res = client.get("/api/v1/bounties/b1/onchain")
         assert res.status_code == 200
         assert res.json()["onchain"] is False
-        assert "Node error" in res.json()["error"]
+        assert res.json()["error"] == "Failed to query on-chain status"
+        assert "Node error" not in res.json()["error"]
 
 def test_create_bounty_missing_agent(client):
     from gateway.auth import create_jwt_token

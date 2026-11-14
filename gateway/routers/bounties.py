@@ -1,4 +1,5 @@
 from ..schemas import ListBountiesResponse, BountyResponse, BountyCreateResponse, BountyActionResponse, BountyOnchainResponse
+import logging
 import re
 from datetime import datetime, UTC, timezone
 from typing import Optional
@@ -999,11 +1000,12 @@ def get_bounty_onchain(bounty_id: str, db: Session = Depends(get_db)):
             "confirmed_round": app_info.get("last-round", 0),
             "state": "escrow_active",
         }
-    except Exception as e:
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to query on-chain status for bounty %s", bounty_id)
         return {
             "bounty_id": bounty_id,
             "onchain": False,
-            "error": str(e),
+            "error": "Failed to query on-chain status",
             "status": b.status,
         }
 

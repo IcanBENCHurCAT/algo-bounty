@@ -1,5 +1,6 @@
 import time
 import json
+import logging
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 import nacl.signing
@@ -168,9 +169,10 @@ class X402Middleware(BaseHTTPMiddleware):
                  status_code=403,
                  media_type="application/json",
              )
-        except Exception as e:
+        except Exception:
+             logging.getLogger(__name__).exception("X402 signature verification failed")
              return Response(
-                 content=f'{{"error": "Signature verification failed: {str(e)}"}}',
+                 content='{"error": "Signature verification failed"}',
                  status_code=400,
                  media_type="application/json",
              )
