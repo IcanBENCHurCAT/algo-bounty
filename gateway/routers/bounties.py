@@ -1022,6 +1022,8 @@ async def sync_github_endpoint(
     bounty = db.query(Bounty).filter(Bounty.bounty_id == bounty_id).first()
     if not bounty:
         raise HTTPException(status_code=404, detail="Bounty not found")
+    if current_user not in (bounty.worker, bounty.creator):
+        raise HTTPException(status_code=403, detail="Only the assigned worker or bounty creator can sync GitHub state.")
     if not bounty.repo_url:
         raise HTTPException(status_code=422, detail="Bounty has no linked GitHub repository")
 
@@ -1090,7 +1092,7 @@ def claim_payout_endpoint(
     bounty = db.query(Bounty).filter(Bounty.bounty_id == bounty_id).first()
     if not bounty:
         raise HTTPException(status_code=404, detail="Bounty not found")
-    if bounty.worker and bounty.worker != current_user:
+    if not bounty.worker or bounty.worker != current_user:
         raise HTTPException(status_code=403, detail="Only the assigned worker can claim the payout.")
     if bounty.status == "closed":
         raise HTTPException(status_code=409, detail="Bounty is already closed.")

@@ -120,3 +120,23 @@ def test_claim_payout_success():
         data = res.json()
         assert data["status"] == "payout_complete"
         assert data["tx_id"] == "MOCK_TX_999"
+
+def test_sync_github_rejects_uninvolved_user():
+    app.dependency_overrides[get_current_user] = lambda: "STRANGER_ADDR"
+    res = client.post("/api/v1/bounties/ALGO-TEST-SYNC/sync-github")
+    assert res.status_code == 403
+    assert "Only the assigned worker or bounty creator" in res.json()["detail"]
+
+def test_claim_payout_rejects_unclaimed_bounty():
+    app.dependency_overrides[get_current_user] = lambda: "STRANGER_ADDR"
+
+    db = TestingSessionLocal()
+    b = db.query(Bounty).filter(Bounty.bounty_id == "ALGO-TEST-SYNC").first()
+    b.worker = None
+    b.payout_ready = True
+    db.commit()
+    db.close()
+
+    res = client.post("/api/v1/bounties/ALGO-TEST-SYNC/claim-payout")
+    assert res.status_code == 403
+    assert "Only the assigned worker" in res.json()["detail"]
