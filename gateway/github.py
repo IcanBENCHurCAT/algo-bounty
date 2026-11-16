@@ -763,6 +763,9 @@ async def check_github_contribution_state(bounty, db: Optional[Session] = None) 
                 if res.status_code == 200:
                     data = res.json()
                     if data.get("merged"):
+                        pr_author = (data.get("user") or {}).get("login")
+                        if bounty.worker and (not pr_author or not is_worker_authorized(bounty.worker, pr_author, db)):
+                            continue
                         sha = data.get("merge_commit_sha") or f"pr_{pr.pr_number}_merged"
                         return {"state": "merged", "sha": sha, "event_id": f"pr_{pr.pr_number}"}
 
@@ -776,6 +779,9 @@ async def check_github_contribution_state(bounty, db: Optional[Session] = None) 
                 body = pr.get("body", "") or ""
                 if bounty.bounty_id in title or bounty.bounty_id in body:
                     if pr.get("merged_at"):
+                        pr_author = (pr.get("user") or {}).get("login")
+                        if bounty.worker and (not pr_author or not is_worker_authorized(bounty.worker, pr_author, db)):
+                            continue
                         sha = pr.get("merge_commit_sha") or f"pr_{pr['number']}_merged"
                         return {"state": "merged", "sha": sha, "event_id": f"pr_{pr['number']}"}
 
