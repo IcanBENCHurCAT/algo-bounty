@@ -1,9 +1,10 @@
 import pytest
-from unittest.mock import patch, AsyncMock
+from datetime import datetime, timedelta, timezone
+from unittest.mock import patch, AsyncMock, MagicMock
 from fastapi.testclient import TestClient
 
 from gateway.main import app
-from gateway.database import Base, Bounty, Agent
+from gateway.database import Base, Bounty, Agent, AccountQuarantine, GitHubPR
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -140,3 +141,101 @@ def test_claim_payout_rejects_unclaimed_bounty():
     res = client.post("/api/v1/bounties/ALGO-TEST-SYNC/claim-payout")
     assert res.status_code == 403
     assert "Only the assigned worker" in res.json()["detail"]
+
+
+def test_claim_payout_and_sync_reject_disputed_or_rejected_bounty():
+    app.dependency_overrides[get_current_user] = override_worker
+
+    for blocked_status in ("disputed", "rejected", "open"):
+        db = TestingSessionLocal()
+        b = db.query(Bounty).filter(Bounty.bounty_id == "ALGO-TEST-SYNC").first()
+        b.status = blocked_status
+        b.payout_ready = True
+        db.commit()
+        db.close()
+
+        sync_res = client.post("/api/v1/bounties/ALGO-TEST-SYNC/sync-github")
+        assert sync_res.status_code == 409
+        assert blocked_status in sync_res.json()["detail"]
+
+        payout_res = client.post("/api/v1/bounties/ALGO-TEST-SYNC/claim-payout")
+        assert payout_res.status_code == 409
+        assert blocked_status in payout_res.json()["detail"]
+
+
+def test_claim_payout_and_sync_reject_quarantined_worker():
+    app.dependency_overrides[get_current_user] = override_worker
+
+    db = TestingSessionLocal()
+    now = datetime.now(timezone.utc)
+    db.add(
+        AccountQuarantine(
+            address="WORKER_ADDR",
+            reason="Suspicious post-refund merge activity",
+            quarantined_at=now,
+            expires_at=now + timedelta(hours=24),
+            status="active",
+        )
+    )
+    b = db.query(Bounty).filter(Bounty.bounty_id == "ALGO-TEST-SYNC").first()
+    b.payout_ready = True
+    db.commit()
+    db.close()
+
+    sync_res = client.post("/api/v1/bounties/ALGO-TEST-SYNC/sync-github")
+    assert sync_res.status_code == 403
+    assert "quarantined" in sync_res.json()["detail"].lower()
+
+    payout_res = client.post("/api/v1/bounties/ALGO-TEST-SYNC/claim-payout")
+    assert payout_res.status_code == 403
+    assert "quarantined" in payout_res.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_check_github_contribution_state_rejects_unauthorized_pr_author():
+    from gateway.github import check_github_contribution_state
+
+    db = TestingSessionLocal()
+    worker = db.query(Agent).filter(Agent.address == "WORKER_ADDR").first()
+    worker.github_username = "legit-worker"
+    db.add(
+        GitHubPR(
+            pr_number=42,
+            repo_url="https://github.com/test/repo",
+            bounty_id="ALGO-TEST-SYNC",
+            state="closed",
+            author="attacker-user",
+        )
+    )
+    db.commit()
+    bounty = db.query(Bounty).filter(Bounty.bounty_id == "ALGO-TEST-SYNC").first()
+
+    spoofed_pr_resp = MagicMock(status_code=200)
+    spoofed_pr_resp.json.return_value = {
+        "number": 42,
+        "merged": True,
+        "merge_commit_sha": "deadbeef",
+        "user": {"login": "attacker-user"},
+    }
+    closed_list_resp = MagicMock(status_code=200)
+    closed_list_resp.json.return_value = [
+        {
+            "number": 99,
+            "title": "Fix typo ALGO-TEST-SYNC",
+            "body": "",
+            "merged_at": "2026-11-16T00:00:00Z",
+            "merge_commit_sha": "cafebabe",
+            "user": {"login": "attacker-user"},
+        }
+    ]
+
+    mock_client = MagicMock()
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=None)
+    mock_client.get = AsyncMock(side_effect=[spoofed_pr_resp, closed_list_resp])
+
+    with patch("gateway.github.httpx.AsyncClient", return_value=mock_client):
+        result = await check_github_contribution_state(bounty, db)
+
+    assert result["state"] == "open"
+    db.close()

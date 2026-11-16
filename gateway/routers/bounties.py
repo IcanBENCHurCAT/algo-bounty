@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from ..database import Bounty, Agent, GitHubPR, Notification
+from ..database import Bounty, Agent, GitHubPR, Notification, AccountQuarantine, SyncRecord
 from ..auth import get_current_user
 from ..config import settings
 from ..dependencies import get_db
@@ -16,6 +16,7 @@ from ..schemas import (
     BountyCreate, BountyClaim, WorkSubmit,
     WorkApprove, WorkReject, DisputeCreate,
     FeeBreakdown, FeeBreakdownDisplay,
+    SyncGithubResponse, ClaimPayoutResponse,
 )
 from ..broker import broker
 from ..algod_client import (
@@ -152,19 +153,23 @@ def get_bounty(bounty_id: str, db: Session = Depends(get_db)):
         "screening_hash": getattr(b, "screening_hash", None),
     }
 
-@router.post("", response_model=BountyCreateResponse, summary="Create a new bounty", description="Deploy a new bounty escrow on-chain (if not in sandbox) and create a database record. Deducts 1 karma from the creator.")
-def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_user: str = Depends(get_current_user)):
-    from ..database import AccountQuarantine
+def _ensure_not_quarantined(db: Session, address: str) -> None:
+    """Reject critical bounty actions when the caller has an active quarantine."""
     quarantine = db.query(AccountQuarantine).filter(
-        AccountQuarantine.address == current_user,
+        AccountQuarantine.address == address,
         AccountQuarantine.status == "active",
-        AccountQuarantine.expires_at > datetime.now(timezone.utc)
+        AccountQuarantine.expires_at > datetime.now(timezone.utc),
     ).first()
     if quarantine:
         raise HTTPException(
             status_code=403,
-            detail=f"Account is quarantined until {quarantine.expires_at.isoformat()}. Reason: {quarantine.reason}"
+            detail=f"Account is quarantined until {quarantine.expires_at.isoformat()}. Reason: {quarantine.reason}",
         )
+
+
+@router.post("", response_model=BountyCreateResponse, summary="Create a new bounty", description="Deploy a new bounty escrow on-chain (if not in sandbox) and create a database record. Deducts 1 karma from the creator.")
+def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_user: str = Depends(get_current_user)):
+    _ensure_not_quarantined(db, current_user)
 
     if body.platform_fee > 1000:
         raise HTTPException(status_code=400, detail="Platform fee cannot exceed 10% (1000 basis points)")
@@ -1010,9 +1015,6 @@ def get_bounty_onchain(bounty_id: str, db: Session = Depends(get_db)):
         }
 
 
-from ..schemas import SyncGithubResponse, ClaimPayoutResponse
-from ..database import SyncRecord, AccountQuarantine
-
 @router.post("/{bounty_id}/sync-github", response_model=SyncGithubResponse, summary="Manual GitHub Sync")
 async def sync_github_endpoint(
     bounty_id: str,
@@ -1024,8 +1026,14 @@ async def sync_github_endpoint(
         raise HTTPException(status_code=404, detail="Bounty not found")
     if current_user not in (bounty.worker, bounty.creator):
         raise HTTPException(status_code=403, detail="Only the assigned worker or bounty creator can sync GitHub state.")
+    _ensure_not_quarantined(db, current_user)
     if not bounty.repo_url:
         raise HTTPException(status_code=422, detail="Bounty has no linked GitHub repository")
+    if bounty.status not in ("claimed", "submitted"):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot sync GitHub state while bounty is {bounty.status}.",
+        )
 
     from ..github import check_github_contribution_state
     res = await check_github_contribution_state(bounty, db)
@@ -1094,8 +1102,14 @@ def claim_payout_endpoint(
         raise HTTPException(status_code=404, detail="Bounty not found")
     if not bounty.worker or bounty.worker != current_user:
         raise HTTPException(status_code=403, detail="Only the assigned worker can claim the payout.")
+    _ensure_not_quarantined(db, current_user)
     if bounty.status == "closed":
         raise HTTPException(status_code=409, detail="Bounty is already closed.")
+    if bounty.status not in ("claimed", "submitted"):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot claim payout while bounty is {bounty.status}.",
+        )
     if not bounty.payout_ready:
         raise HTTPException(status_code=409, detail="Payout is not ready. Run sync-github first.")
 
