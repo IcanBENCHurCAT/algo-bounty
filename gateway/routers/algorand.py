@@ -36,9 +36,20 @@ def algorand_balance(address: str):
     try:
         result = get_account_balance(address)
         if result.get("error"):
-            logger.warning("Algorand balance lookup error for %s: %s", address, result["error"])
-            return {**result, "error": "Unable to retrieve wallet balance"}
-        return result
+            logger.warning("Algorand balance lookup error for %s", address)
+            return {
+                "address": address,
+                "balance": int(result.get("balance", 0)),
+                "balance_algo": float(result.get("balance_algo", 0.0)),
+                "error": "Unable to retrieve wallet balance",
+            }
+        return {
+            "address": str(result.get("address", address)),
+            "balance": int(result.get("balance", 0)),
+            "balance_algo": float(result.get("balance_algo", 0.0)),
+            "total_assets": result.get("total_assets"),
+            "assets": result.get("assets"),
+        }
     except Exception:
         logger.exception("Failed to fetch wallet balance for %s", address)
         raise HTTPException(status_code=500, detail="Failed to retrieve wallet balance")
@@ -50,9 +61,18 @@ def algorand_asset_holders(asset_id: int):
     try:
         result = get_asset_holders(asset_id)
         if result.get("error"):
-            logger.warning("Algorand asset holders lookup error for %s: %s", asset_id, result["error"])
-            return {**result, "error": "Unable to retrieve asset holders"}
-        return result
+            logger.warning("Algorand asset holders lookup error for %s", asset_id)
+            return {
+                "asset_id": asset_id,
+                "total_holders": int(result.get("total_holders", 0)),
+                "holders": [],
+                "error": "Unable to retrieve asset holders",
+            }
+        return {
+            "asset_id": int(result.get("asset_id", asset_id)),
+            "total_holders": int(result.get("total_holders", 0)),
+            "holders": list(result.get("holders", [])),
+        }
     except Exception:
         logger.exception("Failed to fetch asset holders for %s", asset_id)
         raise HTTPException(status_code=500, detail="Failed to retrieve asset holders")

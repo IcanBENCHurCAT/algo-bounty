@@ -6,6 +6,7 @@ Tier 1: Sandbox (local dev only) -- 10.0.0.67
 Tier 2: Algorand Testnet (production fallback)
 Tier 3: Mainnet (future)
 """
+import logging
 import os
 import re
 import subprocess
@@ -13,6 +14,8 @@ from pathlib import Path
 from algosdk.v2client import algod, indexer
 from algosdk import account
 from .config import settings
+
+logger = logging.getLogger(__name__)
 
 # --- Tier 1: Sandbox (local dev only) ---
 SANDBOX_ALGOD = settings.get_secret("ALGOD_ADDRESS", "http://10.0.0.67:4001")
@@ -177,10 +180,11 @@ def get_account_balance(address):
                 for a in assets
             ],
         }
-    except Exception as e:
+    except Exception:
+        logger.warning("Algod account_info lookup failed for %s", address, exc_info=True)
         return {
             "address": address,
-            "error": str(e),
+            "error": "Unable to retrieve wallet balance",
             "balance": 0,
             "balance_algo": 0,
         }
@@ -245,10 +249,11 @@ def get_asset_holders(asset_id):
             "total_holders": len(holders),
             "holders": holders[:100],  # Limit to first 100
         }
-    except Exception as e:
+    except Exception:
+        logger.warning("Indexer get_asset_balances lookup failed for %s", asset_id, exc_info=True)
         return {
             "asset_id": asset_id,
-            "error": str(e),
+            "error": "Unable to retrieve asset holders",
             "total_holders": 0,
             "holders": [],
         }

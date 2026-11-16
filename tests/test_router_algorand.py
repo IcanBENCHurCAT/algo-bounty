@@ -39,6 +39,13 @@ def test_algorand_balance_exception():
         assert res.status_code == 500
         assert res.json()["detail"] == "Failed to retrieve wallet balance"
 
+def test_algorand_balance_error_dict():
+    with patch("gateway.routers.algorand.get_account_balance", return_value={"address": "ADDR", "balance": 0, "balance_algo": 0.0, "error": "internal detail"}):
+        res = client.get("/api/v1/algorand/balance/ADDR")
+        assert res.status_code == 200
+        assert res.json()["error"] == "Unable to retrieve wallet balance"
+        assert "internal detail" not in str(res.json())
+
 def test_algorand_asset_holders_success():
     with patch("gateway.routers.algorand.get_asset_holders", return_value={"asset_id": 123, "total_holders": 5, "holders": []}):
         res = client.get("/api/v1/algorand/asset/123/holders")
@@ -50,3 +57,10 @@ def test_algorand_asset_holders_exception():
         res = client.get("/api/v1/algorand/asset/123/holders")
         assert res.status_code == 500
         assert res.json()["detail"] == "Failed to retrieve asset holders"
+
+def test_algorand_asset_holders_error_dict():
+    with patch("gateway.routers.algorand.get_asset_holders", return_value={"asset_id": 123, "total_holders": 0, "holders": [], "error": "internal detail"}):
+        res = client.get("/api/v1/algorand/asset/123/holders")
+        assert res.status_code == 200
+        assert res.json()["error"] == "Unable to retrieve asset holders"
+        assert "internal detail" not in str(res.json())
