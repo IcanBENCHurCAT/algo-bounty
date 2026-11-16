@@ -66,10 +66,11 @@ def test_get_account_balance_success():
         assert len(res["assets"]) == 1
 
 def test_get_account_balance_error():
-    with patch("gateway.algod_client.get_algod_client", side_effect=Exception("error")):
+    with patch("gateway.algod_client.get_algod_client", side_effect=Exception("secret error")):
         res = algod_client.get_account_balance("ADDR")
         assert res["balance"] == 0
-        assert "error" in res
+        assert res["error"] == "Unable to retrieve wallet balance"
+        assert "secret" not in res["error"]
 
 def test_get_transaction_status_confirmed():
     mock_ic = MagicMock()
@@ -108,11 +109,12 @@ def test_get_asset_holders_success():
 
 def test_get_asset_holders_error():
     mock_ic = MagicMock()
-    mock_ic.get_asset_balances.side_effect = Exception("err")
+    mock_ic.get_asset_balances.side_effect = Exception("secret err")
     with patch("gateway.algod_client.get_indexer_client", return_value=mock_ic):
         res = algod_client.get_asset_holders(123)
         assert res["total_holders"] == 0
-        assert "error" in res
+        assert res["error"] == "Unable to retrieve asset holders"
+        assert "secret" not in res["error"]
 
 def test_compile_escrow_contract_subprocess_ok():
     with patch("gateway.algod_client.ESCROW_TEAL", None), \
