@@ -456,6 +456,26 @@ def deploy_escrow_on_testnet():
         return result
 
 
+def _normalize_base64_txn(signed_txn_b64: str) -> str:
+    """Normalize a base64-encoded transaction string (strip prefix, quotes, URL-safe chars, padding)."""
+    # Strip data URL prefix if present (e.g. data:application/octet-stream;base64,)
+    if "," in signed_txn_b64:
+        signed_txn_b64 = signed_txn_b64.split(",")[-1]
+
+    # Strip spaces and quotes
+    signed_txn_b64 = signed_txn_b64.strip().strip('"').strip("'")
+
+    # Support url-safe base64
+    signed_txn_b64 = signed_txn_b64.replace("-", "+").replace("_", "/")
+
+    # Restore missing padding if needed
+    missing_padding = len(signed_txn_b64) % 4
+    if missing_padding:
+        signed_txn_b64 += "=" * (4 - missing_padding)
+
+    return signed_txn_b64
+
+
 def send_signed_transaction(signed_txn_b64: str):
     """
     Broadcast a base64-encoded signed transaction to the network.
@@ -465,20 +485,7 @@ def send_signed_transaction(signed_txn_b64: str):
 
     client = get_algod_client()
     try:
-        # Strip data URL prefix if present (e.g. data:application/octet-stream;base64,)
-        if "," in signed_txn_b64:
-            signed_txn_b64 = signed_txn_b64.split(",")[-1]
-
-        # Strip spaces and quotes
-        signed_txn_b64 = signed_txn_b64.strip().strip('"').strip("'")
-
-        # Support url-safe base64
-        signed_txn_b64 = signed_txn_b64.replace("-", "+").replace("_", "/")
-
-        # Restore missing padding if needed
-        missing_padding = len(signed_txn_b64) % 4
-        if missing_padding:
-            signed_txn_b64 += "=" * (4 - missing_padding)
+        signed_txn_b64 = _normalize_base64_txn(signed_txn_b64)
 
         # Decode base64 signed transaction
         decoded_txn = base64.b64decode(signed_txn_b64)
@@ -488,6 +495,54 @@ def send_signed_transaction(signed_txn_b64: str):
     except Exception as e:
         print(f"[WEB3] Error sending transaction: {e}")
         raise e
+
+
+def verify_and_send_app_call_txn(
+    signed_txn_b64: str,
+    expected_app_id: int,
+    expected_sender: str,
+    expected_selector: bytes,
+) -> str:
+    """Decode, validate, broadcast, and confirm an ARC-4 application call transaction.
+
+    Ensures the payload is a ``SignedTransaction`` for a NoOp ``ApplicationCallTxn``
+    without ``rekey_to``, matching the expected sender, application ID, and 4-byte
+    ARC-4 method selector before broadcasting and waiting for confirmation.
+    """
+    from algosdk import encoding
+    from algosdk.transaction import OnComplete, SignedTransaction, wait_for_confirmation
+
+    if not signed_txn_b64 or not signed_txn_b64.strip():
+        raise ValueError("signed_txn is required")
+
+    normalized_b64 = _normalize_base64_txn(signed_txn_b64)
+    try:
+        stxn = encoding.msgpack_decode(normalized_b64)
+    except Exception as exc:
+        raise ValueError(f"Invalid signed_txn encoding: {exc}") from exc
+
+    if not isinstance(stxn, SignedTransaction):
+        raise ValueError("Payload is not a SignedTransaction")
+
+    txn = stxn.transaction
+    if getattr(txn, "type", None) != "appl":
+        raise ValueError(f"Expected application call transaction ('appl'), got '{getattr(txn, 'type', None)}'")
+    if getattr(txn, "on_complete", None) != OnComplete.NoOpOC:
+        raise ValueError(f"Expected NoOp OnComplete, got {getattr(txn, 'on_complete', None)}")
+    if getattr(txn, "rekey_to", None) is not None:
+        raise ValueError("Transaction must not set rekey_to")
+    if getattr(txn, "sender", None) != expected_sender:
+        raise ValueError("Transaction sender does not match authenticated user")
+    if getattr(txn, "index", None) != expected_app_id:
+        raise ValueError(f"Transaction app_id does not match bounty app_id ({expected_app_id})")
+
+    app_args = getattr(txn, "app_args", None) or []
+    if not app_args or app_args[0] != expected_selector:
+        raise ValueError("Transaction ARC-4 method selector does not match expected endpoint")
+
+    tx_id = send_signed_transaction(normalized_b64)
+    wait_for_confirmation(get_algod_client(), tx_id, 4)
+    return tx_id
 
 
 def release_trustless(app_id: int, worker_address: str) -> dict:

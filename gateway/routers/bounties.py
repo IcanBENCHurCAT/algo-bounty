@@ -19,14 +19,53 @@ from ..schemas import (
     SyncGithubResponse, ClaimPayoutResponse,
 )
 from ..broker import broker
+from algosdk.abi import Method
 from ..algod_client import (
     get_algod_client, get_default_account,
     is_sandbox, compile_escrow_contract,
-    send_signed_transaction,
+    send_signed_transaction, verify_and_send_app_call_txn,
 )
 
 router = APIRouter(prefix="/api/v1/bounties", tags=["bounties"])
 sandbox_active = is_sandbox()
+
+_ESCROW_METHOD_SELECTORS: dict[str, bytes] = {
+    "claim": Method.from_signature("claim_bounty()void").get_selector(),
+    "submit": Method.from_signature("submit_work(byte[],byte[])void").get_selector(),
+    "approve": Method.from_signature("approve_work()void").get_selector(),
+    "reject": Method.from_signature("reject_work(byte[])void").get_selector(),
+    "dispute": Method.from_signature("submit_dispute(byte[])void").get_selector(),
+}
+
+
+def _execute_bounty_app_call(
+    bounty: Bounty,
+    signed_txn: Optional[str],
+    expected_sender: str,
+    action: str,
+) -> Optional[str]:
+    """Validate and broadcast an escrow app-call transaction on non-sandbox networks."""
+    if settings.ALGORAND_NETWORK != "sandbox":
+        if bounty.app_id is None:
+            raise HTTPException(status_code=400, detail="Bounty has no on-chain app_id")
+        if not signed_txn:
+            raise HTTPException(status_code=400, detail="signed_txn is required")
+        try:
+            return verify_and_send_app_call_txn(
+                signed_txn_b64=signed_txn,
+                expected_app_id=bounty.app_id,
+                expected_sender=expected_sender,
+                expected_selector=_ESCROW_METHOD_SELECTORS[action],
+            )
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"On-chain transaction failed: {e}")
+
+    if signed_txn:
+        try:
+            return send_signed_transaction(signed_txn)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"On-chain transaction failed: {e}")
+    return None
 
 from pydantic import BaseModel
 
@@ -525,16 +564,8 @@ async def claim_bounty(
             "before this agent is operational.",
         )
 
-    # Broadcase on-chain transaction
-    if settings.ALGORAND_NETWORK != "sandbox" and not body.signed_txn:
-        raise HTTPException(status_code=400, detail="signed_txn is required")
-
-    tx_id = None
-    if body.signed_txn:
-        try:
-            tx_id = send_signed_transaction(body.signed_txn)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"On-chain transaction failed: {e}")
+    # Broadcast on-chain transaction
+    tx_id = _execute_bounty_app_call(b, body.signed_txn, current_user, "claim")
 
     b.status = "claimed"
     b.worker = current_user
@@ -586,15 +617,7 @@ async def submit_work(
         raise HTTPException(status_code=403, detail="Only the claiming worker can submit work")
 
     # Broadcast on-chain transaction
-    if settings.ALGORAND_NETWORK != "sandbox" and not body.signed_txn:
-        raise HTTPException(status_code=400, detail="signed_txn is required")
-
-    tx_id = None
-    if body.signed_txn:
-        try:
-            tx_id = send_signed_transaction(body.signed_txn)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"On-chain transaction failed: {e}")
+    tx_id = _execute_bounty_app_call(b, body.signed_txn, current_user, "submit")
 
     b.status = "submitted"
     db.commit()
@@ -775,15 +798,7 @@ async def approve_work(
         raise HTTPException(status_code=400, detail="Bounty has no work submitted to approve")
 
     # Broadcast on-chain transaction
-    if settings.ALGORAND_NETWORK != "sandbox" and not body.signed_txn:
-        raise HTTPException(status_code=400, detail="signed_txn is required")
-
-    tx_id = None
-    if body.signed_txn:
-        try:
-            tx_id = send_signed_transaction(body.signed_txn)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"On-chain transaction failed: {e}")
+    tx_id = _execute_bounty_app_call(b, body.signed_txn, current_user, "approve")
 
     b.status = "closed"
     b.payout_type = "PAYOUT"
@@ -847,12 +862,7 @@ async def reject_work(
         raise HTTPException(status_code=400, detail="No work submitted to reject")
 
     # Broadcast on-chain transaction
-    tx_id = None
-    if body.signed_txn:
-        try:
-            tx_id = send_signed_transaction(body.signed_txn)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"On-chain transaction failed: {e}")
+    tx_id = _execute_bounty_app_call(b, body.signed_txn, current_user, "reject")
 
     b.status = "rejected"
     b.rejection_count += 1
@@ -930,12 +940,7 @@ async def dispute_work(
         raise HTTPException(status_code=400, detail="Cannot dispute at this stage")
 
     # Broadcast on-chain transaction
-    tx_id = None
-    if body.signed_txn:
-        try:
-            tx_id = send_signed_transaction(body.signed_txn)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"On-chain transaction failed: {e}")
+    tx_id = _execute_bounty_app_call(b, body.signed_txn, current_user, "dispute")
 
     b.status = "disputed"
     db.commit()
