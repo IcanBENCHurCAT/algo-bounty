@@ -24,12 +24,14 @@ from ..algod_client import (
     get_algod_client, get_default_account,
     is_sandbox, compile_escrow_contract,
     send_signed_transaction, verify_and_send_app_call_txn,
+    verify_and_send_bounty_creation_txns,
 )
 
 router = APIRouter(prefix="/api/v1/bounties", tags=["bounties"])
 sandbox_active = is_sandbox()
 
 _ESCROW_METHOD_SELECTORS: dict[str, bytes] = {
+    "create": Method.from_signature("create_bounty(byte[],uint64,uint64,uint64,uint64,address,address,address,uint64)void").get_selector(),
     "claim": Method.from_signature("claim_bounty()void").get_selector(),
     "submit": Method.from_signature("submit_work(byte[],byte[])void").get_selector(),
     "approve": Method.from_signature("approve_work()void").get_selector(),
@@ -274,21 +276,15 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
             raise HTTPException(status_code=400, detail="signed_txn is required for on-chain deployment")
 
         try:
-            import base64
-            from algosdk.transaction import wait_for_confirmation
-            client = get_algod_client()
-
-            if "," in body.signed_txn:
-                stxns = []
-                for b64 in body.signed_txn.split(","):
-                    stxns.append(base64.b64decode(b64.strip()))
-                tx_id = client.send_transactions(stxns)
-            else:
-                from ..algod_client import send_signed_transaction
-                tx_id = send_signed_transaction(body.signed_txn)
-
-            wait_for_confirmation(client, tx_id, 4)
+            tx_id = verify_and_send_bounty_creation_txns(
+                signed_txn_b64=body.signed_txn,
+                expected_app_id=app_id,
+                expected_sender=current_user,
+                expected_selector=_ESCROW_METHOD_SELECTORS["create"],
+            )
             onchain = True
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"Invalid on-chain transaction: {e}")
         except Exception as e:
             print(f"[WEB3] Escrow initialization failed: {e}")
             raise HTTPException(

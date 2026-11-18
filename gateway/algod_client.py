@@ -497,20 +497,10 @@ def send_signed_transaction(signed_txn_b64: str):
         raise e
 
 
-def verify_and_send_app_call_txn(
-    signed_txn_b64: str,
-    expected_app_id: int,
-    expected_sender: str,
-    expected_selector: bytes,
-) -> str:
-    """Decode, validate, broadcast, and confirm an ARC-4 application call transaction.
-
-    Ensures the payload is a ``SignedTransaction`` for a NoOp ``ApplicationCallTxn``
-    without ``rekey_to``, matching the expected sender, application ID, and 4-byte
-    ARC-4 method selector before broadcasting and waiting for confirmation.
-    """
+def _decode_signed_txn(signed_txn_b64: str):
+    """Normalize and msgpack-decode a base64-encoded SignedTransaction."""
     from algosdk import encoding
-    from algosdk.transaction import OnComplete, SignedTransaction, wait_for_confirmation
+    from algosdk.transaction import SignedTransaction
 
     if not signed_txn_b64 or not signed_txn_b64.strip():
         raise ValueError("signed_txn is required")
@@ -524,7 +514,18 @@ def verify_and_send_app_call_txn(
     if not isinstance(stxn, SignedTransaction):
         raise ValueError("Payload is not a SignedTransaction")
 
-    txn = stxn.transaction
+    return normalized_b64, stxn
+
+
+def _validate_app_call_txn(
+    txn,
+    expected_app_id: int | None,
+    expected_sender: str,
+    expected_selector: bytes,
+) -> None:
+    """Validate an ApplicationCallTxn against expected NoOp, sender, app_id, and ARC-4 selector."""
+    from algosdk.transaction import OnComplete
+
     if getattr(txn, "type", None) != "appl":
         raise ValueError(f"Expected application call transaction ('appl'), got '{getattr(txn, 'type', None)}'")
     if getattr(txn, "on_complete", None) != OnComplete.NoOpOC:
@@ -533,15 +534,82 @@ def verify_and_send_app_call_txn(
         raise ValueError("Transaction must not set rekey_to")
     if getattr(txn, "sender", None) != expected_sender:
         raise ValueError("Transaction sender does not match authenticated user")
-    if getattr(txn, "index", None) != expected_app_id:
+    if expected_app_id is not None and getattr(txn, "index", None) != expected_app_id:
         raise ValueError(f"Transaction app_id does not match bounty app_id ({expected_app_id})")
 
     app_args = getattr(txn, "app_args", None) or []
     if not app_args or app_args[0] != expected_selector:
         raise ValueError("Transaction ARC-4 method selector does not match expected endpoint")
 
+
+def verify_and_send_app_call_txn(
+    signed_txn_b64: str,
+    expected_app_id: int,
+    expected_sender: str,
+    expected_selector: bytes,
+) -> str:
+    """Decode, validate, broadcast, and confirm an ARC-4 application call transaction.
+
+    Ensures the payload is a ``SignedTransaction`` for a NoOp ``ApplicationCallTxn``
+    without ``rekey_to``, matching the expected sender, application ID, and 4-byte
+    ARC-4 method selector before broadcasting and waiting for confirmation.
+    """
+    from algosdk.transaction import wait_for_confirmation
+
+    normalized_b64, stxn = _decode_signed_txn(signed_txn_b64)
+    _validate_app_call_txn(stxn.transaction, expected_app_id, expected_sender, expected_selector)
+
     tx_id = send_signed_transaction(normalized_b64)
     wait_for_confirmation(get_algod_client(), tx_id, 4)
+    return tx_id
+
+
+def verify_and_send_bounty_creation_txns(
+    signed_txn_b64: str,
+    expected_app_id: int | None,
+    expected_sender: str,
+    expected_selector: bytes,
+) -> str:
+    """Validate, broadcast, and confirm a single or grouped bounty creation transaction payload.
+
+    Ensures every item is a ``SignedTransaction`` without ``rekey_to``, and at least one
+    transaction in the payload is a valid NoOp ``ApplicationCallTxn`` matching
+    ``expected_sender``, ``expected_app_id`` (if provided), and ``expected_selector``.
+    """
+    from algosdk.transaction import wait_for_confirmation
+
+    if not signed_txn_b64 or not signed_txn_b64.strip():
+        raise ValueError("signed_txn is required")
+
+    parts = [p for p in signed_txn_b64.split(",") if p.strip()] if "," in signed_txn_b64 else [signed_txn_b64]
+    decoded = [_decode_signed_txn(part) for part in parts]
+
+    for _, stxn in decoded:
+        if getattr(stxn.transaction, "rekey_to", None) is not None:
+            raise ValueError("Transaction must not set rekey_to")
+
+    last_err: ValueError | None = None
+    matched = False
+    for _, stxn in decoded:
+        try:
+            _validate_app_call_txn(stxn.transaction, expected_app_id, expected_sender, expected_selector)
+            matched = True
+            break
+        except ValueError as exc:
+            last_err = exc
+
+    if not matched:
+        raise last_err or ValueError("No valid create_bounty application call found in signed_txn")
+
+    client = get_algod_client()
+    if len(decoded) > 1:
+        import base64
+        raw_stxns = [base64.b64decode(norm) for norm, _ in decoded]
+        tx_id = client.send_transactions(raw_stxns)
+    else:
+        tx_id = send_signed_transaction(decoded[0][0])
+
+    wait_for_confirmation(client, tx_id, 4)
     return tx_id
 
 
