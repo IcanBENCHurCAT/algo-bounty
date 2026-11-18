@@ -274,3 +274,88 @@ def test_non_sandbox_accepts_valid_app_call_txn(
     assert body["status"] == expected_status
     assert body["tx_id"] == f"TXID_{action_key.upper()}"
     mock_ac.send_raw_transaction.assert_called_once()
+
+
+# ─── Bounty creation (create_bounty) signed_txn validation ──────────────────
+
+CREATE_SELECTOR = Method.from_signature(
+    "create_bounty(byte[],uint64,uint64,uint64,uint64,address,address,address,uint64)void"
+).get_selector()
+
+
+def test_create_bounty_verify_rejects_zero_pay():
+    sk, addr = account.generate_account()
+    pay_b64 = _make_signed_zero_pay(sk, addr)
+    with pytest.raises(ValueError, match="appl"):
+        algod_client.verify_and_send_bounty_creation_txns(pay_b64, 555, addr, CREATE_SELECTOR)
+
+
+def test_create_bounty_verify_rejects_rekey_in_group():
+    sk, addr = account.generate_account()
+    _, target = account.generate_account()
+    pay_txn = PaymentTxn(sender=addr, sp=SP, receiver=addr, amt=0, rekey_to=target)
+    pay_b64 = encoding.msgpack_encode(pay_txn.sign(sk))
+    app_b64 = _make_signed_app_call(sk, addr, 555, CREATE_SELECTOR)
+    with pytest.raises(ValueError, match="rekey_to"):
+        algod_client.verify_and_send_bounty_creation_txns(
+            f"{pay_b64},{app_b64}", 555, addr, CREATE_SELECTOR
+        )
+
+
+def test_create_bounty_verify_accepts_valid_group():
+    sk, addr = account.generate_account()
+    pay_b64 = _make_signed_zero_pay(sk, addr)
+    app_b64 = _make_signed_app_call(sk, addr, 555, CREATE_SELECTOR)
+
+    mock_ac = MagicMock()
+    mock_ac.send_transactions.return_value = "TXID_GROUP_CREATE"
+
+    with (
+        patch("gateway.algod_client.get_algod_client", return_value=mock_ac),
+        patch("algosdk.transaction.wait_for_confirmation", return_value={"confirmed-round": 12}),
+    ):
+        tx_id = algod_client.verify_and_send_bounty_creation_txns(
+            f"{pay_b64},{app_b64}", 555, addr, CREATE_SELECTOR
+        )
+
+    assert tx_id == "TXID_GROUP_CREATE"
+    mock_ac.send_transactions.assert_called_once()
+
+
+def test_create_bounty_endpoint_rejects_spoofed_txn_when_non_sandbox(client, db_session):
+    c_sk, c_addr = account.generate_account()
+    db_session.add(
+        Agent(
+            address=c_addr,
+            karma=50,
+            steward_name="Stew C",
+            steward_email="c@example.com",
+            steward_verified=True,
+        )
+    )
+    db_session.commit()
+
+    token = get_auth_token(client, c_addr)
+    spoof_b64 = _make_signed_zero_pay(c_sk, c_addr)
+    mock_ac = MagicMock()
+
+    with (
+        patch("gateway.routers.bounties.sandbox_active", False),
+        patch("gateway.algod_client.get_algod_client", return_value=mock_ac),
+    ):
+        res = client.post(
+            "/api/v1/bounties",
+            json={
+                "description": "Test bounty",
+                "repo_url": "https://github.com/IcanBENCHurCAT/algo-bounty",
+                "issue_number": 999,
+                "amount": 1000000,
+                "app_id": 555,
+                "signed_txn": spoof_b64,
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert res.status_code == 400, res.text
+    mock_ac.send_raw_transaction.assert_not_called()
+    mock_ac.send_transactions.assert_not_called()
