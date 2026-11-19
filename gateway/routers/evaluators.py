@@ -5,14 +5,18 @@ from datetime import datetime, timezone
 from typing import Optional
 from pydantic import BaseModel
 
+from algosdk.abi import Method
+
 from ..database import Agent, Evaluator, DisputeEvaluator, Bounty
 from ..dependencies import get_db
 from ..auth import get_current_user
-from ..algod_client import get_algod_client, send_signed_transaction
+from ..algod_client import get_algod_client, send_signed_transaction, verify_and_send_app_call_txn
 from ..config import settings
 from ..broker import broker
 
 router = APIRouter(prefix="/api/v1/evaluators", tags=["evaluators"])
+
+_VOTE_DISPUTE_SELECTOR = Method.from_signature("vote_dispute(uint64)void").get_selector()
 
 class VoteRequest(BaseModel):
     vote: str  # "worker", "payer", or "split"
@@ -112,11 +116,22 @@ def vote_dispute(
     if assignment.vote is not None:
         raise HTTPException(status_code=400, detail="You have already cast your vote for this dispute")
 
-    if settings.ALGORAND_NETWORK != "sandbox" and not body.signed_txn:
-        raise HTTPException(status_code=400, detail="signed_txn is required")
-
     tx_id = None
-    if body.signed_txn:
+    if settings.ALGORAND_NETWORK != "sandbox":
+        if bounty.app_id is None:
+            raise HTTPException(status_code=400, detail="Bounty has no on-chain app_id")
+        if not body.signed_txn:
+            raise HTTPException(status_code=400, detail="signed_txn is required")
+        try:
+            tx_id = verify_and_send_app_call_txn(
+                signed_txn_b64=body.signed_txn,
+                expected_app_id=bounty.app_id,
+                expected_sender=current_user,
+                expected_selector=_VOTE_DISPUTE_SELECTOR,
+            )
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"On-chain transaction failed: {e}")
+    elif body.signed_txn:
         try:
             tx_id = send_signed_transaction(body.signed_txn)
         except Exception as e:

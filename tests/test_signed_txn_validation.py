@@ -12,7 +12,7 @@ from algosdk.transaction import (
 )
 
 from gateway import algod_client
-from gateway.database import Agent, Bounty
+from gateway.database import Agent, Bounty, DisputeEvaluator
 from tests.conftest import get_auth_token
 
 GENESIS_HASH = base64.b64encode(b"\x00" * 32).decode()
@@ -359,3 +359,105 @@ def test_create_bounty_endpoint_rejects_spoofed_txn_when_non_sandbox(client, db_
     assert res.status_code == 400, res.text
     mock_ac.send_raw_transaction.assert_not_called()
     mock_ac.send_transactions.assert_not_called()
+
+
+# ─── Dispute vote (vote_dispute) signed_txn validation ───────────────────────
+
+VOTE_DISPUTE_SELECTOR = Method.from_signature("vote_dispute(uint64)void").get_selector()
+
+
+def _seed_dispute_vote(db_session, app_id=555):
+    _seed_wallets_and_bounty(db_session, status="disputed", app_id=app_id)
+    ev_sk, ev_addr = account.generate_account()
+    db_session.add(Agent(address=ev_addr, karma=80))
+    db_session.add(DisputeEvaluator(bounty_id="b_val_1", evaluator_address=ev_addr))
+    db_session.commit()
+    return ev_sk, ev_addr
+
+
+def test_vote_dispute_non_sandbox_rejects_missing_app_id(client, db_session):
+    ev_sk, ev_addr = _seed_dispute_vote(db_session, app_id=None)
+    token = get_auth_token(client, ev_addr)
+    signed_b64 = _make_signed_app_call(ev_sk, ev_addr, 555, VOTE_DISPUTE_SELECTOR)
+    mock_ac = MagicMock()
+
+    with (
+        patch("gateway.config.Config.ALGORAND_NETWORK", new_callable=PropertyMock, return_value="testnet"),
+        patch("gateway.algod_client.get_algod_client", return_value=mock_ac),
+    ):
+        res = client.post(
+            "/api/v1/evaluators/bounties/b_val_1/vote",
+            json={"vote": "worker", "signed_txn": signed_b64},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert res.status_code == 400
+    assert "no on-chain app_id" in res.json()["detail"]
+    assignment = db_session.query(DisputeEvaluator).filter_by(bounty_id="b_val_1", evaluator_address=ev_addr).first()
+    assert assignment.vote is None
+    mock_ac.send_raw_transaction.assert_not_called()
+
+
+@pytest.mark.parametrize("bad_case", ["zero_pay", "wrong_app_id", "wrong_sender", "rekey_to", "wrong_selector"])
+def test_vote_dispute_non_sandbox_rejects_invalid_txn(client, db_session, bad_case):
+    ev_sk, ev_addr = _seed_dispute_vote(db_session, app_id=555)
+    token = get_auth_token(client, ev_addr)
+    other_sk, other_addr = account.generate_account()
+
+    if bad_case == "zero_pay":
+        signed_b64 = _make_signed_zero_pay(ev_sk, ev_addr)
+    elif bad_case == "wrong_app_id":
+        signed_b64 = _make_signed_app_call(ev_sk, ev_addr, 999, VOTE_DISPUTE_SELECTOR)
+    elif bad_case == "wrong_sender":
+        signed_b64 = _make_signed_app_call(other_sk, other_addr, 555, VOTE_DISPUTE_SELECTOR)
+    elif bad_case == "rekey_to":
+        signed_b64 = _make_signed_app_call(ev_sk, ev_addr, 555, VOTE_DISPUTE_SELECTOR, rekey_to=other_addr)
+    else:
+        signed_b64 = _make_signed_app_call(ev_sk, ev_addr, 555, SELECTORS["approve"])
+
+    mock_ac = MagicMock()
+    with (
+        patch("gateway.config.Config.ALGORAND_NETWORK", new_callable=PropertyMock, return_value="testnet"),
+        patch("gateway.algod_client.get_algod_client", return_value=mock_ac),
+    ):
+        res = client.post(
+            "/api/v1/evaluators/bounties/b_val_1/vote",
+            json={"vote": "worker", "signed_txn": signed_b64},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert res.status_code == 400
+    assert "On-chain transaction failed" in res.json()["detail"]
+    assignment = db_session.query(DisputeEvaluator).filter_by(bounty_id="b_val_1", evaluator_address=ev_addr).first()
+    assert assignment.vote is None
+    mock_ac.send_raw_transaction.assert_not_called()
+
+
+def test_vote_dispute_non_sandbox_accepts_valid_app_call_txn(client, db_session):
+    ev_sk, ev_addr = _seed_dispute_vote(db_session, app_id=555)
+    token = get_auth_token(client, ev_addr)
+    signed_b64 = _make_signed_app_call(ev_sk, ev_addr, 555, VOTE_DISPUTE_SELECTOR)
+
+    mock_ac = MagicMock()
+    mock_ac.send_raw_transaction.return_value = "TXID_VOTE_DISPUTE"
+
+    with (
+        patch("gateway.config.Config.ALGORAND_NETWORK", new_callable=PropertyMock, return_value="testnet"),
+        patch("gateway.algod_client.get_algod_client", return_value=mock_ac),
+        patch("algosdk.transaction.wait_for_confirmation", return_value={"confirmed-round": 15}),
+    ):
+        res = client.post(
+            "/api/v1/evaluators/bounties/b_val_1/vote",
+            json={"vote": "worker", "signed_txn": signed_b64},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["status"] == "voted"
+    assert body["vote"] == "worker"
+    assert body["tx_id"] == "TXID_VOTE_DISPUTE"
+    db_session.expire_all()
+    assignment = db_session.query(DisputeEvaluator).filter_by(bounty_id="b_val_1", evaluator_address=ev_addr).first()
+    assert assignment.vote == "worker"
+    mock_ac.send_raw_transaction.assert_called_once()
