@@ -17,6 +17,13 @@ from ..broker import broker
 router = APIRouter(prefix="/api/v1/evaluators", tags=["evaluators"])
 
 _VOTE_DISPUTE_SELECTOR = Method.from_signature("vote_dispute(uint64)void").get_selector()
+# Matches EscrowContract.vote_dispute(vote_option: UInt64) in escrow.py:
+# 1 = worker (agent win), 2 = payer (creator win), 3 = split
+_VOTE_OPTION_CODES: dict[str, int] = {
+    "worker": 1,
+    "payer": 2,
+    "split": 3,
+}
 
 class VoteRequest(BaseModel):
     vote: str  # "worker", "payer", or "split"
@@ -128,6 +135,7 @@ def vote_dispute(
                 expected_app_id=bounty.app_id,
                 expected_sender=current_user,
                 expected_selector=_VOTE_DISPUTE_SELECTOR,
+                expected_args=[_VOTE_OPTION_CODES[vote_val].to_bytes(8, "big")],
             )
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"On-chain transaction failed: {e}")
