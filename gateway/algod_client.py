@@ -522,6 +522,7 @@ def _validate_app_call_txn(
     expected_app_id: int | None,
     expected_sender: str,
     expected_selector: bytes,
+    expected_args: list[bytes] | None = None,
 ) -> None:
     """Validate an ApplicationCallTxn against expected NoOp, sender, app_id, and ARC-4 selector."""
     from algosdk.transaction import OnComplete
@@ -540,6 +541,9 @@ def _validate_app_call_txn(
     app_args = getattr(txn, "app_args", None) or []
     if not app_args or app_args[0] != expected_selector:
         raise ValueError("Transaction ARC-4 method selector does not match expected endpoint")
+    if expected_args is not None:
+        if list(app_args[1:]) != expected_args:
+            raise ValueError("Transaction ARC-4 arguments do not match expected request parameters")
 
 
 def verify_and_send_app_call_txn(
@@ -547,17 +551,25 @@ def verify_and_send_app_call_txn(
     expected_app_id: int,
     expected_sender: str,
     expected_selector: bytes,
+    expected_args: list[bytes] | None = None,
 ) -> str:
     """Decode, validate, broadcast, and confirm an ARC-4 application call transaction.
 
     Ensures the payload is a ``SignedTransaction`` for a NoOp ``ApplicationCallTxn``
-    without ``rekey_to``, matching the expected sender, application ID, and 4-byte
-    ARC-4 method selector before broadcasting and waiting for confirmation.
+    without ``rekey_to``, matching the expected sender, application ID, 4-byte
+    ARC-4 method selector, and optional trailing ARC-4 arguments before broadcasting
+    and waiting for confirmation.
     """
     from algosdk.transaction import wait_for_confirmation
 
     normalized_b64, stxn = _decode_signed_txn(signed_txn_b64)
-    _validate_app_call_txn(stxn.transaction, expected_app_id, expected_sender, expected_selector)
+    _validate_app_call_txn(
+        stxn.transaction,
+        expected_app_id,
+        expected_sender,
+        expected_selector,
+        expected_args=expected_args,
+    )
 
     tx_id = send_signed_transaction(normalized_b64)
     wait_for_confirmation(get_algod_client(), tx_id, 4)

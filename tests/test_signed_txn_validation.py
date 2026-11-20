@@ -34,13 +34,14 @@ def _make_signed_app_call(
     selector: bytes,
     on_complete: OnComplete = OnComplete.NoOpOC,
     rekey_to: str | None = None,
+    extra_args: list[bytes] | None = None,
 ) -> str:
     txn = ApplicationCallTxn(
         sender=sender,
         sp=SP,
         index=app_id,
         on_complete=on_complete,
-        app_args=[selector],
+        app_args=[selector, *(extra_args or [])],
         rekey_to=rekey_to,
     )
     return encoding.msgpack_encode(txn.sign(sk))
@@ -134,6 +135,30 @@ def test_verify_accepts_valid_app_call_txn():
     assert tx_id == "TXID_VALID_100"
     mock_ac.send_raw_transaction.assert_called_once()
     mock_wait.assert_called_once_with(mock_ac, "TXID_VALID_100", 4)
+
+
+@pytest.mark.parametrize(
+    "extra_args",
+    [
+        None,
+        [(2).to_bytes(8, "big")],
+        [(1).to_bytes(8, "big"), (99).to_bytes(8, "big")],
+    ],
+    ids=["missing_args", "mismatched_args", "extra_trailing_args"],
+)
+def test_verify_rejects_mismatched_expected_args(extra_args):
+    sk, addr = account.generate_account()
+    b64 = _make_signed_app_call(
+        sk, addr, 100, VOTE_DISPUTE_SELECTOR, extra_args=extra_args
+    )
+    with pytest.raises(ValueError, match="arguments"):
+        algod_client.verify_and_send_app_call_txn(
+            b64,
+            100,
+            addr,
+            VOTE_DISPUTE_SELECTOR,
+            expected_args=[(1).to_bytes(8, "big")],
+        )
 
 
 # ─── Endpoint integration tests (non-sandbox mode) ──────────────────────────
@@ -433,10 +458,55 @@ def test_vote_dispute_non_sandbox_rejects_invalid_txn(client, db_session, bad_ca
     mock_ac.send_raw_transaction.assert_not_called()
 
 
-def test_vote_dispute_non_sandbox_accepts_valid_app_call_txn(client, db_session):
+@pytest.mark.parametrize(
+    "bad_extra_args",
+    [
+        [(2).to_bytes(8, "big")],
+        [(3).to_bytes(8, "big")],
+        None,
+        [(99).to_bytes(8, "big")],
+    ],
+    ids=["payer_code_2", "split_code_3", "missing_arg", "invalid_code_99"],
+)
+def test_vote_dispute_non_sandbox_rejects_mismatched_vote_arg(client, db_session, bad_extra_args):
     ev_sk, ev_addr = _seed_dispute_vote(db_session, app_id=555)
     token = get_auth_token(client, ev_addr)
-    signed_b64 = _make_signed_app_call(ev_sk, ev_addr, 555, VOTE_DISPUTE_SELECTOR)
+    signed_b64 = _make_signed_app_call(
+        ev_sk, ev_addr, 555, VOTE_DISPUTE_SELECTOR, extra_args=bad_extra_args
+    )
+
+    mock_ac = MagicMock()
+    with (
+        patch("gateway.config.Config.ALGORAND_NETWORK", new_callable=PropertyMock, return_value="testnet"),
+        patch("gateway.algod_client.get_algod_client", return_value=mock_ac),
+    ):
+        res = client.post(
+            "/api/v1/evaluators/bounties/b_val_1/vote",
+            json={"vote": "worker", "signed_txn": signed_b64},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert res.status_code == 400
+    assert "On-chain transaction failed" in res.json()["detail"]
+    assignment = db_session.query(DisputeEvaluator).filter_by(bounty_id="b_val_1", evaluator_address=ev_addr).first()
+    assert assignment.vote is None
+    mock_ac.send_raw_transaction.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "vote_str,code",
+    [("worker", 1), ("payer", 2), ("split", 3)],
+)
+def test_vote_dispute_non_sandbox_accepts_valid_app_call_txn(client, db_session, vote_str, code):
+    ev_sk, ev_addr = _seed_dispute_vote(db_session, app_id=555)
+    token = get_auth_token(client, ev_addr)
+    signed_b64 = _make_signed_app_call(
+        ev_sk,
+        ev_addr,
+        555,
+        VOTE_DISPUTE_SELECTOR,
+        extra_args=[code.to_bytes(8, "big")],
+    )
 
     mock_ac = MagicMock()
     mock_ac.send_raw_transaction.return_value = "TXID_VOTE_DISPUTE"
@@ -448,16 +518,16 @@ def test_vote_dispute_non_sandbox_accepts_valid_app_call_txn(client, db_session)
     ):
         res = client.post(
             "/api/v1/evaluators/bounties/b_val_1/vote",
-            json={"vote": "worker", "signed_txn": signed_b64},
+            json={"vote": vote_str, "signed_txn": signed_b64},
             headers={"Authorization": f"Bearer {token}"},
         )
 
     assert res.status_code == 200, res.text
     body = res.json()
     assert body["status"] == "voted"
-    assert body["vote"] == "worker"
+    assert body["vote"] == vote_str
     assert body["tx_id"] == "TXID_VOTE_DISPUTE"
     db_session.expire_all()
     assignment = db_session.query(DisputeEvaluator).filter_by(bounty_id="b_val_1", evaluator_address=ev_addr).first()
-    assert assignment.vote == "worker"
+    assert assignment.vote == vote_str
     mock_ac.send_raw_transaction.assert_called_once()
