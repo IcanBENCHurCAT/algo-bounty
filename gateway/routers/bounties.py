@@ -275,12 +275,18 @@ def create_bounty(body: BountyCreate, db: Session = Depends(get_db), current_use
         if not body.signed_txn:
             raise HTTPException(status_code=400, detail="signed_txn is required for on-chain deployment")
 
+        expected_amount = pending_bounty.amount if body.bounty_id else body.amount
+        expected_asset_id = pending_bounty.asset_id if body.bounty_id else body.asset_id
+
         try:
             tx_id = verify_and_send_bounty_creation_txns(
                 signed_txn_b64=body.signed_txn,
                 expected_app_id=app_id,
                 expected_sender=current_user,
                 expected_selector=_ESCROW_METHOD_SELECTORS["create"],
+                expected_bounty_id=bounty_id,
+                expected_amount=expected_amount,
+                expected_asset_id=expected_asset_id,
             )
             onchain = True
         except ValueError as e:
