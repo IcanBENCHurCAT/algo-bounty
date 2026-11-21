@@ -1,4 +1,5 @@
 import base64
+from datetime import UTC, datetime
 from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
@@ -308,6 +309,32 @@ CREATE_SELECTOR = Method.from_signature(
 ).get_selector()
 
 
+def _make_create_bounty_args(
+    bounty_id: str,
+    amount: int,
+    asset_id: int = 0,
+    sender_addr: str | None = None,
+) -> list[bytes]:
+    """Build the 9 ARC-4 arguments for create_bounty(byte[],uint64,uint64,uint64,uint64,address,address,address,uint64)void."""
+    addr_bytes = (
+        encoding.decode_address(sender_addr)
+        if sender_addr is not None
+        else b"\x00" * 32
+    )
+    raw_id = bounty_id.encode("utf-8")
+    return [
+        len(raw_id).to_bytes(2, "big") + raw_id,
+        amount.to_bytes(8, "big"),
+        (1000).to_bytes(8, "big"),
+        asset_id.to_bytes(8, "big"),
+        (500).to_bytes(8, "big"),
+        addr_bytes,
+        addr_bytes,
+        addr_bytes,
+        (0).to_bytes(8, "big"),
+    ]
+
+
 def test_create_bounty_verify_rejects_zero_pay():
     sk, addr = account.generate_account()
     pay_b64 = _make_signed_zero_pay(sk, addr)
@@ -384,6 +411,163 @@ def test_create_bounty_endpoint_rejects_spoofed_txn_when_non_sandbox(client, db_
     assert res.status_code == 400, res.text
     mock_ac.send_raw_transaction.assert_not_called()
     mock_ac.send_transactions.assert_not_called()
+
+
+def test_create_bounty_verify_rejects_wrong_arg_count():
+    sk, addr = account.generate_account()
+    app_b64 = _make_signed_app_call(sk, addr, 555, CREATE_SELECTOR, extra_args=[b"only_one"])
+    with pytest.raises(ValueError, match="argument count"):
+        algod_client.verify_and_send_bounty_creation_txns(
+            app_b64, 555, addr, CREATE_SELECTOR,
+            expected_bounty_id="b_1", expected_amount=1_000_000, expected_asset_id=0,
+        )
+
+
+def test_create_bounty_verify_rejects_mismatched_bounty_id():
+    sk, addr = account.generate_account()
+    args = _make_create_bounty_args("b_wrong", 1_000_000, 0, addr)
+    app_b64 = _make_signed_app_call(sk, addr, 555, CREATE_SELECTOR, extra_args=args)
+    with pytest.raises(ValueError, match="bounty_id"):
+        algod_client.verify_and_send_bounty_creation_txns(
+            app_b64, 555, addr, CREATE_SELECTOR,
+            expected_bounty_id="b_expected", expected_amount=1_000_000, expected_asset_id=0,
+        )
+
+
+def test_create_bounty_verify_rejects_mismatched_escrow_amount():
+    sk, addr = account.generate_account()
+    args = _make_create_bounty_args("b_1", 1, 0, addr)
+    app_b64 = _make_signed_app_call(sk, addr, 555, CREATE_SELECTOR, extra_args=args)
+    with pytest.raises(ValueError, match="escrow_amount"):
+        algod_client.verify_and_send_bounty_creation_txns(
+            app_b64, 555, addr, CREATE_SELECTOR,
+            expected_bounty_id="b_1", expected_amount=10_000_000, expected_asset_id=0,
+        )
+
+
+def test_create_bounty_verify_rejects_mismatched_asset_id():
+    sk, addr = account.generate_account()
+    args = _make_create_bounty_args("b_1", 1_000_000, 999, addr)
+    app_b64 = _make_signed_app_call(sk, addr, 555, CREATE_SELECTOR, extra_args=args)
+    with pytest.raises(ValueError, match="asset_id"):
+        algod_client.verify_and_send_bounty_creation_txns(
+            app_b64, 555, addr, CREATE_SELECTOR,
+            expected_bounty_id="b_1", expected_amount=1_000_000, expected_asset_id=0,
+        )
+
+
+def test_create_bounty_verify_accepts_matching_args():
+    sk, addr = account.generate_account()
+    pay_b64 = _make_signed_zero_pay(sk, addr)
+    args = _make_create_bounty_args("b_match", 5_000_000, 31566704, addr)
+    app_b64 = _make_signed_app_call(sk, addr, 555, CREATE_SELECTOR, extra_args=args)
+
+    mock_ac = MagicMock()
+    mock_ac.send_transactions.return_value = "TXID_MATCH_ARGS"
+
+    with (
+        patch("gateway.algod_client.get_algod_client", return_value=mock_ac),
+        patch("algosdk.transaction.wait_for_confirmation", return_value={"confirmed-round": 15}),
+    ):
+        tx_id = algod_client.verify_and_send_bounty_creation_txns(
+            f"{pay_b64},{app_b64}", 555, addr, CREATE_SELECTOR,
+            expected_bounty_id="b_match", expected_amount=5_000_000, expected_asset_id=31566704,
+        )
+
+    assert tx_id == "TXID_MATCH_ARGS"
+    mock_ac.send_transactions.assert_called_once()
+
+
+def _seed_creator_agent(db_session):
+    c_sk, c_addr = account.generate_account()
+    db_session.add(
+        Agent(
+            address=c_addr,
+            karma=50,
+            steward_name="Stew C",
+            steward_email="c@example.com",
+            steward_verified=True,
+        )
+    )
+    db_session.commit()
+    return c_sk, c_addr
+
+
+@pytest.mark.parametrize(
+    ("txn_bounty_id", "txn_amount", "txn_asset_id", "expected_err"),
+    [
+        ("b_1700000000", 1, 0, "escrow_amount"),
+        ("b_1700000000", 10_000_000, 999, "asset_id"),
+        ("b_spoofed_id", 10_000_000, 0, "bounty_id"),
+    ],
+)
+def test_create_bounty_endpoint_rejects_spoofed_arc4_args(
+    client, db_session, txn_bounty_id, txn_amount, txn_asset_id, expected_err
+):
+    c_sk, c_addr = _seed_creator_agent(db_session)
+    token = get_auth_token(client, c_addr)
+    args = _make_create_bounty_args(txn_bounty_id, txn_amount, txn_asset_id, c_addr)
+    signed_b64 = _make_signed_app_call(c_sk, c_addr, 555, CREATE_SELECTOR, extra_args=args)
+    mock_ac = MagicMock()
+
+    with (
+        patch("gateway.routers.bounties.sandbox_active", False),
+        patch("gateway.routers.bounties.datetime") as mock_dt,
+        patch("gateway.algod_client.get_algod_client", return_value=mock_ac),
+    ):
+        mock_dt.now.return_value = datetime.fromtimestamp(1700000000, tz=UTC)
+        res = client.post(
+            "/api/v1/bounties",
+            json={
+                "description": "Test bounty",
+                "repo_url": "https://github.com/IcanBENCHurCAT/algo-bounty",
+                "amount": 10_000_000,
+                "asset_id": 0,
+                "app_id": 555,
+                "signed_txn": signed_b64,
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert res.status_code == 400, res.text
+    assert expected_err in res.json()["detail"]
+    mock_ac.send_raw_transaction.assert_not_called()
+    mock_ac.send_transactions.assert_not_called()
+    assert db_session.query(Bounty).count() == 0
+
+
+def test_create_bounty_endpoint_accepts_matching_arc4_args(client, db_session):
+    c_sk, c_addr = _seed_creator_agent(db_session)
+    token = get_auth_token(client, c_addr)
+    args = _make_create_bounty_args("b_1700000000", 10_000_000, 0, c_addr)
+    signed_b64 = _make_signed_app_call(c_sk, c_addr, 555, CREATE_SELECTOR, extra_args=args)
+    mock_ac = MagicMock()
+    mock_ac.send_raw_transaction.return_value = "TXID_VALID_CREATE"
+
+    with (
+        patch("gateway.routers.bounties.sandbox_active", False),
+        patch("gateway.routers.bounties.datetime") as mock_dt,
+        patch("gateway.algod_client.get_algod_client", return_value=mock_ac),
+        patch("algosdk.transaction.wait_for_confirmation", return_value={"confirmed-round": 20}),
+    ):
+        mock_dt.now.return_value = datetime.fromtimestamp(1700000000, tz=UTC)
+        res = client.post(
+            "/api/v1/bounties",
+            json={
+                "description": "Test bounty",
+                "repo_url": "https://github.com/IcanBENCHurCAT/algo-bounty",
+                "amount": 10_000_000,
+                "asset_id": 0,
+                "app_id": 555,
+                "signed_txn": signed_b64,
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert res.status_code == 200, res.text
+    assert res.json()["tx_id"] == "TXID_VALID_CREATE"
+    mock_ac.send_raw_transaction.assert_called_once()
+    assert db_session.query(Bounty).filter(Bounty.bounty_id == "b_1700000000").count() == 1
 
 
 # ─── Dispute vote (vote_dispute) signed_txn validation ───────────────────────

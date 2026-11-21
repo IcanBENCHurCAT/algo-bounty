@@ -576,17 +576,51 @@ def verify_and_send_app_call_txn(
     return tx_id
 
 
+def _validate_create_bounty_args(
+    txn,
+    expected_bounty_id: str | None,
+    expected_amount: int | None,
+    expected_asset_id: int | None,
+) -> None:
+    """Validate create_bounty ARC-4 arguments against expected request parameters."""
+    if expected_bounty_id is None and expected_amount is None and expected_asset_id is None:
+        return
+
+    app_args = getattr(txn, "app_args", None) or []
+    if len(app_args) != 10:
+        raise ValueError("create_bounty transaction ARC-4 argument count does not match ABI signature")
+
+    if expected_bounty_id is not None:
+        raw_id = expected_bounty_id.encode("utf-8")
+        if len(raw_id) > 64:
+            raise ValueError("expected_bounty_id exceeds 64 bytes")
+        if app_args[1] != len(raw_id).to_bytes(2, "big") + raw_id:
+            raise ValueError("Transaction ARC-4 bounty_id does not match request bounty_id")
+
+    if expected_amount is not None:
+        if not (0 < expected_amount < (1 << 64)) or app_args[2] != expected_amount.to_bytes(8, "big"):
+            raise ValueError("Transaction ARC-4 escrow_amount does not match request amount")
+
+    if expected_asset_id is not None:
+        if not (0 <= expected_asset_id < (1 << 64)) or app_args[4] != expected_asset_id.to_bytes(8, "big"):
+            raise ValueError("Transaction ARC-4 asset_id does not match request asset_id")
+
+
 def verify_and_send_bounty_creation_txns(
     signed_txn_b64: str,
     expected_app_id: int | None,
     expected_sender: str,
     expected_selector: bytes,
+    expected_bounty_id: str | None = None,
+    expected_amount: int | None = None,
+    expected_asset_id: int | None = None,
 ) -> str:
     """Validate, broadcast, and confirm a single or grouped bounty creation transaction payload.
 
     Ensures every item is a ``SignedTransaction`` without ``rekey_to``, and at least one
     transaction in the payload is a valid NoOp ``ApplicationCallTxn`` matching
-    ``expected_sender``, ``expected_app_id`` (if provided), and ``expected_selector``.
+    ``expected_sender``, ``expected_app_id`` (if provided), ``expected_selector``, and
+    optional ``create_bounty`` ARC-4 arguments (``bounty_id``, ``amount``, ``asset_id``).
     """
     from algosdk.transaction import wait_for_confirmation
 
@@ -600,18 +634,33 @@ def verify_and_send_bounty_creation_txns(
         if getattr(stxn.transaction, "rekey_to", None) is not None:
             raise ValueError("Transaction must not set rekey_to")
 
-    last_err: ValueError | None = None
+    arg_err: ValueError | None = None
+    appl_err: ValueError | None = None
+    other_err: ValueError | None = None
     matched = False
     for _, stxn in decoded:
         try:
             _validate_app_call_txn(stxn.transaction, expected_app_id, expected_sender, expected_selector)
+        except ValueError as exc:
+            if getattr(stxn.transaction, "type", None) == "appl":
+                appl_err = exc
+            else:
+                other_err = exc
+            continue
+        try:
+            _validate_create_bounty_args(
+                stxn.transaction,
+                expected_bounty_id=expected_bounty_id,
+                expected_amount=expected_amount,
+                expected_asset_id=expected_asset_id,
+            )
             matched = True
             break
         except ValueError as exc:
-            last_err = exc
+            arg_err = exc
 
     if not matched:
-        raise last_err or ValueError("No valid create_bounty application call found in signed_txn")
+        raise arg_err or appl_err or other_err or ValueError("No valid create_bounty application call found in signed_txn")
 
     client = get_algod_client()
     if len(decoded) > 1:
