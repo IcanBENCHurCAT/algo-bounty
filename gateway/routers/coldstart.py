@@ -9,13 +9,13 @@ When both are available, well-funded newcomers can participate trustlessly via
 collateral, while community-driven trust building happens via co-signing.
 """
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from ..database import Agent, Bounty, CollateralDeposit, Vouch
-from ..auth import get_current_user
+from ..auth import get_current_user, is_admin
 from ..dependencies import get_db
 from ..schemas import BountyCreateResponse
 
@@ -239,9 +239,9 @@ def get_my_vouches(
 @router.post("/vouch/{vouch_id}/resolve")
 def resolve_vouch(
     vouch_id: int,
-    outcome: str = Query(..., description="'resolved', 'slashed', or 'expired'"),
+    outcome: Literal["resolved", "slashed", "expired"] = Query(..., description="'resolved', 'slashed', or 'expired'"),
     db: Session = Depends(get_db),
-    current_user: str = Depends(get_current_user),
+    admin_user: str = Depends(is_admin),
 ):
     """Resolve a vouch after its associated bounty is complete.
 
@@ -291,9 +291,9 @@ def resolve_vouch(
 @router.post("/deposit/{deposit_id}/release")
 def release_collateral(
     deposit_id: int,
-    outcome: str = Query(..., description="'released' (success) or 'slashed' (failure)"),
+    outcome: Literal["released", "slashed"] = Query(..., description="'released' (success) or 'slashed' (failure)"),
     db: Session = Depends(get_db),
-    current_user: str = Depends(get_current_user),
+    admin_user: str = Depends(is_admin),
 ):
     """Release collateral after its associated bounty is resolved.
 
@@ -302,7 +302,6 @@ def release_collateral(
     """
     deposit = db.query(CollateralDeposit).filter(
         CollateralDeposit.id == deposit_id,
-        CollateralDeposit.agent_address == current_user,
         CollateralDeposit.status == "locked",
     ).first()
     if not deposit:
@@ -311,7 +310,7 @@ def release_collateral(
     deposit.status = outcome
     deposit.released_at = datetime.now(timezone.utc)
 
-    agent = db.query(Agent).filter(Agent.address == current_user).first()
+    agent = db.query(Agent).filter(Agent.address == deposit.agent_address).first()
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
 
@@ -319,21 +318,21 @@ def release_collateral(
         # Agent gets ALGO back + 5% bonus
         bonus = deposit.amount_microalgo * 5 // 100
         agent.karma += 15  # bonus karma for successful collateral path
-
-        # Update agent flags
-        active_collateral = (
-            db.query(CollateralDeposit)
-            .filter(
-                CollateralDeposit.agent_address == current_user,
-                CollateralDeposit.status == "locked",
-            )
-            .first()
-        )
-        if not active_collateral:
-            agent.has_collateral = False
-
     elif outcome == "slashed":
         agent.karma -= 5
+
+    # Update agent flags if no other locked collateral deposits remain
+    active_collateral = (
+        db.query(CollateralDeposit)
+        .filter(
+            CollateralDeposit.agent_address == deposit.agent_address,
+            CollateralDeposit.status == "locked",
+            CollateralDeposit.id != deposit.id,
+        )
+        .first()
+    )
+    if not active_collateral:
+        agent.has_collateral = False
 
     db.commit()
     db.refresh(deposit)
