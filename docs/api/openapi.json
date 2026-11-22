@@ -2527,6 +2527,11 @@
             "in": "query",
             "required": true,
             "schema": {
+              "enum": [
+                "resolved",
+                "slashed",
+                "expired"
+              ],
               "type": "string",
               "description": "'resolved', 'slashed', or 'expired'",
               "title": "Outcome"
@@ -2584,6 +2589,10 @@
             "in": "query",
             "required": true,
             "schema": {
+              "enum": [
+                "released",
+                "slashed"
+              ],
               "type": "string",
               "description": "'released' (success) or 'slashed' (failure)",
               "title": "Outcome"
