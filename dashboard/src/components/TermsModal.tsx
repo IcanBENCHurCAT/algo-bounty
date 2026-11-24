@@ -1,23 +1,26 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useSyncExternalStore } from 'react'
+
+const subscribeStorage = (onStoreChange: () => void) => {
+  window.addEventListener('storage', onStoreChange)
+  return () => window.removeEventListener('storage', onStoreChange)
+}
 
 export function TermsModal() {
-  const [open, setOpen] = useState(false)
-
-  useEffect(() => {
-    const accepted = localStorage.getItem('algobounty_tos_accepted')
-    if (!accepted) {
-      setOpen(true)
-    }
-  }, [])
+  const [dismissed, setDismissed] = useState(false)
+  const needsAcceptance = useSyncExternalStore(
+    subscribeStorage,
+    () => !localStorage.getItem('algobounty_tos_accepted'),
+    () => false,
+  )
 
   const handleAccept = () => {
     localStorage.setItem('algobounty_tos_accepted', 'true')
-    setOpen(false)
+    setDismissed(true)
   }
 
-  if (!open) return null
+  if (dismissed || !needsAcceptance) return null
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">

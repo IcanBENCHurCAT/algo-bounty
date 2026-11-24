@@ -197,15 +197,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const e2eWallet = window.localStorage.getItem('algobounty_wallet_type')
       const storedJwt = getStoredToken()
       if (storedJwt && e2eAddr) {
-        setState((s) => ({
-          ...s,
-          address: e2eAddr,
-          connected: true,
-          walletType: e2eWallet || 'pera',
-          jwt: storedJwt,
-          loading: false,
-        }))
+        let cancelled = false
         authInProgress.current = true
+        void Promise.resolve().then(() => {
+          if (cancelled) return
+          setState((s) => ({
+            ...s,
+            address: e2eAddr,
+            connected: true,
+            walletType: e2eWallet || 'pera',
+            jwt: storedJwt,
+            loading: false,
+          }))
+        })
+        return () => {
+          cancelled = true
+        }
       }
       return
     }

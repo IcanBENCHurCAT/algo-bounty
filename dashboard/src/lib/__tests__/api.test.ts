@@ -21,7 +21,7 @@ describe('Token helpers in api.ts', () => {
 
     it('returns null if window is undefined', () => {
       const originalWindow = global.window;
-      // @ts-ignore
+      // @ts-expect-error testing missing window in SSR environment
       delete global.window;
 
       expect(getStoredToken()).toBeNull();
@@ -40,7 +40,7 @@ describe('Token helpers in api.ts', () => {
       const originalWindow = global.window;
       const setItemSpy = jest.spyOn(global.localStorage, 'setItem');
 
-      // @ts-ignore
+      // @ts-expect-error testing missing window in SSR environment
       delete global.window;
 
       storeToken('another-token');
@@ -67,7 +67,7 @@ describe('Token helpers in api.ts', () => {
       const originalWindow = global.window;
       const removeItemSpy = jest.spyOn(global.localStorage, 'removeItem');
 
-      // @ts-ignore
+      // @ts-expect-error testing missing window in SSR environment
       delete global.window;
 
       clearToken();

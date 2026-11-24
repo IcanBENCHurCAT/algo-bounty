@@ -1,4 +1,5 @@
 import { test } from '@playwright/test';
+import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -142,7 +143,6 @@ test('Capture Full Rich UI Lifecycle Screenshots (Marketplace, Claim Modal, Subm
   // Load session tokens
   const tokensPath = path.join(process.cwd(), 'session_tokens.json');
   if (!fs.existsSync(tokensPath) || fs.statSync(tokensPath).size <= 10) {
-    const { execSync } = require('child_process');
     execSync('python ../scripts/seed_demo_data.py');
   }
   const tokens = JSON.parse(fs.readFileSync(tokensPath, 'utf-8'));

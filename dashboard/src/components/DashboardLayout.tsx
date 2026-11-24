@@ -70,8 +70,19 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
   }, [connected, jwt])
 
   useEffect(() => {
-    void checkNotifications()
-  }, [checkNotifications])
+    if (!connected || !jwt) return
+    let cancelled = false
+    getNotifications(jwt)
+      .then((items) => {
+        if (!cancelled) setNotifCount(items.filter((n) => !n.read).length)
+      })
+      .catch(() => {
+        // silently ignore
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [connected, jwt])
 
   useEvents({
     enabled: connected,

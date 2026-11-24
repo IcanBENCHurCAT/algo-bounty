@@ -58,38 +58,29 @@ export default function BountyDetailPage() {
   const [showClaimModal, setShowClaimModal] = useState(false)
   const [claimTxn, setClaimTxn] = useState<TxnGenWithBreakdown | null>(null)
 
-  const fetchBounty = useCallback(async () => {
+  const fetchBountyData = useCallback(async () => {
     if (isFallbackMode) {
-      try {
-        let appId = parseInt(bountyId)
-        if (isNaN(appId) && bountyId.startsWith('b_')) {
-          appId = parseInt(bountyId.substring(2))
-        }
-        if (!isNaN(appId)) {
-          const b = await fetchBountyFromChain(appId)
-          setBounty(b)
-        } else {
-          throw new Error('Invalid App ID format for fallback mode')
-        }
-      } catch (err) {
-        toast.error('Failed to fetch bounty from chain: ' + (err instanceof Error ? err.message : 'unknown error'))
-      } finally {
-        setLoading(false)
+      let appId = parseInt(bountyId)
+      if (isNaN(appId) && bountyId.startsWith('b_')) {
+        appId = parseInt(bountyId.substring(2))
       }
-      return
+      if (!isNaN(appId)) {
+        const b = await fetchBountyFromChain(appId)
+        return { bounty: b, escrow: null as EscrowState | null, fallbackUsed: true }
+      }
+      throw new Error('Invalid App ID format for fallback mode')
     }
 
     try {
       const b = await getBounty(bountyId)
-      setBounty(b)
+      let esc: EscrowState | null = null
       if (b.app_id) {
-        getEscrow(b.app_id)
-          .then(setEscrow)
-          .catch(() => null) // escrow may not be indexed yet
+        esc = await getEscrow(b.app_id).catch(() => null)
       }
+      return { bounty: b, escrow: esc, fallbackUsed: false }
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : ''
-      const isNetworkOr5xx = 
+      const isNetworkOr5xx =
         errMsg.includes('Failed to fetch') ||
         errMsg.includes('NetworkError') ||
         errMsg.includes('HTTP 5') ||
@@ -100,31 +91,63 @@ export default function BountyDetailPage() {
 
       if (isNetworkOr5xx) {
         setFallbackMode(true)
-        try {
-          let appId = parseInt(bountyId)
-          if (isNaN(appId) && bountyId.startsWith('b_')) {
-            appId = parseInt(bountyId.substring(2))
-          }
-          if (!isNaN(appId)) {
-            const b = await fetchBountyFromChain(appId)
-            setBounty(b)
-          } else {
-            throw new Error('Invalid App ID format for fallback mode')
-          }
-        } catch (chainErr) {
-          toast.error('Gateway offline. Failed to fetch fallback data: ' + (chainErr instanceof Error ? chainErr.message : 'unknown error'))
+        let appId = parseInt(bountyId)
+        if (isNaN(appId) && bountyId.startsWith('b_')) {
+          appId = parseInt(bountyId.substring(2))
         }
-      } else if (err instanceof AlgoBountyError && err.code === 'BountyNotFound') {
+        if (!isNaN(appId)) {
+          const b = await fetchBountyFromChain(appId)
+          return { bounty: b, escrow: null as EscrowState | null, fallbackUsed: true }
+        }
+        throw new Error('Gateway offline. Invalid App ID format for fallback mode')
+      }
+      throw err
+    }
+  }, [bountyId, isFallbackMode, setFallbackMode])
+
+  const fetchBounty = useCallback(async () => {
+    try {
+      const data = await fetchBountyData()
+      setBounty(data.bounty)
+      if (data.escrow) setEscrow(data.escrow)
+    } catch (err) {
+      if (err instanceof AlgoBountyError && err.code === 'BountyNotFound') {
         router.push('/')
+      } else if (isFallbackMode) {
+        toast.error('Failed to fetch bounty from chain: ' + (err instanceof Error ? err.message : 'unknown error'))
+      } else {
+        toast.error('Gateway offline. Failed to fetch fallback data: ' + (err instanceof Error ? err.message : 'unknown error'))
       }
     } finally {
       setLoading(false)
     }
-  }, [bountyId, router, isFallbackMode, setFallbackMode, toast])
+  }, [fetchBountyData, isFallbackMode, router, toast])
 
   useEffect(() => {
-    void fetchBounty()
-  }, [fetchBounty])
+    let cancelled = false
+    fetchBountyData()
+      .then((data) => {
+        if (cancelled) return
+        setBounty(data.bounty)
+        if (data.escrow) setEscrow(data.escrow)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        if (err instanceof AlgoBountyError && err.code === 'BountyNotFound') {
+          router.push('/')
+        } else if (isFallbackMode) {
+          toast.error('Failed to fetch bounty from chain: ' + (err instanceof Error ? err.message : 'unknown error'))
+        } else {
+          toast.error('Gateway offline. Failed to fetch fallback data: ' + (err instanceof Error ? err.message : 'unknown error'))
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [fetchBountyData, isFallbackMode, router, toast])
 
   // Real-time: reload when this bounty changes
   const handleSseEvent = useCallback(
