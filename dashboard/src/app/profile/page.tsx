@@ -111,32 +111,40 @@ export default function ProfilePage() {
     useAuth()
   const toast = useToast()
 
-  const [profile, setProfile] = useState<AgentProfile | null>(authProfile)
-  const [loading, setLoading] = useState(false)
-  const [bountiesLoading, setBountiesLoading] = useState(false)
+  const [fetchedProfile, setFetchedProfile] = useState<AgentProfile | null>(null)
+  const [loadedProfileJwt, setLoadedProfileJwt] = useState<string | null>(null)
+  const [loadedBountiesKey, setLoadedBountiesKey] = useState<string | null>(null)
 
   const [tab, setTab] = useState<Tab>('created')
   const [bounties, setBounties] = useState<Bounty[]>([])
 
-  useEffect(() => {
-    setProfile(authProfile)
-  }, [authProfile])
+  const profile = fetchedProfile ?? authProfile
+  const loading = Boolean(connected && jwt && loadedProfileJwt !== jwt)
+  const bountiesKey = connected && address ? `${address}:${tab}` : null
+  const bountiesLoading = Boolean(bountiesKey && loadedBountiesKey !== bountiesKey)
 
   useEffect(() => {
     if (!connected || !jwt) return
-    setLoading(true)
+    let cancelled = false
     getMyProfile(jwt)
-      .then(setProfile)
+      .then((p) => {
+        if (!cancelled) setFetchedProfile(p)
+      })
       .catch(() => null)
-      .finally(() => setLoading(false))
+      .finally(() => {
+        if (!cancelled) setLoadedProfileJwt(jwt)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [connected, jwt])
 
   useEffect(() => {
-    if (!connected || !address) return
-    setBountiesLoading(true)
+    if (!bountiesKey || !address) return
+    let cancelled = false
 
     // Determine filters based on tab
-    const filters: any = { limit: 50 }
+    const filters: Record<string, string | number> = { limit: 50 }
     if (tab === 'created') {
       filters.creator = address
     } else {
@@ -147,13 +155,27 @@ export default function ProfilePage() {
     }
 
     getBounties(filters)
-      .then(res => setBounties(res.bounties))
-      .catch(() => setBounties([]))
-      .finally(() => setBountiesLoading(false))
-  }, [connected, address, tab])
+      .then((res) => {
+        if (!cancelled) setBounties(res.bounties)
+      })
+      .catch(() => {
+        if (!cancelled) setBounties([])
+      })
+      .finally(() => {
+        if (!cancelled) setLoadedBountiesKey(bountiesKey)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [bountiesKey, address, tab])
 
   const handleRefresh = async () => {
     await refreshProfile()
+    if (jwt) {
+      getMyProfile(jwt)
+        .then(setFetchedProfile)
+        .catch(() => null)
+    }
     toast.info('Profile refreshed')
   }
 

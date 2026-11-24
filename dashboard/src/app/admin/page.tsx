@@ -18,8 +18,26 @@ interface QuarantineRecord {
   resolution_note?: string
 }
 
+async function loadAdminData(token: string | null) {
+  const res = await getBounties({ status: 'disputed' })
+  const disputed = (res.bounties || []).filter((b) => b.status === 'disputed')
+  let qList: QuarantineRecord[] = []
+
+  if (token) {
+    try {
+      const qData = await getQuarantines(token)
+      qList = qData.quarantines || []
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      console.warn('Failed to fetch quarantines:', msg)
+    }
+  }
+
+  return { disputed, qList }
+}
+
 export default function AdminPortalPage() {
-  const { jwt, address } = useAuth()
+  const { jwt } = useAuth()
   const [activeTab, setActiveTab] = useState<'disputes' | 'quarantines'>('disputes')
   const [disputedBounties, setDisputedBounties] = useState<Bounty[]>([])
   const [quarantines, setQuarantines] = useState<QuarantineRecord[]>([])
@@ -32,28 +50,38 @@ export default function AdminPortalPage() {
     setLoading(true)
     setMessage(null)
     try {
-      // Fetch disputed bounties
-      const res = await getBounties({ status: 'disputed' })
-      setDisputedBounties((res.bounties || []).filter((b) => b.status === 'disputed'))
-
-      // Fetch quarantines if authenticated
-      if (jwt) {
-        try {
-          const qData = await getQuarantines(jwt)
-          setQuarantines(qData.quarantines || [])
-        } catch (e: any) {
-          console.warn('Failed to fetch quarantines:', e.message)
-        }
-      }
-    } catch (err: any) {
-      setMessage({ type: 'error', text: err.message || 'Failed to load admin data.' })
+      const { disputed, qList } = await loadAdminData(jwt)
+      setDisputedBounties(disputed)
+      setQuarantines(qList)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to load admin data.'
+      setMessage({ type: 'error', text: msg })
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
-    fetchData()
+    let cancelled = false
+    loadAdminData(jwt)
+      .then(({ disputed, qList }) => {
+        if (cancelled) return
+        setDisputedBounties(disputed)
+        setQuarantines(qList)
+        setMessage(null)
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          const msg = err instanceof Error ? err.message : 'Failed to load admin data.'
+          setMessage({ type: 'error', text: msg })
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [jwt])
 
   const handleResolveDispute = async (bountyId: string, resolution: 'worker_win' | 'creator_win' | 'split') => {

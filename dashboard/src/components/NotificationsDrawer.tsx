@@ -38,32 +38,44 @@ interface NotificationsDrawerProps {
 export function NotificationsDrawer({ open, onClose }: NotificationsDrawerProps) {
   const { jwt, connected } = useAuth()
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
-  const [loading, setLoading] = useState(false)
+  const [hasLoaded, setHasLoaded] = useState(false)
 
   const unreadCount = notifications.filter((n) => !n.read).length
+  const loading = open && connected && Boolean(jwt) && !hasLoaded
 
-  const fetchNotifications = useCallback(async (isSilent = false) => {
+  const fetchNotifications = useCallback(async () => {
     if (!jwt) return
-    if (!isSilent) setLoading(true)
     try {
       const items = await getNotifications(jwt)
       setNotifications(items)
     } catch {
       // silently ignore
     } finally {
-      if (!isSilent) setLoading(false)
+      setHasLoaded(true)
     }
   }, [jwt])
 
   useEffect(() => {
-    if (open && connected) {
-      void fetchNotifications()
+    if (!open || !connected || !jwt) return
+    let cancelled = false
+    getNotifications(jwt)
+      .then((items) => {
+        if (!cancelled) setNotifications(items)
+      })
+      .catch(() => {
+        // silently ignore
+      })
+      .finally(() => {
+        if (!cancelled) setHasLoaded(true)
+      })
+    return () => {
+      cancelled = true
     }
-  }, [open, connected, fetchNotifications])
+  }, [open, connected, jwt])
 
   useEvents({
     enabled: open && connected,
-    onEvent: () => void fetchNotifications(true)
+    onEvent: () => void fetchNotifications()
   })
 
   const handleMarkRead = async (id: number) => {

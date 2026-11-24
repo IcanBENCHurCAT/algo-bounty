@@ -23,20 +23,7 @@ export default function MediatorsPage() {
   const [actionLoading, setActionLoading] = useState(false)
   const [search, setSearch] = useState('')
 
-  useEffect(() => {
-    fetchList()
-  }, [])
-
-  useEffect(() => {
-    if (connected && jwt) {
-      fetchStatus()
-    } else {
-      setStatus(null)
-      setLoadingStatus(false)
-    }
-  }, [connected, jwt])
-
-  async function fetchList() {
+  const fetchList = React.useCallback(async () => {
     setLoadingList(true)
     try {
       const data = await getEvaluators()
@@ -47,9 +34,9 @@ export default function MediatorsPage() {
     } finally {
       setLoadingList(false)
     }
-  }
+  }, [toast])
 
-  async function fetchStatus() {
+  const fetchStatus = React.useCallback(async () => {
     if (!jwt) return
     setLoadingStatus(true)
     try {
@@ -60,7 +47,46 @@ export default function MediatorsPage() {
     } finally {
       setLoadingStatus(false)
     }
-  }
+  }, [jwt])
+
+  useEffect(() => {
+    let cancelled = false
+    getEvaluators()
+      .then((data) => {
+        if (!cancelled) setArbitrators(data)
+      })
+      .catch((err) => {
+        console.error(err)
+        if (!cancelled) toast.error('Failed to load active mediators')
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingList(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [toast])
+
+  useEffect(() => {
+    if (!connected || !jwt) return
+    let cancelled = false
+    getMyEvaluatorStatus(jwt)
+      .then((data) => {
+        if (!cancelled) setStatus(data)
+      })
+      .catch((err) => {
+        console.error(err)
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingStatus(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [connected, jwt])
+
+  const effectiveStatus = connected && jwt ? status : null
+  const effectiveLoadingStatus = connected && jwt ? loadingStatus : false
 
   async function handleRegister() {
     if (!jwt) return
@@ -122,9 +148,9 @@ export default function MediatorsPage() {
         
         {!connected ? (
           <p style={{ color: '#94a3b8' }}>Connect your wallet to view your status and register.</p>
-        ) : loadingStatus ? (
+        ) : effectiveLoadingStatus ? (
           <p style={{ color: '#94a3b8' }}>Loading status...</p>
-        ) : status ? (
+        ) : effectiveStatus ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
               <div style={{ flex: 1, minWidth: '250px' }}>
@@ -136,17 +162,17 @@ export default function MediatorsPage() {
               <div>
                 <p style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '0.25rem' }}>Current Karma</p>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <span style={{ fontSize: '1.25rem', fontWeight: 700, color: '#818cf8' }}>{status.karma}</span>
-                  {status.karma < status.min_karma_required && (
+                  <span style={{ fontSize: '1.25rem', fontWeight: 700, color: '#818cf8' }}>{effectiveStatus.karma}</span>
+                  {effectiveStatus.karma < effectiveStatus.min_karma_required && (
                     <span style={{ fontSize: '0.75rem', color: '#ef4444', background: 'rgba(239, 68, 68, 0.1)', padding: '0.125rem 0.5rem', borderRadius: '9999px' }}>
-                      Requires &ge; {status.min_karma_required}
+                      Requires &ge; {effectiveStatus.min_karma_required}
                     </span>
                   )}
                 </div>
               </div>
               <div>
                 <p style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '0.25rem' }}>Status</p>
-                {status.is_registered ? (
+                {effectiveStatus.is_registered ? (
                   <span style={{ display: 'inline-block', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', padding: '0.25rem 0.75rem', borderRadius: '9999px', fontSize: '0.875rem', fontWeight: 600 }}>
                     Active Mediator
                   </span>
@@ -159,7 +185,7 @@ export default function MediatorsPage() {
             </div>
 
             <div style={{ marginTop: '1rem' }}>
-              {status.is_registered ? (
+              {effectiveStatus.is_registered ? (
                 <button
                   onClick={handleDeregister}
                   disabled={actionLoading}
@@ -177,7 +203,7 @@ export default function MediatorsPage() {
                 >
                   {actionLoading ? 'Processing...' : 'Deregister'}
                 </button>
-              ) : status.can_register ? (
+              ) : effectiveStatus.can_register ? (
                 <button
                   onClick={handleRegister}
                   disabled={actionLoading}
@@ -209,7 +235,7 @@ export default function MediatorsPage() {
                     cursor: 'not-allowed'
                   }}
                 >
-                  Requires {status.min_karma_required} Karma (Current: {status.karma})
+                  Requires {effectiveStatus.min_karma_required} Karma (Current: {effectiveStatus.karma})
                 </button>
               )}
             </div>

@@ -1,6 +1,6 @@
 ﻿'use client'
 
-import { useCallback, useEffect, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import type { SseEvent, SseEventType } from '@/types'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? ''
@@ -35,41 +35,46 @@ export function useEvents({ onEvent, enabled = true }: UseEventsOptions = {}) {
     callbackRef.current = onEvent
   }, [onEvent])
 
-  const connect = useCallback(() => {
+  useEffect(() => {
     if (!enabled) return
     if (typeof window === 'undefined') return
 
-    const es = new EventSource(`${API_BASE}/api/v1/events`)
-    esRef.current = es
+    let disposed = false
 
-    for (const eventType of SSE_EVENTS) {
-      es.addEventListener(eventType, (e: MessageEvent) => {
-        try {
-          const data = JSON.parse(e.data as string)
-          callbackRef.current?.({ type: eventType, data })
-          retryDelay.current = 1000 // reset backoff on success
-        } catch {
-          // ignore malformed events
-        }
-      })
+    function connect() {
+      if (disposed) return
+      const es = new EventSource(`${API_BASE}/api/v1/events`)
+      esRef.current = es
+
+      for (const eventType of SSE_EVENTS) {
+        es.addEventListener(eventType, (e: MessageEvent) => {
+          try {
+            const data = JSON.parse(e.data as string)
+            callbackRef.current?.({ type: eventType, data })
+            retryDelay.current = 1000 // reset backoff on success
+          } catch {
+            // ignore malformed events
+          }
+        })
+      }
+
+      es.onerror = () => {
+        es.close()
+        esRef.current = null
+        if (disposed) return
+        // Exponential backoff: 1s → 2s → 4s → 8s → max 30s
+        const delay = Math.min(retryDelay.current, 30_000)
+        retryDelay.current = delay * 2
+        retryRef.current = setTimeout(connect, delay)
+      }
     }
 
-    es.onerror = () => {
-      es.close()
-      esRef.current = null
-      // Exponential backoff: 1s → 2s → 4s → 8s → max 30s
-      const delay = Math.min(retryDelay.current, 30_000)
-      retryDelay.current = delay * 2
-      retryRef.current = setTimeout(connect, delay)
-    }
-  }, [enabled])
-
-  useEffect(() => {
     connect()
     return () => {
+      disposed = true
       esRef.current?.close()
       esRef.current = null
       if (retryRef.current) clearTimeout(retryRef.current)
     }
-  }, [connect])
+  }, [enabled])
 }

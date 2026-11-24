@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { getAgentProfile, getBounties } from '@/lib/api'
@@ -116,8 +116,11 @@ export default function AgentProfilePage() {
   const address = params.address as string
 
   const [profile, setProfile] = useState<AgentProfile | null>(null)
-  const [profileLoading, setProfileLoading] = useState(true)
-  const [bountiesLoading, setBountiesLoading] = useState(false)
+  const [loadedProfileAddr, setLoadedProfileAddr] = useState<string | null>(null)
+  const [loadedBountiesAddr, setLoadedBountiesAddr] = useState<string | null>(null)
+
+  const profileLoading = loadedProfileAddr !== address
+  const bountiesLoading = Boolean(address) && loadedBountiesAddr !== address
 
   const [tab, setTab] = useState<Tab>('created')
 
@@ -128,40 +131,47 @@ export default function AgentProfilePage() {
 
   // Fetch profile
   useEffect(() => {
-    setProfileLoading(true)
+    let cancelled = false
     getAgentProfile(address)
-      .then(setProfile)
+      .then((data) => {
+        if (!cancelled) setProfile(data)
+      })
       .catch(() => null)
-      .finally(() => setProfileLoading(false))
-  }, [address])
-
-  const fetchBounties = useCallback(async () => {
-    if (!address) return
-    setBountiesLoading(true)
-    try {
-      const [created, worked] = await Promise.allSettled([
-        getBounties({ limit: 50, creator: address }),
-        // API does not support worker filter yet, fetch latest and filter locally
-        getBounties({ limit: 50 }),
-      ])
-
-      if (created.status === 'fulfilled') {
-        setCreatedBounties(created.value.bounties)
-      }
-      if (worked.status === 'fulfilled') {
-        const workedB = worked.value.bounties.filter((b) => b.worker === address)
-        setClaimedBounties(workedB.filter(b => b.status === 'claimed'))
-        setCompletedBounties(workedB.filter(b => b.status === 'closed'))
-        setDisputedBounties(workedB.filter(b => b.status === 'disputed'))
-      }
-    } finally {
-      setBountiesLoading(false)
+      .finally(() => {
+        if (!cancelled) setLoadedProfileAddr(address)
+      })
+    return () => {
+      cancelled = true
     }
   }, [address])
 
   useEffect(() => {
-    void fetchBounties()
-  }, [fetchBounties])
+    if (!address) return
+    let cancelled = false
+    Promise.allSettled([
+      getBounties({ limit: 50, creator: address }),
+      // API does not support worker filter yet, fetch latest and filter locally
+      getBounties({ limit: 50 }),
+    ])
+      .then(([created, worked]) => {
+        if (cancelled) return
+        if (created.status === 'fulfilled') {
+          setCreatedBounties(created.value.bounties)
+        }
+        if (worked.status === 'fulfilled') {
+          const workedB = worked.value.bounties.filter((b) => b.worker === address)
+          setClaimedBounties(workedB.filter(b => b.status === 'claimed'))
+          setCompletedBounties(workedB.filter(b => b.status === 'closed'))
+          setDisputedBounties(workedB.filter(b => b.status === 'disputed'))
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadedBountiesAddr(address)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [address])
 
   if (profileLoading) return <FullPageSpinner />
 

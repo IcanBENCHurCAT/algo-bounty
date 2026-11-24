@@ -194,6 +194,18 @@ export default function CreateBountyPage() {
     }
   }
 
+  const amt = Number(form.amountAlgo)
+  const escrowAmount = isNaN(amt) ? 0 : Math.round(amt * 1_000_000)
+  const platformFeeBps = Math.round(Number(form.platformFee || '2.0') * 100)
+  const developerFeeBps = Math.round(Number(form.developerFee || '1.0') * 100)
+  const { breakdown, display: feeDisplay } = useFeeBreakdown(
+    escrowAmount,
+    form.hitm,
+    false,
+    platformFeeBps,
+    developerFeeBps
+  )
+
   // ─── Not connected ───────────────────────────────────────────────────────
 
   if (!connected) {
@@ -231,18 +243,6 @@ export default function CreateBountyPage() {
   }
 
   // ─── Render ──────────────────────────────────────────────────────────────
-
-  const amt = Number(form.amountAlgo)
-  const escrowAmount = isNaN(amt) ? 0 : Math.round(amt * 1_000_000)
-  const platformFeeBps = Math.round(Number(form.platformFee || '2.0') * 100)
-  const developerFeeBps = Math.round(Number(form.developerFee || '1.0') * 100)
-  const { breakdown, display: feeDisplay } = useFeeBreakdown(
-    escrowAmount,
-    form.hitm,
-    false,
-    platformFeeBps,
-    developerFeeBps
-  )
 
   return (
     <div
