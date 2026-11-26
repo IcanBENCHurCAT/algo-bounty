@@ -1,9 +1,12 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useWallet } from '@txnlab/use-wallet-react'
 import { useAuth } from '@/hooks/useAuth'
 import { Button } from '@/components/ui/Button'
+
+const FOCUSABLE_SELECTOR =
+  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
 const WALLET_LABELS: Record<string, { label: string; color: string }> = {
   pera:   { label: 'Pera',   color: '#FCD34D' },
@@ -24,6 +27,67 @@ export function WalletConnect({ variant = 'compact' }: WalletConnectProps) {
   const { connected, address, walletType, loading, error, connect, disconnect } = useAuth()
   const [showDropdown, setShowDropdown] = useState(false)
   const [stewardAccepted, setStewardAccepted] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const previousFocusRef = useRef<HTMLElement | null>(null)
+  const isDialogOpen = showDropdown && !loading && !(connected && address)
+
+  useEffect(() => {
+    if (!isDialogOpen) return
+
+    const dialog = dialogRef.current
+    if (!dialog) return
+
+    previousFocusRef.current =
+      document.activeElement instanceof HTMLElement && document.activeElement !== document.body
+        ? document.activeElement
+        : containerRef.current?.querySelector<HTMLButtonElement>('#wallet-connect-btn') ?? null
+
+    dialog.focus()
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        setShowDropdown(false)
+        return
+      }
+      if (event.key !== 'Tab') return
+
+      const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
+      if (focusable.length === 0) {
+        event.preventDefault()
+        dialog.focus()
+        return
+      }
+
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      const active = document.activeElement
+
+      if (!dialog.contains(active)) {
+        event.preventDefault()
+        ;(event.shiftKey ? last : first).focus()
+        return
+      }
+
+      if (event.shiftKey && (active === first || active === dialog)) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      if (previousFocusRef.current?.isConnected) {
+        previousFocusRef.current.focus()
+      }
+    }
+  }, [isDialogOpen])
 
   if (loading) {
     return (
@@ -41,6 +105,7 @@ export function WalletConnect({ variant = 'compact' }: WalletConnectProps) {
         }}
       >
         <span
+          aria-hidden="true"
           style={{
             width: '14px',
             height: '14px',
@@ -76,6 +141,7 @@ export function WalletConnect({ variant = 'compact' }: WalletConnectProps) {
         >
           {walletInfo && (
             <span
+              aria-hidden="true"
               style={{
                 width: '8px',
                 height: '8px',
@@ -100,9 +166,10 @@ export function WalletConnect({ variant = 'compact' }: WalletConnectProps) {
   }
 
   return (
-    <div style={{ position: 'relative' }}>
+    <div ref={containerRef} style={{ position: 'relative' }}>
       {error && (
         <div
+          role="alert"
           style={{
             position: 'absolute',
             bottom: 'calc(100% + 8px)',
@@ -121,10 +188,14 @@ export function WalletConnect({ variant = 'compact' }: WalletConnectProps) {
         </div>
       )}
       <Button
+        type="button"
         variant="primary"
         size="sm"
         onClick={() => setShowDropdown((v) => !v)}
         id="wallet-connect-btn"
+        aria-haspopup="dialog"
+        aria-expanded={showDropdown}
+        aria-controls={showDropdown ? 'wallet-connect-dialog' : undefined}
       >
         Connect Wallet
       </Button>
@@ -132,6 +203,7 @@ export function WalletConnect({ variant = 'compact' }: WalletConnectProps) {
       {showDropdown && (
         <>
           <div
+            aria-hidden="true"
             style={{
               position: 'fixed',
               inset: 0,
@@ -140,6 +212,12 @@ export function WalletConnect({ variant = 'compact' }: WalletConnectProps) {
             onClick={() => setShowDropdown(false)}
           />
           <div
+            ref={dialogRef}
+            id="wallet-connect-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="wallet-connect-dialog-title"
+            tabIndex={-1}
             style={{
               position: 'absolute',
               top: 'calc(100% + 8px)',
@@ -152,6 +230,7 @@ export function WalletConnect({ variant = 'compact' }: WalletConnectProps) {
               minWidth: '240px',
               zIndex: 50,
               boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
+              outline: 'none',
             }}
           >
             <div
@@ -176,6 +255,7 @@ export function WalletConnect({ variant = 'compact' }: WalletConnectProps) {
             </div>
 
             <p
+              id="wallet-connect-dialog-title"
               style={{
                 margin: '0 0 0.5rem',
                 padding: '0.5rem 0.75rem',
@@ -194,6 +274,7 @@ export function WalletConnect({ variant = 'compact' }: WalletConnectProps) {
               return (
                 <button
                   key={wallet.id}
+                  type="button"
                   id={`connect-${wallet.id}`}
                   disabled={!stewardAccepted}
                   onClick={() => {
@@ -231,6 +312,7 @@ export function WalletConnect({ variant = 'compact' }: WalletConnectProps) {
                   }}
                 >
                   <span
+                    aria-hidden="true"
                     style={{
                       width: '10px',
                       height: '10px',
