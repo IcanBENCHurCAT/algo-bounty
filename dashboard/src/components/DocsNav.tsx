@@ -67,11 +67,11 @@ export default function DocsNav({ tocItems, className = '' }: DocsNavProps) {
   }, [tocItems]);
 
   return (
-    <nav className={className}>
+    <nav className={className} aria-labelledby="docs-toc-heading">
       <div className="p-4 sticky top-0 bg-[#0a0a0a] pb-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-3">
+        <h2 id="docs-toc-heading" className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-3">
           Table of Contents
-        </h3>
+        </h2>
         <div className="border-t border-gray-800/60 my-2" />
       </div>
       <ul className="px-3 pb-4">
@@ -81,6 +81,8 @@ export default function DocsNav({ tocItems, className = '' }: DocsNavProps) {
           return (
             <li key={item.id}>
               <button
+                type="button"
+                aria-current={isActive ? 'location' : undefined}
                 onClick={() => scrollToSection(item.id)}
                 className={`w-full text-left block py-1.5 px-2 rounded-md text-sm transition-colors truncate ${
                   item.level === 3 ? 'pl-6 text-gray-400' : 'font-medium text-gray-300'
